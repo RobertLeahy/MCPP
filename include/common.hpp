@@ -24,6 +24,9 @@
 namespace MCPP {	}
 
 
+#include <rsa_key.hpp>
+#include <chunk.hpp>
+#include <compression.hpp>
 #include <client.hpp>
 #include <nbt.hpp>
 #include <metadata.hpp>

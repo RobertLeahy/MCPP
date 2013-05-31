@@ -303,9 +303,6 @@ namespace MCPP {
 			 *	\param [in] dimension
 			 *		The dimension in which the target
 			 *		chunk resides.
-			 *	\param [in] biome
-			 *		The biome associated with the chunk
-			 *		to save.
 			 *	\param [in] begin
 			 *		A begin iterator to the contiguous
 			 *		buffer of bytes which represent the
@@ -328,7 +325,6 @@ namespace MCPP {
 				Int32 y,
 				Int32 z,
 				SByte dimension,
-				Byte biome,
 				const Byte * begin,
 				const Byte * end,
 				const ChunkSaveBegin & callback_begin,

@@ -1,0 +1,15 @@
+MSYS:
+
+http://sourceforge.net/projects/mingwbuilds/files/external-binary-packages/
+
+Instructions for building OpenSSL:
+
+http://stackoverflow.com/questions/9379363/how-to-build-openssl-with-mingw-in-windows
+
+OpenSSL:
+
+http://www.openssl.org/source/
+
+Compiling ZLIB:
+
+http://kemovitra.blogspot.ca/2009/06/mingw-compiling-zlib.html#.UaaYmkDvv-t

@@ -40,8 +40,8 @@ namespace MCPP {
 	static const String pair_delete_query("DELETE FROM `keyvaluepairs` WHERE `key`=? AND `value`=?");
 	static const String key_delete_query("DELETE FROM `keyvaluepairs` WHERE `key`=?");
 	static const String chunk_query("SELECT `biome`,`data` FROM `chunks` WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?");
-	static const String chunk_insert_query("INSERT INTO `chunks` (`biome`,`data`,`x`,`y`,`z`,`dimension`) VALUES (?,?,?,?,?,?)");
-	static const String chunk_update_query("UPDATE `chunks` SET `biome`=?, `data`=? WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?");
+	static const String chunk_insert_query("INSERT INTO `chunks` (`data`,`x`,`y`,`z`,`dimension`) VALUES (?,?,?,?,?)");
+	static const String chunk_update_query("UPDATE `chunks` SET `data`=? WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?");
 	
 	
 	//	Constants
@@ -886,28 +886,26 @@ namespace MCPP {
 	}
 	
 	
-	void MySQLDataProvider::SaveChunk (Int32 x, Int32 y, Int32 z, SByte dimension, Byte biome, const Byte * begin, const Byte * end, const ChunkSaveBegin & callback_begin, const ChunkSaveEnd & callback_end) {
+	void MySQLDataProvider::SaveChunk (Int32 x, Int32 y, Int32 z, SByte dimension, const Byte * begin, const Byte * end, const ChunkSaveBegin & callback_begin, const ChunkSaveEnd & callback_end) {
 	
 		//	Dispatch task into the thread pool
 		pool->Enqueue(
 			[=] () {
 			
-				//	Bind six parameters
-				MYSQL_BIND param [6];
-				memset(param,0,sizeof(MYSQL_BIND)*6);
+				//	Bind five parameters
+				MYSQL_BIND param [5];
+				memset(param,0,sizeof(MYSQL_BIND)*5);
 				
-				bind(param[0],biome);
-				
-				param[1].buffer_type=MYSQL_TYPE_BLOB;
-				param[1].buffer_length=static_cast<decltype(param[1].buffer_length)>(
+				param[0].buffer_type=MYSQL_TYPE_BLOB;
+				param[0].buffer_length=static_cast<decltype(param[1].buffer_length)>(
 					SafeInt<decltype(end-begin)>(end-begin)
 				);
-				param[1].buffer=const_cast<Byte *>(begin);
+				param[0].buffer=const_cast<Byte *>(begin);
 				
-				bind(param[2],x);
-				bind(param[3],y);
-				bind(param[4],z);
-				bind(param[5],dimension);
+				bind(param[1],x);
+				bind(param[2],y);
+				bind(param[3],z);
+				bind(param[4],dimension);
 				
 				bool completed;
 				try {
@@ -981,18 +979,14 @@ namespace MCPP {
 				bind(param[2],z);
 				bind(param[3],dimension);
 				
-				//	Bind two results
-				MYSQL_BIND result [2];
-				memset(result,0,sizeof(MYSQL_BIND)*2);
+				//	Bind results
+				MYSQL_BIND result;
+				memset(&result,0,sizeof(MYSQL_BIND));
 				
-				//	Result #1 - Biome
-				Byte biome;
-				bind(result[0],biome);
-				
-				//	Result #2 - Chunk
-				result[1].buffer_type=MYSQL_TYPE_BLOB;
+				//	Result - Chunk
+				result.buffer_type=MYSQL_TYPE_BLOB;
 				unsigned long real_length=0;
-				result[1].length=&real_length;
+				result.length=&real_length;
 				
 				//	Completed chunk goes here
 				Nullable<Vector<Byte>> chunk;
@@ -1005,7 +999,7 @@ namespace MCPP {
 						//	Bind and execute
 						if (
 							(mysql_stmt_bind_param(chunk_stmt,param)!=0) ||
-							(mysql_stmt_bind_result(chunk_stmt,result)!=0) ||
+							(mysql_stmt_bind_result(chunk_stmt,&result)!=0) ||
 							(mysql_stmt_execute(chunk_stmt)!=0)
 						) throw std::runtime_error(mysql_stmt_error(chunk_stmt));
 						
@@ -1026,13 +1020,13 @@ namespace MCPP {
 						chunk.Construct(size);
 						
 						//	Prepare bind for real fetch
-						result[1].buffer=to_char(*chunk);
-						result[1].buffer_length=real_length;
+						result.buffer=to_char(*chunk);
+						result.buffer_length=real_length;
 						
 						//	Retrieve data
 						if (mysql_stmt_fetch_column(
 							chunk_stmt,
-							&result[1],
+							&result,
 							1,
 							0
 						)!=0) throw std::runtime_error(mysql_stmt_error(setting_stmt));

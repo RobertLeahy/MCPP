@@ -8,6 +8,8 @@
 
 #include <rleahylib/rleahylib.hpp>
 #include <metadata.hpp>
+#include <compression.hpp>
+#include <chunk.hpp>
 #include <functional>
 #include <stdexcept>
 #include <utility>
@@ -711,7 +713,7 @@ namespace MCPP {
 				//	made necessary but the utter
 				//	stupidity of Notch in choosing
 				//	a signed type
-				if (len<0) return false;
+				if (len<0) throw std::runtime_error("Protocol error");
 				
 				//	Check to see if the buffer is long
 				//	enough to contain a string of that
@@ -1032,7 +1034,7 @@ namespace MCPP {
 			}
 			
 			
-			static bool FromBytes (const Byte ** begin, const Byte * end, Vector<Metadatum> * ptr) noexcept {
+			static bool FromBytes (const Byte ** begin, const Byte * end, Vector<Metadatum> * ptr) {
 			
 				Vector<Metadatum> metadata;
 			
@@ -1136,6 +1138,317 @@ namespace MCPP {
 				
 				//	Move the metadata into place
 				new (ptr) Vector<Metadatum> (std::move(metadata));
+				
+				return true;
+			
+			}
+	
+	
+	};
+	
+	
+	template <>
+	class PacketHelper<Vector<SmartPointer<Chunk>>> {
+	
+	
+		private:
+		
+		
+			static const Word max_chunks=16;
+	
+	
+		public:
+		
+		
+			static const bool Trivial=false;
+			
+			
+			static Word Size (const Vector<SmartPointer<Chunk>> & obj) {
+			
+				//	Iterate over the chunks and sum up their
+				//	sizes
+				SafeWord size=0;
+				for (
+					Word i=0;
+					(i<obj.Count()) &&
+					(i<max_chunks);
+					++i
+				) {
+				
+					const auto & chunk=obj[i];
+					
+					//	Check for an empty
+					//	chunk
+					if (!(
+						(chunk==nullptr) ||
+						(chunk->Count()==0)
+					)) {
+					
+						//	Add size of this chunk
+						size+=SafeWord(DeflateBound(chunk->Count()));
+					
+					}
+				
+				}
+				
+				//	Add size of elements always sent
+				size+=SafeWord(
+					sizeof(UInt16)+	//	Primary bit map
+					sizeof(UInt16)+	//	"Add" bit map
+					sizeof(Int32)	//	Compressed chunk data size
+				);
+				
+				//	Return
+				return Word(size);
+			
+			}
+			
+			
+			static void ToBytes (const Vector<SmartPointer<Chunk>> & obj, Vector<Byte> & buffer) {
+			
+				//	The bitmaps and compressed size
+				//	have to be added to the buffer
+				//	after the compressed data, which
+				//	means that ordinarily we'd have
+				//	to buffer and copy the compressed
+				//	data in memory -- not good.
+				//
+				//	Instead we'll do some magic with
+				//	the underlying buffer, don't
+				//	try this at home.
+				
+				//	Record the buffer's initial count
+				Word initial_count=buffer.Count();
+				
+				//	Now push the buffer's imagined
+				//	end past where those values would
+				//	go -- the buffer is initialized to
+				//	be big enough to hold this data
+				//	maximally, so this is SAFE
+				buffer.SetCount(
+					buffer.Count()+
+					sizeof(UInt16)+	//	Primary bit map
+					sizeof(UInt16)+	//	"Add" bit map
+					sizeof(Int32)	//	Compressed chunk data size
+				);
+			
+				//	Bitmaps
+				UInt16 bitmap=0;
+				UInt16 add_bitmap=0;
+				//	Chunk data size
+				SafeInt<Int32> size=0;
+				
+				//	Iterate over chunks
+				for (
+					Word i=0;
+					(i<obj.Count()) &&
+					(i<max_chunks);
+					++i
+				) {
+				
+					const auto & chunk=obj[i];
+				
+					//	Check to see if the chunk is
+					//	present
+					if (!(
+						(chunk==nullptr) ||
+						(chunk->Count()==0)
+					)) {
+					
+						//	Update bit maps
+						if (chunk->Add()) add_bitmap|=1<<i;
+						bitmap|=1<<i;
+					
+						//	Save count of buffer before
+						//	so we know how much
+						//	data was generated
+						Word initial_count=buffer.Count();
+						
+						//	Compress and add at the
+						//	same time
+						Deflate(chunk->begin(),chunk->end(),&buffer);
+						
+						//	How much data did we add?
+						//	Add to the running total
+						size+=SafeInt<Int32>(
+							Int32(
+								SafeWord(
+									buffer.Count()-initial_count
+								)
+							)
+						);
+					
+					}
+				
+				}
+				
+				//	All chunk data is now compressed and
+				//	in the buffer without time-consuming
+				//	copying.
+				
+				//	Save the current length
+				Word final_count=buffer.Count();
+				
+				//	Now roll back to the count
+				//	we saved
+				buffer.SetCount(initial_count);
+				
+				//	The buffer's end iterator will
+				//	now point at the space where
+				//	the bitmaps and compressed
+				//	data size must go.
+				
+				//	Place the bitmaps and size in
+				//	the buffer
+				PacketHelper<UInt16>::ToBytes(bitmap,buffer);
+				PacketHelper<UInt16>::ToBytes(add_bitmap,buffer);
+				Int32 unsafe_size=Int32(size);
+				PacketHelper<Int32>::ToBytes(unsafe_size,buffer);
+				
+				//	Now we've filled the area we
+				//	bypassed before, zip back to
+				//	after the compressed data
+				buffer.SetCount(final_count);
+			
+			}
+			
+			
+			static bool FromBytes (const Byte ** begin, const Byte * end, Vector<SmartPointer<Chunk>> * ptr) {
+			
+				//	Decode the leading scalars
+				UInt16 bitmap;
+				UInt16 add_bitmap;
+				Int32 size;
+				if (!(
+					PacketHelper<UInt16>::FromBytes(begin,end,&bitmap) &&
+					PacketHelper<UInt16>::FromBytes(begin,end,&bitmap) &&
+					PacketHelper<Int32>::FromBytes(begin,end,&size)
+				)) return false;
+				
+				//	Sanity check on the length made
+				//	necessary by the utter stupidity
+				//	of Notch in choosing a signed
+				//	type
+				if (size<0) throw std::runtime_error("Protocol error");
+				
+				//	Do we have enough bytes to
+				//	decompress?
+				if ((end-*begin)<size) return false;
+				
+				//	Decompress
+				Vector<Byte> chunks(Inflate(*begin,*begin+size));
+				
+				//	Advance past chunk
+				*begin+=size;
+				
+				//	We now have all the chunks in
+				//	memory, but how many are there?
+				//
+				//	And how big are they?
+				Word num_chunks=0;
+				Word max_index=0;
+				Word num_add=0;
+				for (Word i=0;i<max_chunks;++i) {
+				
+					//	Does this chunk exist?
+					if ((bitmap&(1<<i))!=0) {
+					
+						//	YES
+						
+						++num_chunks;
+						max_index=i;
+						
+						//	Is there an add array?
+						if ((add_bitmap&(1<<i))!=0) ++num_add;
+					
+					}
+				
+				}
+				
+				//	Now we know how many chunks there are
+				//	and we can determine what the size of
+				//	each chunk is
+				
+				//	We remove the add arrays since each
+				//	chunk is not guaranteed to have one,
+				//	therefore it would cloud the arithmetic
+				Word normalized_count=chunks.Count()-(num_add*16*16*8);
+				
+				//	Check that this in modulo the number
+				//	of blocks per chunk is zero, otherwise
+				//	that's bad data, throw
+				if ((normalized_count%(16*16*16))!=0) throw std::runtime_error("Protocol error");
+				
+				//	Calculate the size of each chunk minus
+				//	the add arrays
+				Word size_of_chunk=normalized_count/(16*16*16);
+				
+				//	There are two possible values for the
+				//	size of a chunk, check for them
+				bool skylight;
+				if (size_of_chunk==16*16*16*2) skylight=false;
+				else if (size_of_chunk==16*16*24*2) skylight=true;
+				else throw std::runtime_error("Protocol error");
+				
+				//	Allocate enough space to hold
+				//	all the chunks
+				new (ptr) Vector<SmartPointer<Chunk>> (max_index+1);
+				
+				try {
+				
+					//	Copy out the whole buffer, dividing it up
+					//	as necessary
+					
+					const Byte * iter=chunks.begin();
+				
+					//	Loop for all chunks
+					for (Word i=0;i<=max_index;++i) {
+					
+						//	Is this chunk present?
+						if ((bitmap&(1<<i))==0) {
+						
+							//	NO
+							
+							//	Create an empty chunk
+							ptr->EmplaceBack();
+						
+						} else {
+						
+							//	YES
+							
+							//	Does it have an add array?
+							bool add_array=(add_bitmap&(1<<i))!=0;
+							
+							Word copy_count=size_of_chunk;
+							
+							if (add_array) copy_count+=16*16*8;
+							
+							Vector<Byte> buffer(copy_count);
+							
+							//	Copy
+							buffer.Add(iter,iter+copy_count);
+							
+							iter+=copy_count;
+							
+							//	Create chunk
+							ptr->EmplaceBack(SmartPointer<Chunk>::Make(
+								std::move(buffer),
+								skylight,
+								add_array
+							));
+						
+						}
+					
+					}
+				
+				} catch (...) {
+				
+					//	Make sure we clean up
+					ptr->~Vector<SmartPointer<Chunk>>();
+					
+					throw;
+				
+				}
 				
 				return true;
 			

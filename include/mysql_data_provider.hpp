@@ -102,7 +102,6 @@ namespace MCPP {
 				Int32 y,
 				Int32 z,
 				SByte dimension,
-				Byte biome,
 				const Byte * begin,
 				const Byte * end,
 				const ChunkSaveBegin & callback_begin,
