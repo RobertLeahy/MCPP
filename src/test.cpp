@@ -16,6 +16,20 @@ bool test () {
 	for (Byte b : recovered_plaintext) StdOut << " 0x" << String(b,16);
 	StdOut << Newline;
 	
+	StdOut << Newline << "ASN.1/DER representation of public key:" << Newline;
+	bool first=true;
+	for (Byte b : rsa_key.PublicKey()) {
+	
+		if (first) first=false;
+		else StdOut << " ";
+		
+		//StdOut << "0x" << String(b,16);
+		StdOut << b;
+	
+	}
+	
+	StdOut << Newline;
+	
 	//	Cancel main
 	return true;
 

@@ -12,6 +12,10 @@
 namespace MCPP {
 
 
+	/**
+	 *	Encapsulates an RSA public/private
+	 *	key pair.
+	 */
 	class RSAKey {
 	
 	
@@ -20,6 +24,8 @@ namespace MCPP {
 		
 			//	RSA key pair from OpenSSL
 			void * key;
+			//	ASN.1/DER representation
+			Vector<Byte> public_key;
 			
 			
 		public:
@@ -88,6 +94,17 @@ namespace MCPP {
 			 *		A buffer of unencrypted bytes.
 			 */
 			Vector<Byte> PublicDecrypt (const Vector<Byte> & buffer) const;
+			
+			
+			/**
+			 *	Retrieves the ASN.1, DER-encoded representation
+			 *	of the public key.
+			 *
+			 *	\return
+			 *		The ASN.1, DER-encoded representation of
+			 *		the public key.
+			 */
+			const Vector<Byte> & PublicKey () const noexcept;
 	
 	
 	};
