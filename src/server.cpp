@@ -15,41 +15,60 @@ namespace MCPP {
 	static const String list_separator=", ";
 	static const String binding_to="Startup: Attempting to bind to {0}";
 	static const String couldnt_parse_bind="Startup: Could not parse bind \"{0}\"";
+	static const String connected="{0}:{1} connected, there are now {2} clients connected";
+	static const String disconnected="{0}:{1} disconnected, there are now {2} clients connected";
+	static const String disconnected_with_reason="{{0}}:{{1}} disconnected (with reason: \"{0}\"), there are now {{2}} clients connected";
+	static const String error_processing_recv="Error processing received data";
+	static const String buffer_too_long="Buffer too long";
 	
 	
 	//	Constants
 	static const String binds_setting="binds";
 	static const String num_threads_setting="num_threads";
-	static const UInt16 default_port=25565;
+	static const UInt16 default_port=25565;	//	Default MC port
 	static const Word default_num_threads=10;
 	static const String main_thread_desc="Listening Thread";
+	static const Word default_max_bytes=0;	//	Unlimited
+	static const String max_bytes_setting="max_bytes";
 	
 	
 	Nullable<Server> RunningServer;
 	
 	
 	#include "server_setup.cpp"
+	#include "server_getters_setters.cpp"
 
 
 	Server::Server () : Service(service_name), running(false), data(nullptr) {
 	
 		OnConnect.Add(
 			[=] (SmartPointer<Connection> conn) {
-				
-				IPAddress ip=conn->IP();
-				UInt16 port=conn->Port();
 			
-				Clients.Add(SmartPointer<Client>::Make(std::move(conn)));
+				try {
 				
-				WriteLog(
-					String::Format(
-						"{0}:{1} connected, there are now {2} clients connected",
-						ip,
-						port,
-						Clients.Count()
-					),
-					Service::LogType::Information
-				);
+					//	Save IP and port number
+					IPAddress ip=conn->IP();
+					UInt16 port=conn->Port();
+					
+					//	Add client to client list
+					Clients.Add(SmartPointer<Client>::Make(std::move(conn)));
+					
+					//	Log
+					WriteLog(
+						String::Format(
+							connected,
+							ip,
+							port,
+							Clients.Count()
+						),
+						Service::LogType::Information
+					);
+				
+				} catch (...) {
+				
+					//	TODO: Add panic code
+				
+				}
 				
 			}
 		);
@@ -57,32 +76,45 @@ namespace MCPP {
 		OnDisconnect.Add(
 			[=] (SmartPointer<Connection> conn, const String & reason) {
 			
-				Clients.Remove(*conn);	
-			
-				String disconnect_template;
+				try {
 				
-				if (reason.Size()==0) {
-				
-					disconnect_template="{0}:{1} disconnected, there are now {2} clients connected";
-				
-				} else {
-				
-					disconnect_template=String::Format(
-						"{{0}}:{{1}} disconnected (with reason: \"{0}\"), there are now {{2}} clients connected",
-						reason
+					//	Remove client from list of clients
+					Clients.Remove(*conn);
+					
+					//	Choose a log template
+					String disconnect_template;
+					
+					//	If there's no reason, choose
+					//	the template with no reason
+					if (reason.Size()==0) {
+					
+						disconnect_template=disconnected;
+					
+					} else {
+					
+						//	Fill the reason into the template
+						disconnect_template=String::Format(
+							disconnected_with_reason,
+							reason
+						);
+					
+					}
+					
+					WriteLog(
+						String::Format(
+							disconnect_template,
+							conn->IP(),
+							conn->Port(),
+							Clients.Count()
+						),
+						Service::LogType::Information
 					);
 				
-				}
+				} catch (...) {
 				
-				WriteLog(
-					String::Format(
-						disconnect_template,
-						conn->IP(),
-						conn->Port(),
-						Clients.Count()
-					),
-					Service::LogType::Information
-				);
+					//	TODO: Add panic code
+				
+				}
 			
 			}
 		);
@@ -92,55 +124,22 @@ namespace MCPP {
 			try {
 			
 				auto client=Clients[*conn];
-				auto & packet=client->InProgress;
 				
-				//	Attempt to finish a packet
-				if (packet.FromBytes(buffer)) {
+				//	Receive
+				if (client->Receive(&buffer)) {
 				
-					//	Success, route
-					
-					Router(client,std::move(packet));
+					//	Packet complete, route
+					Router(client,client->CompleteReceive());
 				
-				} else {
+				} else if (buffer.Count()>max_bytes) {
 				
-					//	TODO: Buffer too long etc. checks
+					client->Disconnect(buffer_too_long);
 				
 				}
 			
-				/*
-				auto client=Clients[*conn];
-				auto & packet=client->InProgress;
-				
-				if (packet.FromBytes(buffer)) {
-				
-					if (packet.Type()==0xFE) {
-					
-						Packet packet;
-						packet.SetType<PacketTypeMap<0xFF>>();
-						
-						String & message=packet.Retrieve<String>(0);
-						CodePoint null=0;
-						
-						message	<< "§1" << null
-								<< "61" << null
-								<< "1.5.2" << null
-								<< "Minecraft++ Test" << null
-								<< String(Clients.Count()) << null
-								<< String(std::numeric_limits<SByte>::max());
-								
-						auto handle=client->Conn()->Send(packet.ToBytes());
-						
-						handle->Wait();
-						
-						client->Conn()->Disconnect("Ping complete");
-					
-					}
-				
-				}*/
-			
 			} catch (...) {
 			
-				conn->Disconnect("Error receiving data");
+				conn->Disconnect(error_processing_recv);
 				
 				throw;
 			
@@ -155,18 +154,17 @@ namespace MCPP {
 	
 		OnStop();
 	
-		//if (data!=nullptr) delete data;
-	
 	}
 	
 	
-	#ifdef DEBUG
-	void Server::TestStart () {
 	
-		OnStart(Vector<const String>());
+	void Server::StartInteractive (const Vector<const String> & args) {
+	
+		is_interactive=true;
+	
+		OnStart(args);
 	
 	}
-	#endif
 	
 	
 	void Server::WriteLog (const String & message, Service::LogType type) {
@@ -188,9 +186,7 @@ namespace MCPP {
 				
 				}
 				
-				#ifdef DEBUG
-				console_lock.Execute([&] () {	StdOut << message << Newline;	});
-				#endif
+				if (is_interactive) console_lock.Execute([&] () {	StdOut << message << Newline;	});
 			
 			} catch (...) {	}
 		
@@ -214,113 +210,145 @@ namespace MCPP {
 	
 	void Server::OnStart (const Vector<const String> & args) {
 	
-		//	Server is already running, can't
-		//	start a running server
-		if (state_lock.Execute(
-			[this] () {
-			
-				if (running) return true;
-				
-				running=true;
-				
-				return false;
-			
-			}
-		)) return;
+		//	Hold the state lock while
+		//	changing the server's state
+		state_lock.Acquire();
 		
-		//	START
 		try {
 		
-			try {
-
-				server_startup();
-				
-			} catch (...) {
+			//	Server is already running, can't
+			//	start a running server
+			if (running) {
 			
-				if (data!=nullptr) {
+				state_lock.Release();
 				
-					delete data;
-					data=nullptr;
+				return;
+			
+			}
+			
+			//	START
+			try {
+			
+				try {
+
+					server_startup();
 					
+				} catch (...) {
+				
+					if (data!=nullptr) {
+					
+						delete data;
+						data=nullptr;
+						
+					}
+					
+					socket_server.Destroy();
+					connections.Destroy();
+					pool.Destroy();
+					
+					throw;
+				
 				}
 				
-				socket_server.Destroy();
-				connections.Destroy();
-				pool.Destroy();
+			} catch (const std::exception & e) {
 			
-				state_lock.Execute([=] () {	running=false;	});
-				
+				try {
+			
+					WriteLog(
+						String::Format(
+							exception_what,
+							startup_error,
+							e.what()
+						),
+						Service::LogType::Error
+					);
+						
+				} catch (...) {	}
+			
+				throw;
+			
+			} catch (...) {
+			
+				WriteLog(
+					startup_error,
+					Service::LogType::Error
+				);
+			
 				throw;
 			
 			}
 			
-		} catch (const std::exception & e) {
-		
-			try {
-		
-				WriteLog(
-					String::Format(
-						exception_what,
-						startup_error,
-						e.what()
-					),
-					Service::LogType::Error
-				);
-					
-			} catch (...) {	}
-		
-			throw;
-		
 		} catch (...) {
 		
-			WriteLog(
-				startup_error,
-				Service::LogType::Error
-			);
-		
+			state_lock.Release();
+			
 			throw;
 		
 		}
 		
+		//	Startup a success
+		running=true;
+		
+		state_lock.Release();
 	
 	}
 	
 	
 	void Server::OnStop () {
 	
-		//	Server is already stopped, can't
-		//	stop a stopped server
-		if (state_lock.Execute(
-			[this] () {
+		//	Hold the state lock before
+		//	attempting to change the
+		//	server's state
+		state_lock.Acquire();
+		
+		try {
+		
+			//	Server is already stopped, can't
+			//	stop a stopped server
+			if (!running) {
 			
-				if (!running) return true;
+				state_lock.Release();
 				
-				running=false;
-				
-				return false;
+				return;
 			
 			}
-		)) return;
+			
+			//	STOP
+			
+			//	First we stop the flow of
+			//	new connections by killing
+			//	the listening handler
+			socket_server.Destroy();
+			
+			//	Next we disconnect all
+			//	connected clients
+			connections.Destroy();
+			
+			//	Now we wait on all pending
+			//	tasks and then kill the
+			//	thread pool
+			pool.Destroy();
+			
+			//	Clean up data provider
+			delete data;
+			data=nullptr;
+			
+			//	Reset this for next time
+			//	the server is started
+			is_interactive=false;
+			
+		} catch (...) {
 		
-		//	STOP
+			state_lock.Release();
+			
+			throw;
 		
-		//	First we stop the flow of
-		//	new connections by killing
-		//	the listening handler
-		socket_server.Destroy();
+		}
 		
-		//	Next we disconnect all
-		//	connected clients
-		connections.Destroy();
+		//	Shutdown complete
+		running=false;
 		
-		//	Now we wait on all pending
-		//	tasks and then kill the
-		//	thread pool
-		pool.Destroy();
-		
-		//	Clean up data provider
-		/*delete data;
-		data=nullptr;*/
+		state_lock.Release();
 	
 	}
 

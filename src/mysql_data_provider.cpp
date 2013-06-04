@@ -39,7 +39,7 @@ namespace MCPP {
 	static const String key_query("SELECT `value` FROM `keyvaluepairs` WHERE `key`=?");
 	static const String pair_delete_query("DELETE FROM `keyvaluepairs` WHERE `key`=? AND `value`=?");
 	static const String key_delete_query("DELETE FROM `keyvaluepairs` WHERE `key`=?");
-	static const String chunk_query("SELECT `biome`,`data` FROM `chunks` WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?");
+	static const String chunk_query("SELECT `data` FROM `chunks` WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?");
 	static const String chunk_insert_query("INSERT INTO `chunks` (`data`,`x`,`y`,`z`,`dimension`) VALUES (?,?,?,?,?)");
 	static const String chunk_update_query("UPDATE `chunks` SET `data`=? WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?");
 	

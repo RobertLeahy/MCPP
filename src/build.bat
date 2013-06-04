@@ -8,6 +8,8 @@ set zlib_lib_loc="G:/Downloads/zlib128/zlib-1.2.8/"
 set zlib_include_loc="G:/Downloads/zlib128-dll/include/"
 set openssl_lib_loc="G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e"
 set openssl_include_loc="G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include/openssl" -I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include"
+set curl_include_loc="G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/include/curl"
+set curl_lib_loc="G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/bin"
 
 
 rmdir ..\bin /S /Q > nul 2> nul
@@ -38,6 +40,11 @@ echo ====GETTING OPENSSL====
 echo.
 robocopy %openssl_lib_loc% ../bin libeay32.dll %robocopy_shared% /XD * > nul 2> nul
 robocopy %openssl_lib_loc% ../bin ssleay32.dll %robocopy_shared% /XD * > nul 2> nul
+
+echo.
+echo ====GETTING CURL====
+echo.
+robocopy %curl_lib_loc% ../bin libcurl.dll %robocopy_shared% /XD * > nul 2> nul
 
 
 echo.
@@ -81,15 +88,17 @@ echo.
 
 
 set main=main.cpp server.cpp
+set interfaces=mod.cpp
 set nbt=nbt.cpp
 set thread_pool=thread_pool.cpp thread_pool_handle.cpp
 set network=listen_handler.cpp connection.cpp connection_handler.cpp connection_manager.cpp send_handle.cpp
-set mc_comm=packet.cpp packet_factory.cpp packet_router.cpp rsa_key.cpp compression.cpp
+set mc_comm=packet.cpp packet_factory.cpp packet_router.cpp rsa_key.cpp compression.cpp aes_128_cfb_8.cpp
 set mc_data=chunk.cpp metadata.cpp
 set server_data=client.cpp client_list.cpp
-set source_all=%main% %nbt% %thread_pool% %network% %mc_comm% %mc_data% %server_data%
-set include_all=-I %zlib_include_loc% -I %openssl_include_loc%
-set library_all=../bin/data_provider.dll ../bin/zlib1.dll ../bin/libeay32.dll ../bin/ssleay32.dll
+set misc=url.cpp sha1.cpp http_handler.cpp http_request.cpp
+set source_all=%main% %nbt% %thread_pool% %network% %mc_comm% %mc_data% %server_data% %misc% %interfaces%
+set include_all=-I %zlib_include_loc% -I %openssl_include_loc% -I %curl_include_loc%
+set library_all=../bin/data_provider.dll ../bin/zlib1.dll ../bin/libeay32.dll ../bin/ssleay32.dll ../bin/libcurl.dll -lws2_32
 set server_all=%include_all% %source_all% %library_all%
 g++.exe %common_params% %server_all% -o ../bin/server.exe
 

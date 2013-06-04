@@ -89,6 +89,25 @@ namespace MCPP {
 	}
 	
 	
+	Word ClientList::AuthenticatedCount () const noexcept {
+	
+		Word count=0;
+		
+		map_lock.Read();
+		
+		for (const auto & pair : map) {
+		
+			if (pair.second->GetState()==ClientState::Authenticated) ++count;
+		
+		}
+		
+		map_lock.CompleteRead();
+		
+		return count;
+	
+	}
+	
+	
 	void ClientList::Clear () noexcept {
 	
 		map_lock.Write();

@@ -24,6 +24,11 @@
 namespace MCPP {	}
 
 
+#include <mod.hpp>
+#include <url.hpp>
+#include <sha1.hpp>
+#include <http_handler.hpp>
+#include <aes_128_cfb_8.hpp>
 #include <rsa_key.hpp>
 #include <chunk.hpp>
 #include <compression.hpp>

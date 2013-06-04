@@ -1781,6 +1781,11 @@ namespace MCPP {
 	class PacketTypeMap {	};
 	
 	
+	/**
+	 *	\cond
+	 */
+	
+	
 	template <> class PacketTypeMap<0x00> : public PacketType<0x00,Int32> {	};
 	template <> class PacketTypeMap<0x01> : public PacketType<0x01,Int32,String,SByte,SByte,SByte,SByte,SByte> {	};
 	template <> class PacketTypeMap<0x02> : public PacketType<0x02,SByte,String,String,Int32> {	};
@@ -1922,6 +1927,33 @@ namespace MCPP {
 	template <> class PacketTypeMap<0xFD> : public PacketType<0xFD,String,PacketArray<Int16,Byte>,PacketArray<Int16,Byte>> {	};
 	template <> class PacketTypeMap<0xFE> : public PacketType<0xFE,SByte> {	};
 	template <> class PacketTypeMap<0xFF> : public PacketType<0xFF,String> {	};
+	
+	
+	/**
+	 *	\endcond
+	 */
+	 
+	 
+	/**
+	 *	Current Minecraft protocol
+	 *	version.
+	 */
+	extern const Word ProtocolVersion;
+	/**
+	 *	Current Minecraft major version
+	 *	number.
+	 */
+	extern const Word MinecraftMajorVersion;
+	/**
+	 *	Current Minecraft minor version
+	 *	number.
+	 */
+	extern const Word MinecraftMinorVersion;
+	/**
+	 *	Current Minecraft sub-minor version
+	 *	number.
+	 */
+	extern const Word MinecraftSubminorVersion;
 	
 
 }

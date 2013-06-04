@@ -34,6 +34,7 @@ namespace MCPP {
 #include <data_provider.hpp>
 #include <event.hpp>
 #include <typedefs.hpp>
+#include <http_handler.hpp>
 
 
 namespace MCPP {
@@ -57,6 +58,15 @@ namespace MCPP {
 			
 			//	Data provider
 			DataProvider * data;
+			
+			
+			//	Settings
+			
+			//	Maximum number of bytes that
+			//	will be allowed to be buffered
+			//	from a certain client before
+			//	disconnecting them
+			Word max_bytes;
 		
 		
 			//	Components
@@ -65,9 +75,10 @@ namespace MCPP {
 			Nullable<ListenHandler> socket_server;
 			
 			
-			#ifdef DEBUG
+			//	For interactive
+			
 			Mutex console_lock;
-			#endif
+			bool is_interactive;
 			
 			
 			//					//
@@ -87,6 +98,32 @@ namespace MCPP {
 		
 		
 			/**
+			 *	Determines whether the server is running
+			 *	in interactive mode or not.
+			 *
+			 *	\return
+			 *		\em true if the server is running
+			 *		in interactive mode, \em false
+			 *		otherwise.
+			 */
+			bool IsInteractive () const noexcept;
+			/**
+			 *	Gets the server's data provider.
+			 *
+			 *	\return
+			 *		A reference to the server's
+			 *		data provider
+			 */
+			DataProvider & Data ();
+			/**
+			 *	Gets the server's thread pool.
+			 *
+			 *	\return
+			 *		A reference to the server's
+			 *		thread pool.
+			 */
+			ThreadPool & Pool ();
+			/**
 			 *	A list of clients connected to the
 			 *	server.
 			 */
@@ -104,9 +141,14 @@ namespace MCPP {
 			Server & operator = (Server &&) = delete;
 			
 			
-			#ifdef DEBUG
-			void TestStart ();
-			#endif
+			/**
+			 *	Starts the server in interactive mode.
+			 *
+			 *	\param [in] args
+			 *		The command line arguments to pass
+			 *		to the server.
+			 */
+			void StartInteractive (const Vector<const String> & args);
 		
 		
 			/**

@@ -4,9 +4,19 @@ inline void Server::server_startup () {
 	//	instance is being recycled
 	Clients.Clear();
 	//	Clear routes for same reason
+	Router.Clear();
 
 	//	Get a data provider
 	data=DataProvider::GetDataProvider();
+	
+	//	Grab settings
+	
+	//	Maximum number of bytes to buffer
+	Nullable<String> max_bytes_str(data->GetSetting(max_bytes_setting));
+	if (
+		max_bytes_str.IsNull() ||
+		!max_bytes_str->ToInteger(&max_bytes)
+	) max_bytes=default_max_bytes;
 
 	//	Initialize a thread pool
 	

@@ -73,6 +73,14 @@ namespace MCPP {
 		Failed		/**<	The data has not been sent and never will be.	*/
 	
 	};
+	
+	
+	/**
+	 *	The type of callback that may be
+	 *	invoked when a send operation
+	 *	completes.
+	 */
+	typedef std::function<void (SendState)> SendCallback;
 
 
 	/**
@@ -93,6 +101,7 @@ namespace MCPP {
 			CondVar wait;
 			SendState state;
 			std::atomic<Word> sent;
+			Vector<SendCallback> callbacks;
 			
 			
 		public:
@@ -110,6 +119,7 @@ namespace MCPP {
 			SendState State () noexcept;
 			SendState Wait () noexcept;
 			Word Sent () noexcept;
+			void AddCallback (const SendCallback & callback);
 	
 	
 	};

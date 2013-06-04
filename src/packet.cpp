@@ -8,6 +8,12 @@ namespace MCPP {
 	static const char * no_type="Packet has not been imbued with a type";
 	
 	
+	const Word ProtocolVersion=61;
+	const Word MinecraftMajorVersion=1;
+	const Word MinecraftMinorVersion=5;
+	const Word MinecraftSubminorVersion=2;
+	
+	
 	void Packet::destroy_buffer () noexcept {
 	
 		//	Cleanup buffer only if

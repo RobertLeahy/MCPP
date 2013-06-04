@@ -219,6 +219,27 @@ namespace MCPP {
 									//	handle
 									handle->lock.Acquire();
 									handle->state=SendState::Sent;
+									
+									try {
+									
+										for (auto & callback : handle->callbacks) {
+										
+											parent->pool->Enqueue(
+												callback,
+												SendState::Sent
+											);
+										
+										}
+										
+									} catch (...) {
+									
+										handle->wait.WakeAll();
+										handle->lock.Release();
+										
+										throw;
+									
+									}
+									
 									handle->wait.WakeAll();
 									handle->lock.Release();
 									

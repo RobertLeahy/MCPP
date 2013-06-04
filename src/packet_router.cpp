@@ -65,12 +65,25 @@ namespace MCPP {
 		//	supposed to kick offenders
 		} else if (!ignore_dne) {
 		
-			client->Conn()->Disconnect(
-				String::Format(
+			String reason;
+			try {
+			
+				reason=String::Format(
 					packet_dne,
 					String(packet.Type(),16)
-				)
-			);
+				);
+			
+			} catch (...) {
+			
+				//	We need to make sure this gets
+				//	done...
+				client->Disconnect(reason);
+				
+				throw;
+			
+			}
+			
+			client->Disconnect(reason);
 		
 		}
 	

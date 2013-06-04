@@ -36,6 +36,17 @@ namespace MCPP {
 			
 			handle->lock.Acquire();
 			handle->state=SendState::Failed;
+			
+			for (auto & callback : handle->callbacks) {
+			
+				try {
+				
+					callback(SendState::Failed);
+				
+				} catch (...) {	}
+			
+			}
+			
 			handle->wait.WakeAll();
 			handle->lock.Release();
 		

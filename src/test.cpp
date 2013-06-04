@@ -1,36 +1,26 @@
-bool test () {
+#include <curl.h>
+#include <system_error>
 
-	RSAKey rsa_key;
-	
-	Vector<Byte> plaintext={1,2,3,4,5};
-	
-	Vector<Byte> encrypted=rsa_key.PrivateEncrypt(plaintext);
-	
-	StdOut << "Encrypted bytes:";
-	for (Byte b : encrypted) StdOut << " 0x" << String(b,16);
-	StdOut << Newline;
-	
-	Vector<Byte> recovered_plaintext=rsa_key.PublicDecrypt(encrypted);
-	
-	StdOut << Newline << "Recovered bytes:";
-	for (Byte b : recovered_plaintext) StdOut << " 0x" << String(b,16);
-	StdOut << Newline;
-	
-	StdOut << Newline << "ASN.1/DER representation of public key:" << Newline;
+
+void print_bytes (const Vector<Byte> & buffer) {
+
 	bool first=true;
-	for (Byte b : rsa_key.PublicKey()) {
+	for (const Byte b : buffer) {
 	
 		if (first) first=false;
 		else StdOut << " ";
 		
-		//StdOut << "0x" << String(b,16);
-		StdOut << b;
+		StdOut << String(b,16);
 	
 	}
 	
 	StdOut << Newline;
-	
-	//	Cancel main
-	return true;
+
+}
+
+
+bool test () {
+
+	return false;
 
 }

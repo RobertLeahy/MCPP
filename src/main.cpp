@@ -13,6 +13,12 @@ int Main (const Vector<const String> & args) {
 	if (test()) return EXIT_SUCCESS;
 	#endif
 	
+	RunningServer.Construct();
+	
+	RunningServer->StartInteractive(args);
+	
+	StdIn.ReadLine();
+	
 	return EXIT_SUCCESS;
 
 }
