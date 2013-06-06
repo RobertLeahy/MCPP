@@ -1,4 +1,5 @@
 #include <server.hpp>
+#include <exception>
 
 
 namespace MCPP {
@@ -30,6 +31,8 @@ namespace MCPP {
 	static const String main_thread_desc="Listening Thread";
 	static const Word default_max_bytes=0;	//	Unlimited
 	static const String max_bytes_setting="max_bytes";
+	static const Word default_max_players=0;
+	static const String max_players_setting="max_players";
 	
 	
 	Nullable<Server> RunningServer;
@@ -131,7 +134,7 @@ namespace MCPP {
 					//	Packet complete, route
 					Router(client,client->CompleteReceive());
 				
-				} else if (buffer.Count()>max_bytes) {
+				} else if (buffer.Count()>MaximumBytes) {
 				
 					client->Disconnect(buffer_too_long);
 				
@@ -349,6 +352,20 @@ namespace MCPP {
 		running=false;
 		
 		state_lock.Release();
+	
+	}
+	
+	
+	void Server::Panic () noexcept {
+	
+		try {
+		
+			OnStop();
+		
+		} catch (...) {	}
+		
+		//	ABORT
+		std::terminate();
 	
 	}
 

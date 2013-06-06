@@ -1,4 +1,10 @@
+#include "server_mod_loader.cpp"
+
+
 inline void Server::server_startup () {
+
+	//	Attempt to load mods
+	load_mods();
 
 	//	Clear clients in case an existing
 	//	instance is being recycled
@@ -15,8 +21,15 @@ inline void Server::server_startup () {
 	Nullable<String> max_bytes_str(data->GetSetting(max_bytes_setting));
 	if (
 		max_bytes_str.IsNull() ||
-		!max_bytes_str->ToInteger(&max_bytes)
-	) max_bytes=default_max_bytes;
+		!max_bytes_str->ToInteger(&MaximumBytes)
+	) MaximumBytes=default_max_bytes;
+	
+	//	Maximum number of players
+	Nullable<String> max_players_str(data->GetSetting(max_players_setting));
+	if (
+		max_players_str.IsNull() ||
+		!max_players_str->ToInteger(&MaximumPlayers)
+	) MaximumPlayers=default_max_players;
 
 	//	Initialize a thread pool
 	

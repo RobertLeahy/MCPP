@@ -19,6 +19,8 @@ int Main (const Vector<const String> & args) {
 	
 	StdIn.ReadLine();
 	
+	RunningServer.Destroy();
+	
 	return EXIT_SUCCESS;
 
 }

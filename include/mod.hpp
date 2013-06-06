@@ -39,9 +39,6 @@ namespace MCPP {
 			/**
 			 *	When overriden in a derived class,
 			 *	cleans this object up.
-			 *
-			 *	The server will not call this directly,
-			 *	and will instead call Destroy.
 			 */
 			virtual ~Module () noexcept;
 			
@@ -85,14 +82,6 @@ namespace MCPP {
 			 *	with the exception of networking components.
 			 */
 			virtual void Install () = 0;
-	
-	
-			/**
-			 *	When overriden in a derived class,
-			 *	will clean the module and all associated
-			 *	resources up.
-			 */
-			virtual void Destroy () noexcept = 0;
 	
 	
 	};

@@ -4,7 +4,6 @@
 
 
 static const String motd_setting("motd");
-static const String max_players_setting("max_players");
 static const String protocol_error("Protocol error");
 
 
@@ -26,7 +25,7 @@ class ServerListPing : public Module {
 		
 		virtual void Install () override {
 		
-			PackeHandler prev(std::move(RunningServer->Router[0xFE]));
+			PacketHandler prev(std::move(RunningServer->Router[0xFE]));
 		
 			RunningServer->Router[0xFE]=[=] (SmartPointer<Client> && client, Packet && packet) {
 			
@@ -43,14 +42,6 @@ class ServerListPing : public Module {
 				
 					//	Get MotD
 					Nullable<String> motd=RunningServer->Data().GetSetting(motd_setting);
-					//	Get max players
-					Nullable<String> max_players=RunningServer->Data().GetSetting(max_players_setting);
-					
-					Word max_players_num;
-					if (
-						max_players.IsNull() ||
-						!max_players->ToInteger(&max_players_num)
-					) max_players_num=std::numeric_limits<Word>::max();
 					
 					//	Make a version number string
 					String ver_num(MinecraftMajorVersion);
@@ -65,21 +56,20 @@ class ServerListPing : public Module {
 								<< null_char
 								<< ver_num
 								<< null_char
-								<< (motd.IsNull() ? String("") : motd)
+								<< (motd.IsNull() ? String("") : *motd)
 								<< null_char
-								<< max_players_num;
-					ping_str << GraphemeCluster('\0')
+								<< RunningServer->MaximumPlayers==0 ? std::numeric_limits<Word>::max() : RunningServer->MaximumPlayers;
 			
 					//	Create packet
 					Packet reply;
 					reply.SetType<PacketTypeMap<0xFF>>();
-					reply.Retrieve(0)=std::move(ping_str);
+					reply.Retrieve<String>(0)=std::move(ping_str);
 					
 					//	Send
 					auto handle=client->Send(reply.ToBytes());
 					
 					//	Queue up disconnect
-					handle.AddCallback([=] (ClientState) {	client->Disconnect();	});
+					handle->AddCallback([=] (SendState) mutable {	client->Disconnect();	});
 			
 					//	Chain to previous callback
 					if (prev) prev(
@@ -96,23 +86,52 @@ class ServerListPing : public Module {
 			};
 		
 		}
-		
-		
-		virtual void Destroy () noexcept override {	}
 
 
 };
 
 
+
+static const char * module_name="0xFE Server List Ping Protocol Support";
+static ServerListPing * mod_ptr=nullptr;
+
+
 extern "C" {
 
 
-	const char * ModuleName="0xFE Server List Ping Protocol Support";
+	const char * ModuleName () {
+	
+		return module_name;
+	
+	}
 	
 	
 	Module * Load () {
 
-		return new ServerListPing();
+		try {
+		
+			if (mod_ptr!=nullptr) mod_ptr=new ServerListPing();
+		
+		} catch (...) {
+		
+			return nullptr;
+		
+		}
+		
+		return mod_ptr;
+	
+	}
+	
+	
+	void Unload () {
+	
+		if (mod_ptr!=nullptr) {
+		
+			delete mod_ptr;
+		
+			mod_ptr=nullptr;
+		
+		}
 	
 	}
 	

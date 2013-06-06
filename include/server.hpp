@@ -58,15 +58,6 @@ namespace MCPP {
 			
 			//	Data provider
 			DataProvider * data;
-			
-			
-			//	Settings
-			
-			//	Maximum number of bytes that
-			//	will be allowed to be buffered
-			//	from a certain client before
-			//	disconnecting them
-			Word max_bytes;
 		
 		
 			//	Components
@@ -85,6 +76,7 @@ namespace MCPP {
 			//	PRIVATE METHODS	//
 			//					//
 			inline void server_startup();
+			inline void load_mods();
 			
 			
 		protected:
@@ -97,6 +89,33 @@ namespace MCPP {
 		public:
 		
 		
+			/**
+			 *	The maxiumum number of bytes which
+			 *	the server shall allow to be buffered
+			 *	on a client connection before
+			 *	disconnecting them.
+			 */
+			Word MaximumBytes;
+			/**
+			 *	The maximum number of players which may
+			 *	simultaneously be connected to this
+			 *	server.
+			 */
+			Word MaximumPlayers;
+			/**
+			 *	A listing of the modules loadid by
+			 *	the server.
+			 */
+			Vector<
+				Tuple<
+					//	Actual name of the module
+					String,
+					//	File the module was loaded from
+					String,
+					//	Module handle
+					Library
+				>
+			> Modules;
 			/**
 			 *	Determines whether the server is running
 			 *	in interactive mode or not.
@@ -178,6 +197,15 @@ namespace MCPP {
 			 *		The type of message to log.
 			 */
 			void WriteLog (const String & message, Service::LogType type);
+			
+			
+			/**
+			 *	Should be called when something has
+			 *	gone fatally and irrecoverably wrong.
+			 *
+			 *	Attempts to shut the server down.
+			 */
+			void Panic () noexcept;
 			
 			
 			//			//

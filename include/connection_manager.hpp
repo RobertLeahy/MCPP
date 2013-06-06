@@ -163,7 +163,6 @@ namespace MCPP {
 			
 			//	Connected to a handler?
 			Mutex connected_lock;
-			bool connected;
 			
 			//	Last call to socket did not
 			//	completely send data
@@ -173,6 +172,10 @@ namespace MCPP {
 			Mutex reason_lock;
 			String reason;
 			volatile bool disconnect_flag;
+			
+			
+			void connect (Mutex * lock, CondVar * signal) noexcept;
+			void disconnect () noexcept;
 			
 			
 		public:
@@ -229,22 +232,6 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Associates this connection with a
-			 *	handler which shall be notified
-			 *	whenever data is sent.
-			 *
-			 *	\param [in] lock
-			 *		A pointer to a mutex which must
-			 *		be held to send a signal.
-			 *	\param [in] signal
-			 *		A pointer to a condvar which may
-			 *		be used to notify the handler
-			 *		that data is waiting to be sent.
-			 */
-			void Connect (Mutex * lock, CondVar * signal);
-			
-			
-			/**
 			 *	Retrieves the IP address to which this
 			 *	connection is connected.
 			 *
@@ -262,6 +249,11 @@ namespace MCPP {
 			UInt16 Port () const noexcept;
 			
 			
+			/**
+			 *	Instructs the connection handler responsible
+			 *	for this socket to close the connection.
+			 */
+			void Disconnect () noexcept;
 			/**
 			 *	Instructs the connection handler responsible
 			 *	for this socket to close the connection.

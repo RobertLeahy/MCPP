@@ -45,6 +45,11 @@ namespace MCPP {
 		
 		send->Join();
 		recv->Join();
+		
+		//	Purge all connections
+		//	so that they disassociate from this
+		//	handler
+		purge_connections(connections);
 
 		//	Safe for automatic cleanup now
 	
@@ -86,58 +91,26 @@ namespace MCPP {
 			
 			try {
 			
-				for (Word i=0;i<connections.Count();) {
+				for (auto & conn : purge) {
 				
-					bool found=false;
+					for (Word i=0;i<connections.Count();++i) {
 					
-					for (Word n=0;n<purge.Count();++n) {
-					
-						if (static_cast<Connection *>(connections[i])==static_cast<Connection *>(purge[n])) {
+						if (static_cast<Connection *>(connections[i])==static_cast<Connection *>(conn)) {
 						
-							found=true;
-							
-							//	Fire disconnect handler
-							//
-							//	We don't catch when this throws,
-							//	because if it's fails that's
-							//	very bad.
+							//	Disassociate connection from this
+							//	handler
+							conn->disconnect();
+						
 							parent->pool->Enqueue(
-								[this] (SmartPointer<Connection> conn) mutable {
-								
-									String reason=conn->reason_lock.Execute(
-										[this,conn] () {
-										
-											try {
-										
-												try {
-											
-													return conn->reason;
-													
-												} catch (const std::exception & e) {
-												
-													//	TODO: Log
-													
-													throw;
-												
-												} catch (...) {
-												
-													//	TODO: Log
-													
-													throw;
-												
-												}
-												
-											} catch (...) {
-											
-												parent->panic();
-												
-												throw;
-												
-											}
-										
-										}
-									);
-								
+								[this,conn] () mutable {
+									
+									String reason;
+									try {
+									
+										reason=conn->reason_lock.Execute([conn] () {	return conn->reason;	});
+									
+									} catch (...) {	}
+									
 									try {
 									
 										try {
@@ -148,6 +121,8 @@ namespace MCPP {
 										
 											//	TODO: Log
 										
+											throw;
+										
 										} catch (...) {
 										
 											//	TODO: Log
@@ -155,7 +130,7 @@ namespace MCPP {
 											throw;
 										
 										}
-										
+									
 									} catch (...) {
 									
 										parent->panic();
@@ -164,22 +139,16 @@ namespace MCPP {
 									
 									}
 								
-								},
-								connections[i]
+								}
 							);
-							
+						
 							connections.Delete(i);
-							purge.Delete(n);
-							
+						
 							break;
 						
 						}
 					
 					}
-					
-					if (purge.Count()==0) break;
-					
-					if (!found) ++i;
 				
 				}
 			

@@ -56,6 +56,11 @@ namespace MCPP {
 		
 		try {
 		
+			//	Create poll state object
+			//	to ues in polling
+			PollState ps;
+			ps.SetWrite();
+		
 			//	Loop until told to shut down
 			while (!stop) {
 			
@@ -76,15 +81,29 @@ namespace MCPP {
 					
 						for (SmartPointer<Connection> & conn : connections) {
 						
-							if (!(
-								conn->saturated ||
-								(conn->send_queue.Count()==0) ||
-								conn->disconnect_flag
-							)) {
+							//	If a connection has been flagged for
+							//	disconnect, move to disconnect it
+							//	at once
+							if (conn->disconnect_flag) {
 							
 								pending=true;
 								
 								break;
+							
+							}
+							
+							//	Don't check for pending data
+							//	if we marked the socket as saturated,
+							//	we'd just waste CPU cycles spinning
+							//	waiting for the data to get flushed out
+							//	across the network
+							if (!conn->saturated) {
+							
+								conn->send_lock.Acquire();
+								if (conn->send_queue.Count()!=0) pending=true;
+								conn->send_lock.Release();
+								
+								if (pending) break;
 							
 							}
 						
@@ -115,11 +134,6 @@ namespace MCPP {
 				}
 				
 				send_lock.Release();
-			
-				//	Create set of sockets
-				//	which need to be written
-				Word num=0;
-				SocketSet write;
 				
 				//	List of connections that
 				//	must be purged
@@ -137,138 +151,137 @@ namespace MCPP {
 				
 					for (SmartPointer<Connection> & conn : connections) {
 					
-						//	Is this socket to be disconnected?
+						//	If this socket has to be disconnected
+						//	do not attempt operations on it,
+						//	just queue it for removal
 						if (conn->disconnect_flag) {
 						
 							purge.EmplaceBack(conn);
 						
-						//	Otherwise, handle sending
+						//	Otherwise we can handle sending
 						} else {
-					
-							//	Clear saturated flag
+						
+							//	Clear the saturated flag
 							conn->saturated=false;
-						
-							//	Check for data to be written
-							if (conn->send_queue.Count()!=0) {
 							
-								//	If data must be written, check the socket
-								write.Add(conn->socket);
-								
-								++num;
-								
-							}
+							//	Acquire send lock
+							conn->send_lock.Acquire();
 							
-						}
-					
-					}
-					
-					//	Check sockets
-					if (
-						(num!=0) &&
-						(Socket::Select(nullptr,&write,nullptr,send_wait_timeout)!=0)
-					)
-					for (SmartPointer<Connection> & conn : connections)
-					if (write.Contains(conn->socket)) {
-					
-						//	Obtain lock
-						conn->send_lock.Acquire();
-						
-						try {
-						
-							//	Write
-							while (conn->send_queue.Count()!=0) {
+							try {
 							
-								Vector<Byte> & buffer=conn->send_queue[0].Item<0>();
-								SmartPointer<SendHandle> & handle=conn->send_queue[0].Item<1>();
+								//	Loop until all data has been sent,
+								//	or socket becomes no longer writable
+								//	without blocking
+								while (
+									(conn->send_queue.Count()!=0) &&
+									conn->socket.Poll(ps,send_wait_timeout).Write()
+								) {
 								
-								//	No longer pending
-								handle->lock.Acquire();
-								handle->state=SendState::Sending;
-								handle->wait.WakeAll();
-								handle->lock.Release();
-								
-								//	Number of bytes we're going to try and send
-								Word num_bytes=buffer.Count();
-								//	Number of bytes actually sent
-								Word bytes_sent=0;
-							
-								//	Whether we sent all bytes
-								bool sent_all=false;
-								
-								//	Attempt to send
-								try {
-								
-									sent_all=(bytes_sent=conn->socket.Send(&buffer))==num_bytes;
-								
-								} catch (...) {
-								
-									//	Socket exceptions cause
-									//	connection to be purged
-									purge.EmplaceBack(conn);
+									//	Retrieve next item to be sent
+									Vector<Byte> & buffer=conn->send_queue[0].Item<0>();
+									SmartPointer<SendHandle> & handle=conn->send_queue[0].Item<1>();
 									
-									break;
-								
-								}
-								
-								//	Update sent count in handle
-								handle->sent+=bytes_sent;
-								
-								if (sent_all) {
-								
-									//	Sent all bytes successfully, notify
-									//	handle
+									//	Change send handle state
+									//	to sending if it isn't
+									//	sending already
 									handle->lock.Acquire();
-									handle->state=SendState::Sent;
+									if (handle->state!=SendState::Sending) {
 									
+										handle->state=SendState::Sending;
+										handle->wait.WakeAll();
+									
+									}
+									handle->lock.Release();
+									
+									//	Number of bytes we're going to try
+									//	and send
+									Word num_bytes=buffer.Count();
+									//	Number of bytes actually sent
+									//	(for comparison)
+									Word bytes_sent=0;
+									
+									//	Attempt to send
 									try {
 									
-										for (auto & callback : handle->callbacks) {
-										
-											parent->pool->Enqueue(
-												callback,
-												SendState::Sent
-											);
-										
-										}
-										
+										bytes_sent=conn->socket.Send(&buffer);
+									
 									} catch (...) {
 									
-										handle->wait.WakeAll();
-										handle->lock.Release();
+										//	Socket exceptions cause connection
+										//	to be purged
+										purge.EmplaceBack(conn);
 										
-										throw;
+										//	We also do not attempt to write
+										//	anymore
+										break;
 									
 									}
 									
-									handle->wait.WakeAll();
-									handle->lock.Release();
+									//	Update sent count in handle
+									handle->sent+=bytes_sent;
 									
-									//	Purge buffer to move onto next
-									//	buffer (if there is one)
-									conn->send_queue.Delete(0);
+									if (bytes_sent==num_bytes) {
 									
-								} else {
+										//	Sent all bytes successfully, notify
+										//	handle
+										handle->lock.Acquire();
+										handle->state=SendState::Sent;
+										handle->wait.WakeAll();
+										
+										//	Fire callbacks
+										try {
+										
+											for (auto & callback : handle->callbacks) {
+											
+												parent->pool->Enqueue(
+													callback,
+													SendState::Sent
+												);
+											
+											}
+										
+										} catch (...) {
+										
+											handle->lock.Release();
+											
+											throw;
+										
+										}
+										
+										handle->lock.Release();
+										
+										//	Purge buffer to move onto next
+										//	buffer (if there is one)
+										conn->send_queue.Delete(0);
+									
+									}
 								
-									//	Didn't send all bytes, mark
-									//	this socket as saturated and
-									//	abort (for now)
+								}
+								
+								//	If we failed to write all data
+								//	mark socket as saturated
+								if (conn->send_queue.Count()!=0) {
+								
+									/*parent->log(
+										"Saturated",
+										Service::LogType::Information
+									);*/
+								
 									conn->saturated=true;
 									
-									break;
-									
 								}
+								
+							} catch (...) {
+							
+								conn->send_lock.Release();
+								
+								throw;
 							
 							}
-						
-						} catch (...) {
-						
-							conn->send_lock.Release();
 							
-							throw;
+							conn->send_lock.Release();
 						
 						}
-						
-						conn->send_lock.Release();
 					
 					}
 				

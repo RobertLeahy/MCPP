@@ -87,7 +87,7 @@ echo ====BUILDING SERVER====
 echo.
 
 
-set main=main.cpp server.cpp
+set main=server.cpp
 set interfaces=mod.cpp
 set nbt=nbt.cpp
 set thread_pool=thread_pool.cpp thread_pool_handle.cpp
@@ -100,11 +100,24 @@ set source_all=%main% %nbt% %thread_pool% %network% %mc_comm% %mc_data% %server_
 set include_all=-I %zlib_include_loc% -I %openssl_include_loc% -I %curl_include_loc%
 set library_all=../bin/data_provider.dll ../bin/zlib1.dll ../bin/libeay32.dll ../bin/ssleay32.dll ../bin/libcurl.dll -lws2_32
 set server_all=%include_all% %source_all% %library_all%
-g++.exe %common_params% %server_all% -o ../bin/server.exe
+g++.exe %common_params% %server_all% -shared -o ../bin/mcpp.dll
 
+set mcpp=../bin/mcpp.dll
 
 echo.
+echo ====BUILDING MODULES====
+echo.
 
+mkdir ..\bin\mods > nul 2> nul
 
+g++.exe %include_all% %common_params% ping/main.cpp %mcpp% -shared -o ../bin/mods/ping.dll
+
+echo.
+echo ====BUILDING SERVER FRONT-END====
+echo.
+
+g++.exe %include_all% %common_params% main.cpp %mcpp% -o ../bin/server.exe
+
+echo.
 echo ====DONE====
 echo.

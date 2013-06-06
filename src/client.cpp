@@ -28,13 +28,14 @@ namespace MCPP {
 	
 		if (encrypted) {
 		
+			SmartPointer<SendHandle> handle;
+			
 			//	Lock to keep stream cipher
 			//	synchronized between client
 			//	and server (and because
 			//	encryption is not parallelizable.
 			encryptor->BeginEncrypt();
 			
-			SmartPointer<SendHandle> handle;
 			try {
 		
 				//	Encrypt
@@ -60,6 +61,13 @@ namespace MCPP {
 		
 		//	No encryption, just send
 		return conn->Send(std::move(buffer));
+	
+	}
+	
+	
+	void Client::Disconnect () noexcept {
+	
+		conn->Disconnect();
 	
 	}
 	

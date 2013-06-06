@@ -159,12 +159,22 @@ namespace MCPP {
 			 *	explicitly sends it and waits on the send
 			 *	handle returned by Send before calling
 			 *	this function.
+			 */
+			void Disconnect () noexcept;
+			/**
+			 *	Disconnects the client.
+			 *
+			 *	The client will not receive the appropriate
+			 *	kick/disconnect packet unless the caller
+			 *	explicitly sends it and waits on the send
+			 *	handle returned by Send before calling
+			 *	this function.
 			 *
 			 *	\param [in] reason
 			 *		The reason the client is being disconnected,
 			 *		defaults to the empty string.
 			 */
-			void Disconnect (const String & reason=String()) noexcept;
+			void Disconnect (const String & reason) noexcept;
 			/**
 			 *	Disconnects the client.
 			 *

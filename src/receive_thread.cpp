@@ -49,17 +49,6 @@ namespace MCPP {
 		//	the send thread has stopped
 		ch->send->Join();
 		
-		//	We must disconnect all connections from
-		//	this handler before we can safely
-		//	clean it up
-		for (SmartPointer<Connection> & conn : ch->connections) {
-		
-			conn->connected_lock.Acquire();
-			conn->connected=false;
-			conn->connected_lock.Release();
-		
-		}
-		
 		//	There are three situations wherein a handler
 		//	is shutting down:
 		//
@@ -204,7 +193,7 @@ namespace MCPP {
 					
 					if (conn.IsNull()) break;
 					
-					(*conn)->Connect(&send_lock,&send_sleep);
+					(*conn)->connect(&send_lock,&send_sleep);
 					
 					connections_lock.Write();
 					

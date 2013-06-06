@@ -20,7 +20,6 @@ namespace MCPP {
 			recv_task(false),
 			send_msg_lock(nullptr),
 			send_msg_signal(nullptr),
-			connected(false),
 			saturated(false),
 			disconnect_flag(false)
 	{	}
@@ -83,25 +82,15 @@ namespace MCPP {
 		
 		//	Now notify send thread
 		//	if applicable
-		if (connected) {
+		connected_lock.Acquire();
+		if (send_msg_lock!=nullptr) {
 		
 			send_msg_lock->Acquire();
-			
-			try {
-			
-				send_msg_signal->WakeAll();
-			
-			} catch (...) {
-			
-				send_msg_lock->Release();
-				
-				throw;
-			
-			}
-			
+			send_msg_signal->WakeAll();
 			send_msg_lock->Release();
 			
 		}
+		connected_lock.Release();
 		
 		//	Return handle
 		return handle;
@@ -109,12 +98,22 @@ namespace MCPP {
 	}
 	
 	
-	void Connection::Connect (Mutex * lock, CondVar * signal) {
+	void Connection::connect (Mutex * lock, CondVar * signal) noexcept {
 	
+		connected_lock.Acquire();
 		send_msg_lock=lock;
 		send_msg_signal=signal;
-		
-		connected=true;
+		connected_lock.Release();
+	
+	}
+	
+	
+	void Connection::disconnect () noexcept {
+	
+		connected_lock.Acquire();
+		send_msg_lock=nullptr;
+		send_msg_signal=nullptr;
+		connected_lock.Release();
 	
 	}
 	
@@ -154,12 +153,10 @@ namespace MCPP {
 		
 		//	Wake up send thread to disconnect
 		connected_lock.Acquire();
-		if (connected) {
+		if (send_msg_lock!=nullptr) {
 		
 			send_msg_lock->Acquire();
-			
 			send_msg_signal->WakeAll();
-			
 			send_msg_lock->Release();
 			
 		}
@@ -180,14 +177,31 @@ namespace MCPP {
 		
 		//	Wake up send thread to disconnect
 		connected_lock.Acquire();
-		if (connected) {
+		if (send_msg_lock!=nullptr) {
 		
 			send_msg_lock->Acquire();
-			
 			send_msg_signal->WakeAll();
-			
 			send_msg_lock->Release();
 			
+		}
+		connected_lock.Release();
+	
+	}
+	
+	
+	void Connection::Disconnect () noexcept {
+	
+		//	Flag for disconnect
+		disconnect_flag=true;
+		
+		//	Wake up send thread to disconnect
+		connected_lock.Acquire();
+		if (send_msg_lock!=nullptr) {
+		
+			send_msg_lock->Acquire();
+			send_msg_signal->WakeAll();
+			send_msg_lock->Release();
+		
 		}
 		connected_lock.Release();
 	
