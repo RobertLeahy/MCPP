@@ -117,11 +117,15 @@ namespace MCPP {
 	
 	Metadatum & Metadatum::operator = (const Metadatum & other) {
 	
-		destroy();
-		
-		copy(other);
-		
-		copy_move_shared(other);
+		if (&other!=this) {
+	
+			destroy();
+			
+			copy(other);
+			
+			copy_move_shared(other);
+			
+		}
 		
 		return *this;
 	
@@ -130,11 +134,15 @@ namespace MCPP {
 	
 	Metadatum & Metadatum::operator = (Metadatum && other) noexcept {
 	
-		destroy();
-		
-		move(std::move(other));
-		
-		copy_move_shared(other);
+		if (&other!=this) {
+	
+			destroy();
+			
+			move(std::move(other));
+			
+			copy_move_shared(other);
+			
+		}
 		
 		return *this;
 	

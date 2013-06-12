@@ -185,10 +185,14 @@ Tag::Tag (Tag && other) noexcept {
 
 Tag & Tag::operator = (const Tag & other) {
 
-	destroy();
-	
-	copy(other);
-	
+	if (&other!=this) {
+
+		destroy();
+		
+		copy(other);
+		
+	}
+		
 	return *this;
 
 }
@@ -196,9 +200,13 @@ Tag & Tag::operator = (const Tag & other) {
 
 Tag & Tag::operator = (Tag && other) noexcept {
 
-	destroy();
-	
-	move(std::move(other));
+	if (&other!=this) {
+
+		destroy();
+		
+		move(std::move(other));
+		
+	}
 	
 	return *this;
 

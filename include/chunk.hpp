@@ -59,7 +59,7 @@ namespace MCPP {
 			 *		Whether the uffer has the extra
 			 *		4 bits for extra block types.
 			 */
-			Chunk (Vector<Byte> && data, bool skylight, bool add) noexcept;
+			Chunk (Vector<Byte> data, bool skylight, bool add) noexcept;
 			
 			
 			/**

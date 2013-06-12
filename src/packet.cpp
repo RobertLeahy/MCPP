@@ -85,22 +85,27 @@ namespace MCPP {
 	
 	Packet & Packet::operator = (Packet && other) noexcept {
 	
-		//	Clean out the buffers and
-		//	factory in this object
-		destroy();
-		
-		//	Move from other item
-		buffer=other.buffer;
-		factory=other.factory;
-		curr=other.curr;
-		complete=other.complete;
-		metadata=std::move(other.metadata);
-		
-		//	Prevent cleanup of
-		//	pointers we took ownership
-		//	of
-		other.factory=nullptr;
-		other.buffer=nullptr;
+		//	Guard against self-assignment
+		if (&other!=this) {
+	
+			//	Clean out the buffers and
+			//	factory in this object
+			destroy();
+			
+			//	Move from other item
+			buffer=other.buffer;
+			factory=other.factory;
+			curr=other.curr;
+			complete=other.complete;
+			metadata=std::move(other.metadata);
+			
+			//	Prevent cleanup of
+			//	pointers we took ownership
+			//	of
+			other.factory=nullptr;
+			other.buffer=nullptr;
+			
+		}
 		
 		//	Return self reference
 		return *this;

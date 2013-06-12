@@ -49,7 +49,7 @@ namespace MCPP {
 			//	State
 			
 			//	Is the server running?
-			volatile bool running;
+			bool running;
 			//	Must be held to change the server's state
 			Mutex state_lock;
 			

@@ -43,16 +43,20 @@ namespace MCPP {
 	
 	SHA1 & SHA1::operator = (const SHA1 & other) {
 	
-		EVP_MD_CTX_cleanup(&sha);
+		if (&other!=this) {
+	
+			EVP_MD_CTX_cleanup(&sha);
+			
+			EVP_MD_CTX_init(&sha);
+			
+			if (EVP_MD_CTX_copy_ex(&sha,&other.sha)==0) throw std::runtime_error(
+				ERR_error_string(
+					ERR_get_error(),
+					nullptr
+				)
+			);
 		
-		EVP_MD_CTX_init(&sha);
-		
-		if (EVP_MD_CTX_copy_ex(&sha,&other.sha)==0) throw std::runtime_error(
-			ERR_error_string(
-				ERR_get_error(),
-				nullptr
-			)
-		);
+		}
 		
 		return *this;
 	

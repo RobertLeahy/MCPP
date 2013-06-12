@@ -9,7 +9,7 @@ namespace MCPP {
 	static const char * size_error="Chunk has incorrect size";
 
 
-	Chunk::Chunk (Vector<Byte> && data, bool skylight, bool add) noexcept : data(0) {
+	Chunk::Chunk (Vector<Byte> data, bool skylight, bool add) noexcept {
 	
 		//	Target size starts out as
 		//	1 byte per block for block

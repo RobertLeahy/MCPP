@@ -2,7 +2,6 @@
 #include <utility>
 
 
-static const String motd_setting("motd");
 static const String protocol_error("Protocol error");
 static const String name("0xFE Server List Ping Protocol Support");
 static const Word priority=1;
