@@ -50,7 +50,7 @@ namespace MCPP {
 			 *	The type of the callback which shall be
 			 *	invoked on a successful connection.
 			 */
-			typedef std::function<void (Socket &&, IPAddress, UInt16)> ConnectType;
+			typedef std::function<void (Socket, IPAddress, UInt16)> ConnectType;
 			/**
 			 *	The type of the callback which shall be
 			 *	called each time a new connection is formed,
@@ -138,13 +138,13 @@ namespace MCPP {
 			 *		has to unexpectedly shut down.
 			 */
 			ListenHandler (
-				const String & desc,
+				String desc,
 				const Vector<Tuple<IPAddress,UInt16>> & binds,
 				ThreadPool & pool,
-				const OnConnectType & on_connect,
-				const ConnectType & connect,
-				const LogType & log,
-				const PanicType & panic
+				OnConnectType on_connect,
+				ConnectType connect,
+				LogType log,
+				PanicType panic
 			);
 			
 			

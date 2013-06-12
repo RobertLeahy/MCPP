@@ -21,6 +21,7 @@ namespace MCPP {
 	static const String disconnected_with_reason="{{0}}:{{1}} disconnected (with reason: \"{0}\"), there are now {{2}} clients connected";
 	static const String error_processing_recv="Error processing received data";
 	static const String buffer_too_long="Buffer too long";
+	static const String panic_message="Panic!";
 	
 	
 	//	Constants
@@ -33,6 +34,7 @@ namespace MCPP {
 	static const String max_bytes_setting="max_bytes";
 	static const Word default_max_players=0;
 	static const String max_players_setting="max_players";
+	static const String motd_setting="motd";
 	
 	
 	Nullable<Server> RunningServer;
@@ -139,6 +141,17 @@ namespace MCPP {
 					client->Disconnect(buffer_too_long);
 				
 				}
+			
+			} catch (const std::exception & e) {
+			
+				WriteLog(
+					e.what(),
+					Service::LogType::Warning
+				);
+			
+				conn->Disconnect(error_processing_recv);
+				
+				throw;
 			
 			} catch (...) {
 			
@@ -332,6 +345,19 @@ namespace MCPP {
 			//	thread pool
 			pool.Destroy();
 			
+			//	Now we unload all modules
+			if (!mods.IsNull()) mods->Unload();
+			
+			//	Clear all events et cetera
+			//	that might have module resources
+			//	loaded into them
+			Router.Clear();
+			OnAccept.Clear();
+			OnConnect.Clear();
+			OnDisconnect.Clear();
+			OnLog.Clear();
+			OnReceive=ReceiveCallback();
+			
 			//	Clean up data provider
 			delete data;
 			data=nullptr;
@@ -360,12 +386,34 @@ namespace MCPP {
 	
 		try {
 		
+			WriteLog(
+				panic_message,
+				Service::LogType::Critical
+			);
+		
+		} catch (...) {	}
+	
+		try {
+		
 			OnStop();
 		
 		} catch (...) {	}
 		
 		//	ABORT
 		std::terminate();
+	
+	}
+	
+	
+	String Server::GetMessageOfTheDay () {
+	
+		if (data==nullptr) return String();
+		
+		Nullable<String> motd=data->GetSetting(motd_setting);
+		
+		if (motd.IsNull()) return String();
+		
+		return *motd;
 	
 	}
 

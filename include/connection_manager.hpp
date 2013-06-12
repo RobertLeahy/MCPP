@@ -119,7 +119,7 @@ namespace MCPP {
 			SendState State () noexcept;
 			SendState Wait () noexcept;
 			Word Sent () noexcept;
-			void AddCallback (const SendCallback & callback);
+			void AddCallback (SendCallback callback);
 	
 	
 	};
@@ -208,7 +208,7 @@ namespace MCPP {
 			 *		object is destroyed.
 			 */
 			Connection (
-				Socket && socket,
+				Socket socket,
 				const IPAddress & ip,
 				UInt16 port
 			);
@@ -228,7 +228,7 @@ namespace MCPP {
 			 *		A buffer to be queued
 			 *		to be sent.
 			 */
-			SmartPointer<SendHandle> Send (Vector<Byte> && buffer);
+			SmartPointer<SendHandle> Send (Vector<Byte> buffer);
 			
 			
 			/**
@@ -470,11 +470,11 @@ namespace MCPP {
 			 *		processing.
 			 */
 			ConnectionManager (
-				const ConnectCallback & connect,
-				const DisconnectCallback & disconnect,
-				const ReceiveCallback & recv,
-				const LogType & log,
-				const PanicType & panic,
+				ConnectCallback connect,
+				DisconnectCallback disconnect,
+				ReceiveCallback recv,
+				LogType log,
+				PanicType panic,
 				ThreadPool & pool
 			);
 		
@@ -501,7 +501,7 @@ namespace MCPP {
 			 *		The remote port to which \em socket
 			 *		is connected.
 			 */
-			void Add (Socket && socket, const IPAddress & ip, UInt16 port);
+			void Add (Socket socket, const IPAddress & ip, UInt16 port);
 	
 	
 	};

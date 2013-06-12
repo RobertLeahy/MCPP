@@ -88,6 +88,12 @@ namespace MCPP {
 			 *		to this event.
 			 */
 			void Add (std::function<T (Args...)> && func);
+			/**
+			 *	Clears all subscribed events.
+			 *
+			 *	This is not thread safe.
+			 */
+			void Clear () noexcept;
 			
 			
 			/**
@@ -269,6 +275,14 @@ namespace MCPP {
 		}
 		
 		return returnthis;
+	
+	}
+	
+	
+	template <typename T, typename... Args>
+	void Event<T (Args...)>::Clear () noexcept {
+	
+		callbacks.Clear();
 	
 	}
 	

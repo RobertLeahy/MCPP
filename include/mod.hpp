@@ -82,6 +82,21 @@ namespace MCPP {
 			 *	with the exception of networking components.
 			 */
 			virtual void Install () = 0;
+			
+			
+			/**
+			 *	When overriden in a derived class,
+			 *	returns the name that this module shall
+			 *	be known by.
+			 *
+			 *	\return
+			 *		A reference to a string which gives
+			 *		the name by which this module shall
+			 *		be known.  As it is a reference that
+			 *		string must be statically allocated
+			 *		in some way.
+			 */
+			virtual const String & Name () const noexcept = 0;
 	
 	
 	};

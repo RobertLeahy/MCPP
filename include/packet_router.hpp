@@ -14,7 +14,7 @@
 namespace MCPP {
 
 
-	typedef std::function<void (SmartPointer<Client> &&, Packet &&)> PacketHandler;
+	typedef std::function<void (SmartPointer<Client>, Packet)> PacketHandler;
 
 
 	/**
@@ -85,7 +85,7 @@ namespace MCPP {
 			 *	\param [in] packet
 			 *		The packet-in-question.
 			 */
-			void operator () (SmartPointer<Client> client, Packet && packet) const;
+			void operator () (SmartPointer<Client> client, Packet packet) const;
 			
 			
 			/**

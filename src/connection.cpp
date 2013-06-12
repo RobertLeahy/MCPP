@@ -8,7 +8,7 @@ namespace MCPP {
 
 
 	Connection::Connection (
-		Socket && socket,
+		Socket socket,
 		const IPAddress & ip,
 		UInt16 port
 	)
@@ -54,7 +54,7 @@ namespace MCPP {
 	}
 
 	
-	SmartPointer<SendHandle> Connection::Send (Vector<Byte> && buffer) {
+	SmartPointer<SendHandle> Connection::Send (Vector<Byte> buffer) {
 	
 		//	Create handle
 		SmartPointer<SendHandle> handle(SmartPointer<SendHandle>::Make());

@@ -1,4 +1,5 @@
 #include <connection_manager.hpp>
+#include <utility>
 
 
 namespace MCPP {
@@ -45,7 +46,7 @@ namespace MCPP {
 	}
 	
 	
-	void SendHandle::AddCallback (const SendCallback & callback) {
+	void SendHandle::AddCallback (SendCallback callback) {
 	
 		bool execute=false;
 		lock.Acquire();
@@ -59,7 +60,7 @@ namespace MCPP {
 					(state==SendState::Failed)
 				)
 			) execute=true;
-			else callbacks.Add(callback);
+			else callbacks.Add(std::move(callback));
 			
 		} catch (...) {
 		

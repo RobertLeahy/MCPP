@@ -64,6 +64,7 @@ namespace MCPP {
 			Nullable<ConnectionManager> connections;
 			Nullable<ThreadPool> pool;
 			Nullable<ListenHandler> socket_server;
+			Nullable<ModuleLoader> mods;
 			
 			
 			//	For interactive
@@ -103,7 +104,15 @@ namespace MCPP {
 			 */
 			Word MaximumPlayers;
 			/**
-			 *	A listing of the modules loadid by
+			 *	Retrieves the server's message of the
+			 *	day.
+			 *
+			 *	\return
+			 *		The server's message of the day.
+			 */
+			String GetMessageOfTheDay ();
+			/**
+			 *	A listing of the modules loaded by
 			 *	the server.
 			 */
 			Vector<

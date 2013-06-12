@@ -18,6 +18,7 @@ int Main (const Vector<const String> & args) {
 	RunningServer->StartInteractive(args);
 	
 	StdIn.ReadLine();
+	//for (;;) Thread::Sleep(1000);
 	
 	RunningServer.Destroy();
 	

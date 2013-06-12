@@ -260,16 +260,7 @@ namespace MCPP {
 								
 								//	If we failed to write all data
 								//	mark socket as saturated
-								if (conn->send_queue.Count()!=0) {
-								
-									/*parent->log(
-										"Saturated",
-										Service::LogType::Information
-									);*/
-								
-									conn->saturated=true;
-									
-								}
+								if (conn->send_queue.Count()!=0) conn->saturated=true;
 								
 							} catch (...) {
 							

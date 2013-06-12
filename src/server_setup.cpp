@@ -1,10 +1,24 @@
-#include "server_mod_loader.cpp"
+static const String mods_dir("mods");
 
 
 inline void Server::server_startup () {
 
-	//	Attempt to load mods
-	load_mods();
+	//	Log callback for components
+	MCPP::LogType log(
+		[=] (const String & message, Service::LogType type) -> void {	WriteLog(message,type);	}
+	);
+	
+	//	Load mods
+	mods.Construct(
+		Path::Combine(
+			Path::GetPath(
+				File::GetCurrentExecutableFileName()
+			),
+			mods_dir
+		),
+		log
+	);
+	mods->Load();
 
 	//	Clear clients in case an existing
 	//	instance is being recycled
@@ -46,13 +60,13 @@ inline void Server::server_startup () {
 	//	Fire up the thread pool
 	pool.Construct(num_threads);
 
-	//	Callbacks
-	MCPP::LogType log(
-		[=] (const String & message, Service::LogType type) -> void {	WriteLog(message,type);	}
-	);
+	//	Panic callback
 	PanicType panic(
-		[=] () -> void {	}
+		[=] () -> void {	Panic();	}
 	);
+	
+	//	Install mods
+	mods->Install();
 	
 	//	Try and fire up a connection
 	//	manager

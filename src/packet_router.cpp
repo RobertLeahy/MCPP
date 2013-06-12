@@ -50,13 +50,15 @@ namespace MCPP {
 	}
 	
 	
-	void PacketRouter::operator () (SmartPointer<Client> client, Packet && packet) const {
+	void PacketRouter::operator () (SmartPointer<Client> client, Packet packet) const {
+	
+		auto & dispatch=routes[packet.Type()];
 	
 		//	Check that a valid route exists
-		if (routes[packet.Type()]) {
+		if (dispatch) {
 		
 			//	Dispatch
-			routes[packet.Type()](
+			dispatch(
 				std::move(client),
 				std::move(packet)
 			);

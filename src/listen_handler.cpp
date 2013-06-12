@@ -18,14 +18,23 @@ namespace MCPP {
 
 
 	ListenHandler::ListenHandler (
-		const String & desc,
+		String desc,
 		const Vector<Tuple<IPAddress,UInt16>> & binds,
 		ThreadPool & pool,
-		const OnConnectType & on_connect,
-		const ConnectType & connect,
-		const LogType & log,
-		const PanicType & panic
-	) : desc(desc), sockets(binds.Count()), pool(&pool), on_connect(on_connect), connect(connect), log(log), panic(panic), stop(false) {
+		OnConnectType on_connect,
+		ConnectType connect,
+		LogType log,
+		PanicType panic
+	)
+		:	desc(std::move(desc)),
+			sockets(binds.Count()),
+			pool(&pool),
+			on_connect(std::move(on_connect)),
+			connect(std::move(connect)),
+			log(std::move(log)),
+			panic(std::move(panic)),
+			stop(false)
+	{
 	
 		//	Attempt to bind
 		for (const Tuple<IPAddress,UInt16> & t : binds) {

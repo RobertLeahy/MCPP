@@ -1,10 +1,11 @@
 #include <common.hpp>
 #include <utility>
-#include <limits>
 
 
 static const String motd_setting("motd");
 static const String protocol_error("Protocol error");
+static const String name("0xFE Server List Ping Protocol Support");
+static const Word priority=1;
 
 
 class ServerListPing : public Module {
@@ -18,7 +19,14 @@ class ServerListPing : public Module {
 		
 		virtual Word Priority () const noexcept override {
 		
-			return 1;
+			return priority;
+		
+		}
+		
+		
+		virtual const String & Name () const noexcept override {
+		
+			return name;
 		
 		}
 		
@@ -27,21 +35,25 @@ class ServerListPing : public Module {
 		
 			PacketHandler prev(std::move(RunningServer->Router[0xFE]));
 		
-			RunningServer->Router[0xFE]=[=] (SmartPointer<Client> && client, Packet && packet) {
+			RunningServer->Router[0xFE]=[=] (SmartPointer<Client> client, Packet packet) {
 			
 				try {
 				
 					//	Is this client in the right state?
 					if (client->GetState()!=ClientState::Connected) {
 					
-						client->Disconnect(protocol_error);
+						//	Not for us, chain through if possible
+						if (prev) prev(
+							std::move(client),
+							std::move(packet)
+						);
+						//	Nothing to chain through to, kill the
+						//	client
+						else client->Disconnect(protocol_error);
 					
 						return;
 					
 					}
-				
-					//	Get MotD
-					Nullable<String> motd=RunningServer->Data().GetSetting(motd_setting);
 					
 					//	Make a version number string
 					String ver_num(MinecraftMajorVersion);
@@ -51,14 +63,26 @@ class ServerListPing : public Module {
 					//	Prepare a string
 					GraphemeCluster null_char('\0');
 					String ping_str("§1");
-					ping_str	<< null_char
-								<< ProtocolVersion
-								<< null_char
-								<< ver_num
-								<< null_char
-								<< (motd.IsNull() ? String("") : *motd)
-								<< null_char
-								<< RunningServer->MaximumPlayers==0 ? std::numeric_limits<Word>::max() : RunningServer->MaximumPlayers;
+					ping_str	<<	null_char
+								<<	ProtocolVersion
+								<<	null_char
+								<<	ver_num
+								<<	null_char
+								<<	RunningServer->GetMessageOfTheDay()
+								<<	null_char
+								<<	RunningServer->Clients.AuthenticatedCount()
+								<<	null_char
+								<< 	(
+										//	Minecraft client probably doesn't understand
+										//	that 0 max players = unlimited, so we
+										//	try and transform that into something the
+										//	Minecraft client can understand
+										(RunningServer->MaximumPlayers==0)
+												//	Which probably isn't this but at least
+												//	we tried...
+											?	std::numeric_limits<Word>::max()
+											:	RunningServer->MaximumPlayers
+									);
 			
 					//	Create packet
 					Packet reply;
@@ -91,32 +115,19 @@ class ServerListPing : public Module {
 };
 
 
-
-static const char * module_name="0xFE Server List Ping Protocol Support";
-static ServerListPing * mod_ptr=nullptr;
+static Module * mod_ptr=nullptr;
 
 
 extern "C" {
-
-
-	const char * ModuleName () {
-	
-		return module_name;
-	
-	}
 	
 	
 	Module * Load () {
 
 		try {
 		
-			if (mod_ptr!=nullptr) mod_ptr=new ServerListPing();
+			if (mod_ptr==nullptr) mod_ptr=new ServerListPing();
 		
-		} catch (...) {
-		
-			return nullptr;
-		
-		}
+		} catch (...) {	}
 		
 		return mod_ptr;
 	

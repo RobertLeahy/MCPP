@@ -1,17 +1,26 @@
 #include <connection_manager.hpp>
+#include <utility>
 
 
 namespace MCPP {
 
 
 	ConnectionManager::ConnectionManager (
-		const ConnectCallback & connect,
-		const DisconnectCallback & disconnect,
-		const ReceiveCallback & recv,
-		const LogType & log,
-		const PanicType & panic,
+		ConnectCallback connect,
+		DisconnectCallback disconnect,
+		ReceiveCallback recv,
+		LogType log,
+		PanicType panic,
 		ThreadPool & pool
-	) : cleanup_count(0), connect(connect), disconnect(disconnect), panic(panic), recv(recv), log(log), pool(&pool) {	}
+	)
+		:	cleanup_count(0),
+			connect(std::move(connect)),
+			disconnect(std::move(disconnect)),
+			panic(std::move(panic)),
+			recv(std::move(recv)),
+			log(std::move(log)),
+			pool(&pool)
+	{	}
 
 
 	ConnectionManager::~ConnectionManager () noexcept {
@@ -39,7 +48,7 @@ namespace MCPP {
 	}
 	
 	
-	void ConnectionManager::Add (Socket && socket, const IPAddress & ip, UInt16 port) {
+	void ConnectionManager::Add (Socket socket, const IPAddress & ip, UInt16 port) {
 	
 		SmartPointer<Connection> conn=SmartPointer<Connection>::Make(
 			std::move(socket),
