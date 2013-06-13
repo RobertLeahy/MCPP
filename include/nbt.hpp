@@ -131,16 +131,11 @@ namespace MCPP {
 				Tag (Int64 data) noexcept;
 				Tag (Single data) noexcept;
 				Tag (Double data) noexcept;
-				Tag (const Vector<SByte> & data);
-				Tag (Vector<SByte> && data) noexcept;
-				Tag (const String & data);
-				Tag (String && data) noexcept;
-				Tag (const Vector<Tag> & data);
-				Tag (Vector<Tag> && data) noexcept;
-				Tag (const Vector<NamedTag> & data);
-				Tag (Vector<NamedTag> && data) noexcept;
-				Tag (const Vector<Int32> & data);
-				Tag (Vector<Int32> && data) noexcept;
+				Tag (Vector<SByte> data) noexcept;
+				Tag (String data) noexcept;
+				Tag (Vector<Tag> data) noexcept;
+				Tag (Vector<NamedTag> data) noexcept;
+				Tag (Vector<Int32> data) noexcept;
 				
 				
 				/**

@@ -158,7 +158,7 @@ namespace MCPP {
 			 *		A string representing the name
 			 *		of the setting to delete.
 			 */
-			virtual void DeleteSetting (const String & setting) = 0;
+			//virtual void DeleteSetting (const String & setting) = 0;
 			/**
 			 *	Sets a setting in the backing store.
 			 *
@@ -170,7 +170,7 @@ namespace MCPP {
 			 *		the value to set the setting
 			 *		to.
 			 */
-			virtual void SetSetting (const String & setting, const Nullable<String> & value) = 0;
+			//virtual void SetSetting (const String & setting, const Nullable<String> & value) = 0;
 			/**
 			 *	Attempts to get a setting from
 			 *	whatever backing store is in use.
@@ -209,7 +209,7 @@ namespace MCPP {
 			 *		the values associated with \em key in
 			 *		an unspecified order.
 			 */
-			virtual Vector<Nullable<String>> GetValues (const String & key) = 0;
+			//virtual Vector<Nullable<String>> GetValues (const String & key) = 0;
 			/**
 			 *	Deletes all key/value pairs with the given
 			 *	key and the given value.
@@ -219,7 +219,7 @@ namespace MCPP {
 			 *	\param [in] value
 			 *		The value to delete.
 			 */
-			virtual void DeletePairs (const String & key, const String & value) = 0;
+			//virtual void DeletePairs (const String & key, const String & value) = 0;
 			/**
 			 *	Deletes all values associated with the
 			 *	given key.
@@ -227,7 +227,7 @@ namespace MCPP {
 			 *	\param [in] key
 			 *		The key to delete.
 			 */
-			virtual void DeleteKey (const String & key) = 0;
+			//virtual void DeleteKey (const String & key) = 0;
 			/**
 			 *	Sets the value of a certain pair or pairs.
 			 *
@@ -274,7 +274,7 @@ namespace MCPP {
 			 *		A function to be invoked once the
 			 *		chunk has been loaded.
 			 */
-			virtual void LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, const ChunkLoad & callback) = 0;
+			//virtual void LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, const ChunkLoad & callback) = 0;
 			/**
 			 *	Starts the process of saving a chunk to
 			 *	the backing store.
@@ -320,7 +320,7 @@ namespace MCPP {
 			 *		after the chunk saving process is
 			 *		complete.
 			 */
-			virtual void SaveChunk (
+			/*virtual void SaveChunk (
 				Int32 x,
 				Int32 y,
 				Int32 z,
@@ -329,7 +329,7 @@ namespace MCPP {
 				const Byte * end,
 				const ChunkSaveBegin & callback_begin,
 				const ChunkSaveEnd & callback_end
-			) = 0;
+			) = 0;*/
 			
 			
 			/**

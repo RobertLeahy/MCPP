@@ -36,75 +36,72 @@ class ServerListPing : public Module {
 		
 			RunningServer->Router[0xFE]=[=] (SmartPointer<Client> client, Packet packet) {
 			
-				try {
+				//	Is this client in the right state?
+				if (client->GetState()!=ClientState::Connected) {
 				
-					//	Is this client in the right state?
-					if (client->GetState()!=ClientState::Connected) {
-					
-						//	Not for us, chain through if possible
-						if (prev) prev(
-							std::move(client),
-							std::move(packet)
-						);
-						//	Nothing to chain through to, kill the
-						//	client
-						else client->Disconnect(protocol_error);
-					
-						return;
-					
-					}
-					
-					//	Make a version number string
-					String ver_num(MinecraftMajorVersion);
-					ver_num << "." << MinecraftMinorVersion;
-					if (MinecraftSubminorVersion!=0) ver_num << "." << MinecraftSubminorVersion;
-				
-					//	Prepare a string
-					GraphemeCluster null_char('\0');
-					String ping_str("§1");
-					ping_str	<<	null_char
-								<<	ProtocolVersion
-								<<	null_char
-								<<	ver_num
-								<<	null_char
-								<<	RunningServer->GetMessageOfTheDay()
-								<<	null_char
-								<<	RunningServer->Clients.AuthenticatedCount()
-								<<	null_char
-								<< 	(
-										//	Minecraft client probably doesn't understand
-										//	that 0 max players = unlimited, so we
-										//	try and transform that into something the
-										//	Minecraft client can understand
-										(RunningServer->MaximumPlayers==0)
-												//	Which probably isn't this but at least
-												//	we tried...
-											?	std::numeric_limits<Word>::max()
-											:	RunningServer->MaximumPlayers
-									);
-			
-					//	Create packet
-					Packet reply;
-					reply.SetType<PacketTypeMap<0xFF>>();
-					reply.Retrieve<String>(0)=std::move(ping_str);
-					
-					//	Send
-					auto handle=client->Send(reply.ToBytes());
-					
-					//	Queue up disconnect
-					handle->AddCallback([=] (SendState) mutable {	client->Disconnect();	});
-			
-					//	Chain to previous callback
+					//	Not for us, chain through if possible
 					if (prev) prev(
 						std::move(client),
 						std::move(packet)
 					);
-					
-				} catch (...) {
+					//	Nothing to chain through to, kill the
+					//	client
+					else client->Disconnect(protocol_error);
 				
-					RunningServer->Panic();
+					return;
 				
 				}
+				
+				//	Make a version number string
+				String ver_num(MinecraftMajorVersion);
+				ver_num << "." << String(MinecraftMinorVersion);
+				if (MinecraftSubminorVersion!=0) ver_num << "." << String(MinecraftSubminorVersion);
+			
+				//	Prepare the packet
+				GraphemeCluster null_char('\0');
+				Packet reply;
+				reply.SetType<PacketTypeMap<0xFF>>();
+				reply.Retrieve<String>(0)	<< "§1"
+											<<	null_char
+											<<	String(ProtocolVersion)
+											<<	null_char
+											<<	ver_num
+											<<	null_char
+											<<	RunningServer->GetMessageOfTheDay()
+											<<	null_char
+											<<	String(RunningServer->Clients.AuthenticatedCount())
+											<<	null_char
+											<< 	String(
+													//	Minecraft client probably doesn't understand
+													//	that 0 max players = unlimited, so we
+													//	try and transform that into something the
+													//	Minecraft client can understand
+													(RunningServer->MaximumPlayers==0)
+															//	Which probably isn't this but at least
+															//	we tried...
+														?	std::numeric_limits<Word>::max()
+														:	RunningServer->MaximumPlayers
+												);
+				
+				//	Send and attach
+				//	callback to disconnect
+				//	client after
+				//	the packet is on
+				//	the wire
+				client->Send(
+					reply.ToBytes()
+				)->AddCallback(
+					[=] (SendState) mutable {
+						client->Disconnect();
+					}
+				);
+		
+				//	Chain to previous callback
+				//	if it exists
+				if (prev) prev(
+					std::move(client),
+					std::move(packet)
+				);
 			
 			};
 		

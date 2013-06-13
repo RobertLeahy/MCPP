@@ -144,11 +144,6 @@ namespace MCPP {
 			
 			} catch (const std::exception & e) {
 			
-				WriteLog(
-					e.what(),
-					Service::LogType::Warning
-				);
-			
 				conn->Disconnect(error_processing_recv);
 				
 				throw;

@@ -1,4 +1,5 @@
 #include <thread_pool.hpp>
+#include <utility>
 
 
 namespace MCPP {
@@ -130,7 +131,7 @@ namespace MCPP {
 	}
 
 
-	ThreadPool::ThreadPool (Word num, const ThreadPoolStartup & startup, const ThreadPoolShutdown & shutdown) : pool((num==0) ? 1 : num), startup(startup), shutdown(shutdown), stop(false), begin(false) {
+	ThreadPool::ThreadPool (Word num, ThreadPoolStartup startup, ThreadPoolShutdown shutdown) : pool((num==0) ? 1 : num), startup(std::move(startup)), shutdown(std::move(shutdown)), stop(false), begin(false) {
 	
 		num=(num==0) ? 1 : num;
 	

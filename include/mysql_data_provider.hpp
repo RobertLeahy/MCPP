@@ -18,59 +18,56 @@ namespace MCPP {
 	
 	
 		private:
-		
-		
-			//	Thread pool
-			Nullable<ThreadPool> pool;
 			
 			
 			//	Connection
 			MYSQL conn;
+			//	Connection info for
+			//	reconnections
+			//
+			//	Stored API encoded
+			//	for efficiency's sake
+			Vector<Byte> username;
+			Vector<Byte> password;
+			Vector<Byte> database;
+			Vector<Byte> host;
+			UInt16 port;
 			
 			
 			//	Statements
-			MYSQL_STMT * setting_stmt;
-			MYSQL_STMT * setting_update_stmt;
-			MYSQL_STMT * setting_insert_stmt;
-			MYSQL_STMT * setting_delete_stmt;
 			MYSQL_STMT * log_stmt;
-			MYSQL_STMT * key_stmt;
-			MYSQL_STMT * pair_delete_stmt;
-			MYSQL_STMT * key_delete_stmt;
-			MYSQL_STMT * chunk_stmt;
-			MYSQL_STMT * chunk_update_stmt;
-			MYSQL_STMT * chunk_insert_stmt;
+			MYSQL_STMT * setting_stmt;
 			
 			
-			//	Statement locks
-			Mutex setting_lock;
-			//	One lock for UPDATE and
-			//	INSERT since they follow
-			//	one another
-			Mutex setting_set_lock;
-			Mutex setting_delete_lock;
-			Mutex log_lock;
-			Mutex key_lock;
-			Mutex pair_delete_lock;
-			Mutex key_delete_lock;
-			Mutex chunk_lock;
-			//	One lock for UPDATE and
-			//	INSERT since they follow
-			//	one another
-			Mutex chunk_set_lock;
+			//	Thread pool for worker
+			//	thread, which will be
+			//	"polluted" by the MySQL
+			//	thread local variables
+			//	et cetera and which
+			//	will be the only thread
+			//	that touches the connection,
+			//	thus obviating problems even
+			//	if libmysql is not thread safe.
+			//
+			//	It is important that this be
+			//	declared last so that username,
+			//	password, database, host, and
+			//	port will be available/populated
+			//	when it starts its worker.
+			ThreadPool pool;
 			
 			
-			inline MYSQL_STMT * prepare_stmt (const String &);
-			inline void prepare_statements ();
+			//	Private methods
+			inline void connect ();
+			inline void keep_alive ();
+			inline void prepare_stmt (MYSQL_STMT * &, const char *);
+			inline void destroy_stmts () noexcept;
 			inline void destroy () noexcept;
 			
 			
 		public:
 		
 		
-			MySQLDataProvider () = delete;
-			
-			
 			MySQLDataProvider (
 				const String & host,
 				UInt16 port,
@@ -80,33 +77,8 @@ namespace MCPP {
 			);
 			
 			
-			virtual ~MySQLDataProvider () noexcept override;
-			
-			
-			virtual void WriteLog (const String &, Service::LogType) override;
-			
-			
+			virtual void WriteLog (const String & log, Service::LogType type) override;
 			virtual Nullable<String> GetSetting (const String & setting) override;
-			virtual void SetSetting (const String & setting, const Nullable<String> & value) override;
-			virtual void DeleteSetting (const String & setting) override;
-			
-			
-			virtual Vector<Nullable<String>> GetValues (const String & key) override;
-			virtual void DeletePairs (const String & key, const String & value) override;
-			virtual void DeleteKey (const String & key) override;
-			
-			
-			virtual void LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, const ChunkLoad & callback) override;
-			virtual void SaveChunk (
-				Int32 x,
-				Int32 y,
-				Int32 z,
-				SByte dimension,
-				const Byte * begin,
-				const Byte * end,
-				const ChunkSaveBegin & callback_begin,
-				const ChunkSaveEnd & callback_end
-			) override;
 	
 	
 	};

@@ -245,34 +245,19 @@ Tag::Tag (Single data) noexcept : type(TagType::Float), tag_float(data) {	}
 Tag::Tag (Double data) noexcept : type(TagType::Double), tag_double(data) {	}
 
 
-Tag::Tag (const Vector<SByte> & data) : type(TagType::ByteArray), tag_bytearray(data) {	}
+Tag::Tag (Vector<SByte> data) noexcept : type(TagType::ByteArray), tag_bytearray(std::move(data)) {	}
 
 
-Tag::Tag (Vector<SByte> && data) noexcept : type(TagType::ByteArray), tag_bytearray(std::move(data)) {	}
+Tag::Tag (String data) noexcept : type(TagType::String), tag_string(std::move(data)) {	}
 
 
-Tag::Tag (const String & data) : type(TagType::String), tag_string(data) {	}
+Tag::Tag (Vector<Tag> data) noexcept : type(TagType::List), tag_list(std::move(data)) {	}
 
 
-Tag::Tag (String && data) noexcept : type(TagType::String), tag_string(std::move(data)) {	}
+Tag::Tag (Vector<NamedTag> data) noexcept : type(TagType::Compound), tag_compound(std::move(data)) {	}
 
 
-Tag::Tag (const Vector<Tag> & data) : type(TagType::List), tag_list(data) {	}
-
-
-Tag::Tag (Vector<Tag> && data) noexcept : type(TagType::List), tag_list(std::move(data)) {	}
-
-
-Tag::Tag (const Vector<NamedTag> & data) : type(TagType::Compound), tag_compound(data) {	}
-
-
-Tag::Tag (Vector<NamedTag> && data) noexcept : type(TagType::Compound), tag_compound(std::move(data)) {	}
-
-
-Tag::Tag (const Vector<Int32> & data) : type(TagType::IntArray), tag_intarray(data) {	}
-
-
-Tag::Tag (Vector<Int32> && data) noexcept : type(TagType::IntArray), tag_intarray(std::move(data)) {	}
+Tag::Tag (Vector<Int32> data) noexcept : type(TagType::IntArray), tag_intarray(std::move(data)) {	}
 
 
 String Tag::TypeToString () const {

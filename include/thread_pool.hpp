@@ -309,7 +309,7 @@ namespace MCPP {
 			 *		A callback function to be called before
 			 *		each worker shuts down.
 			 */
-			ThreadPool (Word num, const ThreadPoolStartup & startup=ThreadPoolStartup(), const ThreadPoolShutdown & shutdown=ThreadPoolShutdown());
+			ThreadPool (Word num, ThreadPoolStartup startup=ThreadPoolStartup(), ThreadPoolShutdown shutdown=ThreadPoolShutdown());
 			/**
 			 *	Shuts down a thread pool.
 			 */
