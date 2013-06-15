@@ -101,8 +101,11 @@ namespace MCPP {
 							//	handler
 							conn->disconnect();
 						
+							//	Capture these
+							const auto & disconnect=parent->disconnect;
+							const auto & panic=parent->panic;
 							parent->pool->Enqueue(
-								[this,conn] () mutable {
+								[=] () mutable {
 									
 									String reason;
 									try {
@@ -115,7 +118,7 @@ namespace MCPP {
 									
 										try {
 										
-											parent->disconnect(conn,reason);
+											disconnect(conn,reason);
 										
 										} catch (const std::exception & e) {
 										
@@ -133,7 +136,11 @@ namespace MCPP {
 									
 									} catch (...) {
 									
-										parent->panic();
+										try {
+									
+											panic();
+											
+										} catch (...) {	}
 										
 										throw;
 									

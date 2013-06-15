@@ -348,15 +348,17 @@ namespace MCPP {
 											//	main buffer, dispatch event
 											if (use_primary) {
 											
+												//	Capture this
+												const auto & recv=parent->recv;
 												parent->pool->Enqueue(
-													[this,conn] () mutable {
+													[=] () mutable {
 													
 														loop:
 													
 														//	Invoke callback
 														try {
 														
-															parent->recv(
+															recv(
 																conn,
 																conn->recv
 															);

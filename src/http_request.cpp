@@ -11,8 +11,8 @@ namespace MCPP {
 	HTTPRequest::HTTPRequest (
 		CURL * handle,
 		Word max_bytes,
-		const HTTPStatusStringDone & status_string_done
-	) : status_string_done(status_string_done), max_bytes(max_bytes), handle(handle) {	}
+		HTTPStatusStringDone status_string_done
+	) : status_string_done(std::move(status_string_done)), max_bytes(max_bytes), handle(handle) {	}
 	
 	
 	HTTPRequest::~HTTPRequest () noexcept {

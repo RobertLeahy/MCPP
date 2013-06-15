@@ -36,7 +36,7 @@ namespace MCPP {
 	 *	1.	Content of the HTTP request.  Ignore this
 	 *		parameter if the status code is zero.
 	 */
-	typedef std::function<void (Word, String &&)> HTTPStatusStringDone;
+	typedef std::function<void (Word, String)> HTTPStatusStringDone;
 	/**
 	 *	The type of callback that shall be invoked
 	 *	when an HTTP request has incoming data
@@ -115,7 +115,7 @@ namespace MCPP {
 			HTTPRequest & operator = (HTTPRequest &) = delete;
 		
 		
-			HTTPRequest (CURL * handle, Word max_bytes, const HTTPStatusStringDone & status_string_done);
+			HTTPRequest (CURL * handle, Word max_bytes, HTTPStatusStringDone status_string_done);
 			~HTTPRequest () noexcept;
 		
 		
@@ -230,7 +230,7 @@ namespace MCPP {
 			 */
 			void Get (
 				const String & url,
-				const HTTPStatusStringDone & callback
+				HTTPStatusStringDone callback
 			);
 	
 	

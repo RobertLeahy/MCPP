@@ -219,3 +219,6 @@ login_info.cpp
 rleahylib/
 old*/
 doc/
+java_test/
+src/server.txt
+src/build.txt

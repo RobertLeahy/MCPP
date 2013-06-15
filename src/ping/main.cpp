@@ -5,15 +5,13 @@
 static const String protocol_error("Protocol error");
 static const String name("0xFE Server List Ping Protocol Support");
 static const Word priority=1;
+static const String ping_template("{0}:{1} pinged");
 
 
 class ServerListPing : public Module {
 
 
 	public:
-	
-	
-		ServerListPing () noexcept {	}
 		
 		
 		virtual Word Priority () const noexcept override {
@@ -52,6 +50,17 @@ class ServerListPing : public Module {
 				
 				}
 				
+				//	Log the fact that the client
+				//	pinged
+				RunningServer->WriteLog(
+					String::Format(
+						ping_template,
+						client->IP(),
+						client->Port()
+					),
+					Service::LogType::Information
+				);
+				
 				//	Make a version number string
 				String ver_num(MinecraftMajorVersion);
 				ver_num << "." << String(MinecraftMinorVersion);
@@ -89,7 +98,7 @@ class ServerListPing : public Module {
 				//	the packet is on
 				//	the wire
 				client->Send(
-					reply.ToBytes()
+					std::move(reply)
 				)->AddCallback(
 					[=] (SendState) mutable {
 						client->Disconnect();

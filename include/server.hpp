@@ -91,6 +91,17 @@ namespace MCPP {
 		
 		
 			/**
+			 *	Whether protocol analysis shall be
+			 *	performed.
+			 *
+			 *	Protocol analysis logs all packets
+			 *	the server sends and receives, can
+			 *	be hard on the logging mechanism,
+			 *	and should be enabled only if
+			 *	needed.
+			 */
+			bool ProtocolAnalysis;
+			/**
 			 *	The maxiumum number of bytes which
 			 *	the server shall allow to be buffered
 			 *	on a client connection before

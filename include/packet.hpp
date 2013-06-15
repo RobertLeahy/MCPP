@@ -336,6 +336,26 @@ namespace MCPP {
 			 *		packet.
 			 */
 			Vector<Byte> ToBytes () const;
+			
+			
+			/**
+			 *	Obtains a string representation of this
+			 *	packet.
+			 *
+			 *	\return
+			 *		A string representation of this packet.
+			 */
+			String ToString () const;
+			
+			
+			/**
+			 *	Obtains a string representation of this
+			 *	packet.
+			 *
+			 *	\return
+			 *		A string representation of this packet.
+			 */
+			explicit operator String () const;
 	
 	
 	};
@@ -1467,6 +1487,41 @@ namespace MCPP {
 	class PacketType : public PacketFactory {
 	
 	
+		public:
+		
+		
+			/**
+			 *	The number of objects in the payload
+			 *	of this packet type.
+			 */
+			static const Word TypesCount=sizeof...(Types);
+			/**
+			 *	A helper class which allows access to
+			 *	arbitrary types within the payload
+			 *	of this packet type.
+			 *
+			 *	\tparam i
+			 *		The zero-relative index of the type
+			 *		to retrieve.
+			 */
+			template <Word i>
+			class RetrieveType {
+			
+			
+				public:
+				
+				
+					/**
+					 *	Specifies the type of the \em ith
+					 *	item in the payload of the containing
+					 *	packet type.
+					 */
+					typedef typename GetParameterType<i,Types...>::Type Type;
+			
+			
+			};
+	
+	
 		private:
 	
 	
@@ -1591,7 +1646,7 @@ namespace MCPP {
 					
 					//	Success, update count of items
 					//	retrieved
-					packet.curr=i;
+					packet.curr=i+1;
 				
 				}
 				

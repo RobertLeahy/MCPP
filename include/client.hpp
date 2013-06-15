@@ -38,8 +38,7 @@ namespace MCPP {
 	enum class ClientState : Word {
 	
 		Connected=0,		/**<	Client is newly-connected, and hasn't entered any state yet.	*/
-		Authenticating=1,	/**<	Client is in the process of authenticating.	*/
-		Authenticated=2		/**<	Client has logged in.	*/
+		Authenticated=1		/**<	Client has logged in.	*/
 	
 	};
 
@@ -60,23 +59,45 @@ namespace MCPP {
 			//	Connection to client
 			SmartPointer<Connection> conn;
 			
+			//	This lock must be held
+			//	while performing IO so
+			//	that the state of the
+			//	encryptor may be changed
+			//	in a threadsafe manner
+			RWLock comm_lock;
+			
 			//	Encryption
 			
 			//	Encryption worker
 			Nullable<AES128CFB8> encryptor;
-			//	Whether encryption should
-			//	be used or not
-			volatile bool encrypted;
 			
-			//	Receive buffers
+			//	Receive buffer
 			
 			//	Packet currently being built
 			Packet in_progress;
 			//	Decrypted bytes
 			Vector<Byte> encryption_buffer;
+			//	If a packet has had at
+			//	least one byte added to it
+			//	this is set to true
+			bool packet_in_progress;
+			//	If packet_in_progress is
+			//	true and the packet
+			//	was started with encryption
+			//	this is true
+			bool packet_encrypted;
 			
 			//	Client's current state
 			std::atomic<Word> state;
+			
+			//	Client's username
+			String username;
+			mutable Mutex username_lock;
+			
+			//	Client's inactivity
+			//	duration
+			mutable Timer inactive;
+			mutable Mutex inactive_lock;
 			
 			
 		public:
@@ -89,7 +110,7 @@ namespace MCPP {
 			 *	\param [in] conn
 			 *		The connection to wrap.
 			 */
-			Client (SmartPointer<Connection> && conn) noexcept;
+			Client (SmartPointer<Connection> conn) noexcept;
 		
 		
 			/**
@@ -118,7 +139,24 @@ namespace MCPP {
 			 *		for the data to be flushed out to the
 			 *		client.
 			 */
-			SmartPointer<SendHandle> Send (Vector<Byte> && buffer);
+			SmartPointer<SendHandle> Send (Packet packet);
+			/**
+			 *	Sends data to the client and then
+			 *	atomically enables encryption.
+			 *
+			 *	\param [in] buffer
+			 *		A buffer of bytes to send to the client.
+			 *	\param [in] key
+			 *		The encryption key.
+			 *	\param [in] iv
+			 *		The initialization vector.
+			 *	
+			 *	\return
+			 *		A send handle which can be used to wait
+			 *		for the data to be flushed out to the
+			 *		client.
+			 */
+			SmartPointer<SendHandle> Send (Packet packet, const Vector<Byte> & key, const Vector<Byte> & iv);
 			/**
 			 *	Receives data from a buffer.
 			 *
@@ -201,6 +239,71 @@ namespace MCPP {
 			 *		The client's current state.
 			 */
 			ClientState GetState () const noexcept;
+			
+			
+			/**
+			 *	Sets the client's username.
+			 *
+			 *	Thread safe.
+			 *
+			 *	\param [in] username
+			 *		The username to set.
+			 */
+			void SetUsername (String username) noexcept;
+			/**
+			 *	Retrieves the client's username.
+			 *
+			 *	Thread safe.
+			 *
+			 *	\return
+			 *		The client's username.
+			 */
+			String GetUsername () const;
+			
+			
+			/**
+			 *	Retrieves the client's IP.
+			 *
+			 *	\return
+			 *		The IP from which the client
+			 *		is connected.
+			 */
+			const IPAddress & IP () const noexcept;
+			/**
+			 *	Retrieves the client's port.
+			 *
+			 *	\return
+			 *		The port from which the client
+			 *		is connected.
+			 */
+			UInt16 Port () const noexcept;
+			
+			
+			/**
+			 *	Retrieves a pointer to the wrapped
+			 *	connection object.
+			 */
+			const Connection * GetConn () const noexcept;
+			
+			
+			/**
+			 *	Called when the client undergoes some
+			 *	external activity not managed by the
+			 *	built in network stack to reset
+			 *	their inactivity timer.
+			 */
+			void Active ();
+			/**
+			 *	Determines the number of milliseconds
+			 *	the client has been considered to be
+			 *	inactive for.
+			 *
+			 *	\return
+			 *		The number of milliseconds that have
+			 *		elapsed since the client's last
+			 *		activity.
+			 */
+			Word Inactive () const;
 	
 	
 	};
@@ -231,7 +334,7 @@ namespace MCPP {
 			 *	\param [in] client
 			 *		The client to add.
 			 */
-			void Add (const SmartPointer<Client> & client);
+			void Add (SmartPointer<Client> client);
 		
 		
 			/**
@@ -282,6 +385,31 @@ namespace MCPP {
 			 *	Removes all clients.
 			 */
 			void Clear () noexcept;
+			
+			
+			/**
+			 *	Scans the client list, iterating
+			 *	over each connected client.
+			 *
+			 *	The collection is guaranteed not
+			 *	to change from the time the scan
+			 *	begins to the time it ends.
+			 *
+			 *	Do not try to modify the collection
+			 *	while scanning, this will lead to
+			 *	a deadlock.
+			 *
+			 *	\param [in] func
+			 *		The callable object which is to be
+			 *		called for each client.  It shall
+			 *		be passed each client in turn.
+			 */
+			template <typename T>
+			void Scan (T && func) {
+			
+				map_lock.Read([&] () mutable {	for (auto & pair : map) func(pair.second);	});
+			
+			}
 			
 	
 	};

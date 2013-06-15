@@ -448,7 +448,7 @@ namespace MCPP {
 	}
 	
 	
-	void HTTPHandler::Get (const String & url, const HTTPStatusStringDone & callback) {
+	void HTTPHandler::Get (const String & url, HTTPStatusStringDone callback) {
 	
 		//	Setup request
 		CURL * curl=curl_easy_init();
@@ -462,7 +462,7 @@ namespace MCPP {
 			request=SmartPointer<HTTPRequest>::Make(
 				curl,
 				max_bytes,
-				callback
+				std::move(callback)
 			);
 			
 		} catch (...) {

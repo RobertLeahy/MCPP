@@ -176,6 +176,23 @@ namespace MCPP {
 		return factory->ToBytes(*this);
 	
 	}
+	
+	
+	#include "protocol_analysis.cpp"
+	
+	
+	String Packet::ToString () const {
+	
+		return protocol_analysis(*this);
+	
+	}
+	
+	
+	Packet::operator String () const {
+	
+		return protocol_analysis(*this);
+	
+	}
 
 
 }

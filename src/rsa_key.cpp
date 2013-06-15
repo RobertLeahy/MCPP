@@ -136,7 +136,7 @@ namespace MCPP {
 	}
 
 
-	RSAKey::RSAKey (const String & seed) : public_key(0) {
+	RSAKey::RSAKey (const String & seed) {
 	
 		//	Convert the seed to bytes
 		Vector<Byte> buffer=UTF8().Encode(seed);

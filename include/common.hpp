@@ -24,6 +24,7 @@
 namespace MCPP {	}
 
 
+#include <random.hpp>
 #include <mod.hpp>
 #include <url.hpp>
 #include <sha1.hpp>

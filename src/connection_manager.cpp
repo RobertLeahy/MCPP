@@ -50,46 +50,50 @@ namespace MCPP {
 	
 	void ConnectionManager::Add (Socket socket, const IPAddress & ip, UInt16 port) {
 	
-		SmartPointer<Connection> conn=SmartPointer<Connection>::Make(
-			std::move(socket),
-			ip,
-			port
+		SmartPointer<Connection> conn(
+			SmartPointer<Connection>::Make(
+				std::move(socket),
+				ip,
+				port
+			)
 		);
 		
-		//	Fire connection callback asynchronously
-		pool->Enqueue(
-			[this,conn] () mutable {
+		//	Fire connection callback
+		//	we do this synchronously
+		//	otherwise it would be possible
+		//	for a message to be received
+		//	from a client that hadn't
+		//	yet been added to be
+		//	handled, which would cause
+		//	odd behaviour (to say the
+		//	least)
+		try {
+		
+			try {
 			
-				try {
+				connect(conn);
+			
+			} catch (const std::exception & e) {
+			
+				//	TODO: Log
 				
-					try {
-					
-						connect(conn);
-					
-					} catch (const std::exception & e) {
-					
-						//	TODO: Log
-						
-						throw;
-					
-					} catch (...) {
-					
-						//	TODO: Log
-						
-						throw;
-					
-					}
+				throw;
+			
+			} catch (...) {
+			
+				//	TODO: Log
 				
-				} catch (...) {
-				
-					panic();
-					
-					throw;
-				
-				}
+				throw;
 			
 			}
-		);
+			
+		} catch (...) {
+		
+			try {	panic();	} catch (...) {	}
+			
+			throw;
+		
+		}
 		
 		pending_lock.Acquire();
 		

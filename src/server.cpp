@@ -16,9 +16,9 @@ namespace MCPP {
 	static const String list_separator=", ";
 	static const String binding_to="Startup: Attempting to bind to {0}";
 	static const String couldnt_parse_bind="Startup: Could not parse bind \"{0}\"";
-	static const String connected="{0}:{1} connected, there are now {2} clients connected";
-	static const String disconnected="{0}:{1} disconnected, there are now {2} clients connected";
-	static const String disconnected_with_reason="{{0}}:{{1}} disconnected (with reason: \"{0}\"), there are now {{2}} clients connected";
+	static const String connected="{0}:{1} connected, there {3} now {2} client{4} connected";
+	static const String disconnected="{0}:{1} disconnected, there {3} now {2} client{4} connected";
+	static const String disconnected_with_reason="{{0}}:{{1}} disconnected (with reason: \"{0}\"), there {{3}} now {{2}} client{{4}} connected";
 	static const String error_processing_recv="Error processing received data";
 	static const String buffer_too_long="Buffer too long";
 	static const String panic_message="Panic!";
@@ -34,7 +34,6 @@ namespace MCPP {
 	static const String max_bytes_setting="max_bytes";
 	static const Word default_max_players=0;
 	static const String max_players_setting="max_players";
-	static const String motd_setting="motd";
 	
 	
 	Nullable<Server> RunningServer;
@@ -44,7 +43,7 @@ namespace MCPP {
 	#include "server_getters_setters.cpp"
 
 
-	Server::Server () : Service(service_name), running(false), data(nullptr) {
+	Server::Server () : Service(service_name), running(false), data(nullptr), ProtocolAnalysis(false), Router(true) {
 	
 		OnConnect.Add(
 			[=] (SmartPointer<Connection> conn) {
@@ -59,12 +58,15 @@ namespace MCPP {
 					Clients.Add(SmartPointer<Client>::Make(std::move(conn)));
 					
 					//	Log
+					auto clients=Clients.Count();
 					WriteLog(
 						String::Format(
 							connected,
 							ip,
 							port,
-							Clients.Count()
+							clients,
+							(clients==1) ? "is" : "are",
+							(clients==1) ? "" : "s"
 						),
 						Service::LogType::Information
 					);
@@ -105,12 +107,15 @@ namespace MCPP {
 					
 					}
 					
+					auto clients=Clients.Count();
 					WriteLog(
 						String::Format(
 							disconnect_template,
 							conn->IP(),
 							conn->Port(),
-							Clients.Count()
+							clients,
+							(clients==1) ? "is" : "are",
+							(clients==1) ? "" : "s"
 						),
 						Service::LogType::Information
 					);
@@ -130,17 +135,18 @@ namespace MCPP {
 			
 				auto client=Clients[*conn];
 				
-				//	Receive
-				if (client->Receive(&buffer)) {
+				//	Loop while there's a packet to
+				//	extract
+				while (client->Receive(&buffer)) Router(client,client->CompleteReceive());
 				
-					//	Packet complete, route
-					Router(client,client->CompleteReceive());
-				
-				} else if (buffer.Count()>MaximumBytes) {
-				
-					client->Disconnect(buffer_too_long);
-				
-				}
+				//	Check buffer
+				//	if it's gotten bigger than
+				//	allowed, kill the client
+				if (
+					//	0 = unlimited
+					(MaximumBytes!=0) &&
+					(buffer.Count()>MaximumBytes)
+				) client->Disconnect(buffer_too_long);
 			
 			} catch (const std::exception & e) {
 			
@@ -396,19 +402,6 @@ namespace MCPP {
 		
 		//	ABORT
 		std::terminate();
-	
-	}
-	
-	
-	String Server::GetMessageOfTheDay () {
-	
-		if (data==nullptr) return String();
-		
-		Nullable<String> motd=data->GetSetting(motd_setting);
-		
-		if (motd.IsNull()) return String();
-		
-		return *motd;
 	
 	}
 

@@ -49,12 +49,18 @@ namespace MCPP {
 			
 			EVP_MD_CTX_init(&sha);
 			
-			if (EVP_MD_CTX_copy_ex(&sha,&other.sha)==0) throw std::runtime_error(
-				ERR_error_string(
-					ERR_get_error(),
-					nullptr
-				)
-			);
+			if (EVP_MD_CTX_copy_ex(&sha,&other.sha)==0) {
+			
+				EVP_MD_CTX_cleanup(&sha);
+			
+				throw std::runtime_error(
+					ERR_error_string(
+						ERR_get_error(),
+						nullptr
+					)
+				);
+				
+			}
 		
 		}
 		

@@ -95,7 +95,7 @@ set network=listen_handler.cpp connection.cpp connection_handler.cpp connection_
 set mc_comm=packet.cpp packet_factory.cpp packet_router.cpp rsa_key.cpp compression.cpp aes_128_cfb_8.cpp
 set mc_data=chunk.cpp metadata.cpp
 set server_data=client.cpp client_list.cpp
-set misc=url.cpp sha1.cpp http_handler.cpp http_request.cpp mod_loader.cpp new_delete.cpp
+set misc=url.cpp sha1.cpp http_handler.cpp http_request.cpp mod_loader.cpp new_delete.cpp random.cpp
 set source_all=%main% %nbt% %thread_pool% %network% %mc_comm% %mc_data% %server_data% %misc% %interfaces%
 set include_all=-I %zlib_include_loc% -I %openssl_include_loc% -I %curl_include_loc%
 set library_all=../bin/data_provider.dll ../bin/zlib1.dll ../bin/libeay32.dll ../bin/ssleay32.dll ../bin/libcurl.dll -lws2_32
@@ -111,6 +111,8 @@ echo.
 mkdir ..\bin\mods > nul 2> nul
 
 g++.exe %include_all% %common_params% ping/main.cpp %mcpp% -shared -o ../bin/mods/ping.dll
+g++.exe %include_all% %common_params% auth/main.cpp %mcpp% -shared -o ../bin/mods/auth.dll
+g++.exe %include_all% %common_params% keep_alive/main.cpp %mcpp% -shared -o ../bin/mods/keep_alive.dll
 
 echo.
 echo ====BUILDING SERVER FRONT-END====

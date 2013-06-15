@@ -10,10 +10,12 @@
 int Main (const Vector<const String> & args) {
 
 	#ifdef DEBUG
-	if (test()) return EXIT_SUCCESS;
+	//if (test()) return EXIT_SUCCESS;
 	#endif
 	
 	RunningServer.Construct();
+	
+	RunningServer->ProtocolAnalysis=true;
 	
 	RunningServer->StartInteractive(args);
 	

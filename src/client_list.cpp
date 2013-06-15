@@ -1,4 +1,5 @@
 #include <client.hpp>
+#include <utility>
 
 
 namespace MCPP {
@@ -29,7 +30,7 @@ namespace MCPP {
 	}
 	
 	
-	void ClientList::Add (const SmartPointer<Client> & client) {
+	void ClientList::Add (SmartPointer<Client> client) {
 	
 		map_lock.Write();
 		
@@ -38,7 +39,7 @@ namespace MCPP {
 			map.insert(
 				decltype(map)::value_type(
 					static_cast<const Connection *>(client->conn),
-					client
+					std::move(client)
 				)
 			);
 			
