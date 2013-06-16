@@ -6,6 +6,7 @@ INC_OPENSSL=-I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/in
 INC_ZLIB=-I "G:/Downloads/zlib128-dll/include/"
 INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
 OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
+#OPTIMIZATION=-O3
 OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
 GPP=g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 
@@ -60,7 +61,6 @@ obj/nbt.o \
 obj/listen_handler.o \
 obj/connection.o \
 obj/connection_handler.o \
-obj/server.o \
 obj/connection_manager.o \
 obj/send_handle.o \
 obj/packet.o \
@@ -82,8 +82,8 @@ obj/random.o \
 obj/thread_pool.o \
 obj/thread_pool_handle.o \
 obj/sha1.o \
-bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/rleahy_lib.dll bin/data_provider.dll
-	$(GPP) $? -shared -o $@ -lws2_32
+bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ obj/server.o obj/mod.o obj/nbt.o obj/listen_handler.o obj/connection.o obj/connection_handler.o obj/connection_manager.o obj/send_handle.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/new_delete.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
 
 obj/server.o: src/server.cpp
 	$(GPP) $? -c -o $@
@@ -185,7 +185,7 @@ bin/data_provider.dll: bin/data_providers/mysql_data_provider.dll
 	cmd /c "copy bin\data_providers\mysql_data_provider.dll bin\data_provider.dll"
 	
 bin/data_providers/mysql_data_provider.dll: obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o
-	$(GPP) $? -shared -o bin/data_providers/data_provider.dll
+	$(GPP) -shared -o bin/data_providers/data_provider.dll obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o
 	cmd /c "move bin\data_providers\data_provider.dll bin\data_providers\mysql_data_provider.dll"
 
 obj/mysql_data_provider.o: src/mysql_data_provider.cpp
@@ -216,26 +216,26 @@ bin/mods/chat.dll
 
 #	PING SUPPORT
 
-bin/mods/ping.dll: src/ping/main.cpp bin/rleahy_lib.dll bin/mcpp.dll
-	$(GPP) $? -shared -o $@
+bin/mods/ping.dll: src/ping/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ src/ping/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 	
 
 #	AUTHENTICATION SUPPORT
 
-bin/mods/auth.dll: src/auth/main.cpp bin/rleahy_lib.dll bin/mcpp.dll
-	$(GPP) $? -shared -o $@
+bin/mods/auth.dll: src/auth/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ src/auth/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 	
 	
 #	KEEP ALIVE SUPPORT
 
-bin/mods/keep_alive.dll: src/keep_alive/main.cpp bin/rleahy_lib.dll bin/mcpp.dll
-	$(GPP) $? -shared -o $@
+bin/mods/keep_alive.dll: src/keep_alive/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ src/keep_alive/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 	
 	
 #	CHAT SUPPORT
 
-bin/mods/chat.dll: src/chat/main.cpp bin/rleahy_lib.dll bin/mcpp.dll
-	$(GPP) $? -shared -o $@
+bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 	
 	
 #	SERVER FRONT-END
@@ -243,5 +243,5 @@ bin/mods/chat.dll: src/chat/main.cpp bin/rleahy_lib.dll bin/mcpp.dll
 .PHONY: front_end
 front_end: bin/server.exe
 
-bin/server.exe: bin/mcpp.dll src/main.cpp bin/rleahy_lib.dll
-	$(GPP) $? -o $@
+bin/server.exe: src/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -o $@ src/main.cpp bin/mcpp.dll bin/rleahy_lib.dll

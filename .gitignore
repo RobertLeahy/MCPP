@@ -219,3 +219,4 @@ login_info.cpp
 rleahylib/
 doc/
 build.txt
+build_make_error.txt
