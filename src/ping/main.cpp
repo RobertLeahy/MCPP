@@ -97,13 +97,7 @@ class ServerListPing : public Module {
 				//	client after
 				//	the packet is on
 				//	the wire
-				client->Send(
-					std::move(reply)
-				)->AddCallback(
-					[=] (SendState) mutable {
-						client->Disconnect();
-					}
-				);
+				client->Send(reply)->AddCallback([=] (SendState) mutable {	client->Disconnect();	});
 		
 				//	Chain to previous callback
 				//	if it exists

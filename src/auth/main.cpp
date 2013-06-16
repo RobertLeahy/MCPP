@@ -277,7 +277,7 @@ class Authentication : public Module {
 						reply.Retrieve<Vector<Byte>>(2)=data.Bytes;
 						
 						//	Send our response
-						client->Send(std::move(reply));
+						client->Send(reply);
 						
 						//	Change client's state
 						data.State=AuthenticationState::EncryptionRequestSent;
@@ -559,15 +559,11 @@ class Authentication : public Module {
 										}
 										
 										//	Send, wait, disconnect
-										client->Send(
-											std::move(reply)
-										)->AddCallback(
-											[=] (SendState) mutable {
+										client->Send(reply)->AddCallback([=] (SendState) mutable {
+										
+											client->Disconnect(log_error);
 											
-												client->Disconnect(log_error);
-											
-											}
-										);
+										});
 									
 										return;
 									
@@ -596,11 +592,12 @@ class Authentication : public Module {
 										auto & data=loc->second;
 										
 										//	Simultaneously send the
-										//	encryption response and
-										//	enable encryption on this
+										//	encryption response, set
+										//	the client to authenticated
+										//	and enable encryption on this
 										//	connection
 										client->Send(
-											std::move(reply),
+											reply,
 											data.Secret,
 											data.Secret
 										);
@@ -608,9 +605,6 @@ class Authentication : public Module {
 										return true;
 									
 									})) return;
-									
-									//	LOGIN SUCCESS
-									client->SetState(ClientState::Authenticated);
 									
 									//	Client is authenticated, log
 									RunningServer->WriteLog(

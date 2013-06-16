@@ -1,6 +1,7 @@
 #include <sha1.hpp>
 #include <err.h>
 #include <stdexcept>
+#include <limits>
 
 
 namespace MCPP {
@@ -124,37 +125,62 @@ namespace MCPP {
 	}
 	
 	
+	static inline void twos_complement (Vector<Byte> & buffer) {
+	
+		bool carry=false;
+		for (Word i=buffer.Count();(i--)>0;) {
+		
+			//	Invert
+			buffer[i]=~buffer[i];
+			
+			//	Add one
+			if (
+				(i==buffer.Count()-1) ||
+				carry
+			) {
+			
+				if (buffer[i]==std::numeric_limits<Byte>::max()) {
+				
+					carry=true;
+					
+					buffer[i]=0;
+				
+				} else {
+				
+					carry=false;
+				
+					++buffer[i];
+				
+				}
+			
+			}
+		
+		}
+	
+	}
+	
+	
 	String SHA1::HexDigest () {
 	
 		//	Get the digest
 		Vector<Byte> digest(Complete());
 		
 		String hex_digest;
-		bool found=false;
-		bool negative=false;
-		for (Word i=0;i<digest.Count();++i) {
 		
-			//	Negative check
-			if (
-				(i==0) &&
-				((digest[i]&128)!=0)
-			) {
+		//	Check for negative
+		if (!(
+			(digest.Count()==0) ||
+			((digest[0]&128)==0)
+		)) {
+		
+			twos_complement(digest);
 			
-				hex_digest << "-";
-			
-				negative=true;
-				
-			}
-			
-			//	Render negative numbers
-			//	properly
-			if (negative) {
-			
-				digest[i]=~digest[i];
-				
-				if (i==(digest.Count()-1)) digest[i]=(digest[i]==255) ? 0 : digest[i]+1;
-			
-			}
+			hex_digest << "-";
+		
+		}
+		
+		bool found=false;
+		for (Word i=0;i<digest.Count();++i) {
 			
 			//	Loop for each nibble
 			//	(i.e. each hex digit)

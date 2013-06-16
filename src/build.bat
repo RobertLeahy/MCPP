@@ -109,10 +109,12 @@ echo ====BUILDING MODULES====
 echo.
 
 mkdir ..\bin\mods > nul 2> nul
+mkdir ..\bin\chat_mods > nul 2> nul
 
 g++.exe %include_all% %common_params% ping/main.cpp %mcpp% -shared -o ../bin/mods/ping.dll
 g++.exe %include_all% %common_params% auth/main.cpp %mcpp% -shared -o ../bin/mods/auth.dll
 g++.exe %include_all% %common_params% keep_alive/main.cpp %mcpp% -shared -o ../bin/mods/keep_alive.dll
+g++.exe %include_all% %common_params% chat/main.cpp %mcpp% -shared -o ../bin/mods/chat.dll
 
 echo.
 echo ====BUILDING SERVER FRONT-END====

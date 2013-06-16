@@ -139,10 +139,11 @@ namespace MCPP {
 			 *		for the data to be flushed out to the
 			 *		client.
 			 */
-			SmartPointer<SendHandle> Send (Packet packet);
+			SmartPointer<SendHandle> Send (const Packet & packet);
 			/**
 			 *	Sends data to the client and then
-			 *	atomically enables encryption.
+			 *	atomically enables encryption and sets
+			 *	the client to authenticated state.
 			 *
 			 *	\param [in] buffer
 			 *		A buffer of bytes to send to the client.
@@ -156,7 +157,7 @@ namespace MCPP {
 			 *		for the data to be flushed out to the
 			 *		client.
 			 */
-			SmartPointer<SendHandle> Send (Packet packet, const Vector<Byte> & key, const Vector<Byte> & iv);
+			SmartPointer<SendHandle> Send (const Packet & packet, const Vector<Byte> & key, const Vector<Byte> & iv);
 			/**
 			 *	Receives data from a buffer.
 			 *

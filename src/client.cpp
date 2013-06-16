@@ -101,7 +101,7 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Client::Send (Packet packet) {
+	SmartPointer<SendHandle> Client::Send (const Packet & packet) {
 	
 		//	Protocol analysis
 		if (RunningServer->ProtocolAnalysis) {
@@ -141,7 +141,7 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Client::Send (Packet packet, const Vector<Byte> & key, const Vector<Byte> & iv) {
+	SmartPointer<SendHandle> Client::Send (const Packet & packet, const Vector<Byte> & key, const Vector<Byte> & iv) {
 	
 		//	Protocol Analysis
 		if (RunningServer->ProtocolAnalysis) {
@@ -189,6 +189,8 @@ namespace MCPP {
 				
 				//	Enable encryption
 				encryptor.Construct(key,iv);
+				
+				SetState(ClientState::Authenticated);
 				
 				//	Return send handle
 				return handle;

@@ -85,7 +85,7 @@ class KeepAlive : public Module {
 							keep_alive.SetType<PacketTypeMap<0x00>>();
 							keep_alive.Retrieve<Int32>(0)=generator();
 							
-							client->Send(std::move(keep_alive));
+							client->Send(keep_alive);
 						
 						}
 					

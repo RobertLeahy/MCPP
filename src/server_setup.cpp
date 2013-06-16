@@ -1,4 +1,5 @@
 static const String mods_dir("mods");
+static const String startup_prepend("Startup: ");
 
 
 inline void Server::server_startup () {
@@ -16,7 +17,14 @@ inline void Server::server_startup () {
 			),
 			mods_dir
 		),
-		log
+		[this] (const String & message, Service::LogType type) {
+		
+			String log(startup_prepend);
+			log << message;
+			
+			WriteLog(log,type);
+		
+		}
 	);
 	mods->Load();
 
@@ -195,7 +203,7 @@ inline void Server::server_startup () {
 		binds,
 		*pool,
 		OnAccept,
-		[=] (Socket && socket, const IPAddress & ip, UInt16 port) {	connections->Add(std::move(socket),ip,port);	},
+		[=] (Socket socket, const IPAddress & ip, UInt16 port) {	connections->Add(std::move(socket),ip,port);	},
 		log,
 		panic
 	);
