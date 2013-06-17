@@ -3,7 +3,7 @@
 
 
 static const String protocol_error("Protocol error");
-static const String name("0xFE Server List Ping Protocol Support");
+static const String name("Ping Support");
 static const Word priority=1;
 static const String ping_template("{0}:{1} pinged");
 

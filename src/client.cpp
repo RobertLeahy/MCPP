@@ -63,10 +63,11 @@ namespace MCPP {
 	}
 
 
-	Client::Client (SmartPointer<Connection> conn) noexcept
+	Client::Client (SmartPointer<Connection> conn)
 		:	conn(std::move(conn)),
 			packet_in_progress(false),
-			packet_encrypted(false)
+			packet_encrypted(false),
+			inactive(Timer::CreateAndStart())
 	{
 	
 		state=static_cast<Word>(ClientState::Connected);
@@ -190,6 +191,7 @@ namespace MCPP {
 				//	Enable encryption
 				encryptor.Construct(key,iv);
 				
+				//	Atomically set state
 				SetState(ClientState::Authenticated);
 				
 				//	Return send handle

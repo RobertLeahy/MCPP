@@ -110,7 +110,7 @@ namespace MCPP {
 			 *	\param [in] conn
 			 *		The connection to wrap.
 			 */
-			Client (SmartPointer<Connection> conn) noexcept;
+			Client (SmartPointer<Connection> conn);
 		
 		
 			/**

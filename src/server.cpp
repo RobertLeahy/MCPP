@@ -184,43 +184,43 @@ namespace MCPP {
 	}
 	
 	
-	void Server::WriteLog (const String & message, Service::LogType type) {
+	void Server::WriteLog (const String & message, Service::LogType type) noexcept {
 	
-		auto callback=[=] () {
-		
-			//	Don't throw errors, eat them
-			try {
+		//	Don't throw errors, eat them
+		try {
+	
+			auto callback=[=] () {
 			
-				if (data!=nullptr) {
+				//	Don't throw errors, eat them
+				try {
 				
-					data->WriteLog(message,type);
+					try {
 					
-					OnLog(message,type);
+						OnLog(message,type);
+						
+					} catch (...) {	}
 				
-				} else {
+					if (data==nullptr) Service::WriteLog(message,type);
+					else data->WriteLog(message,type);
 				
-					Service::WriteLog(message,type);
-				
-				}
-				
-				if (is_interactive) console_lock.Execute([&] () {	StdOut << message << Newline;	});
+				} catch (...) {	}
 			
-			} catch (...) {	}
-		
-		};
-		
-		//	Is there a thread pool?
-		if (pool.IsNull()) {
-		
-			//	Log synchronously
-			callback();
-		
-		} else {
-		
-			//	Log asynchronously
-			pool->Enqueue(callback);
-		
-		}
+			};
+			
+			//	Is there a thread pool?
+			if (pool.IsNull()) {
+			
+				//	Log synchronously
+				callback();
+			
+			} else {
+			
+				//	Log asynchronously
+				pool->Enqueue(callback);
+			
+			}
+			
+		} catch (...) {	}
 	
 	}
 	

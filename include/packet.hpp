@@ -279,7 +279,7 @@ namespace MCPP {
 			 *	clear the packet and begin building another
 			 *	packet inside it from the new buffer.
 			 *
-			 *	A return value of \em true does not mean that
+			 *	A return value of \em false does not mean that
 			 *	\em buffer is unaffected.  This function
 			 *	builds the packet incrementally.  All consumed
 			 *	bytes will be removed as they are parsed.
@@ -544,44 +544,19 @@ namespace MCPP {
 				//	Verify there's enough space
 				if ((end-(*begin))<sizeof(T)) return false;
 				
-				//	If big endian we can extract
-				//	without an intermediary copy
-				if (Endianness::IsBigEndian<T>()) {
+				//	Copy from source buffer
+				//	to destination
+				memcpy(
+					ptr,
+					*begin,
+					sizeof(T)
+				);
 				
-					memcpy(
-						ptr,
-						*begin,
-						sizeof(T)
-					);
-					
-					*begin+=sizeof(T);
+				//	Advance iterator
+				*begin+=sizeof(T);
 				
-				//	Otherwise extract, swap bytes order
-				//	and copy again
-				} else {
-				
-					//	Union prevents initialization
-					union {
-						T obj;
-					};
-					
-					memcpy(
-						&obj,
-						*begin,
-						sizeof(T)
-					);
-					
-					*begin+=sizeof(T);
-					
-					Endianness::FixEndianness(&obj);
-					
-					memcpy(
-						ptr,
-						&obj,
-						sizeof(T)
-					);
-				
-				}
+				//	Swap byte order if necessary
+				if (!Endianness::IsBigEndian<T>()) Endianness::FixEndianness(ptr);
 				
 				return true;
 			

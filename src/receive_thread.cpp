@@ -7,6 +7,8 @@ namespace MCPP {
 	//	Duration of receive thread's wait for
 	//	sockets to have data
 	static const Word recv_wait_timeout=50;
+	static const String recv_thread_error("Error in receive thread");
+	static const String recv_thread_error_what("Error in receive thread: {0}");
 	
 	
 	void ConnectionHandler::recv_thread (void * ptr) {
@@ -26,13 +28,30 @@ namespace MCPP {
 			
 			} catch (const std::exception & e) {
 			
-				//	TODO: Log
+				try {
+				
+					ch->parent->log(
+						String::Format(
+							recv_thread_error_what,
+							e.what()
+						),
+						Service::LogType::Error
+					);
+				
+				} catch (...) {	}
 				
 				throw;
 			
 			} catch (...) {
 			
-				//	TODO: Log
+				try {
+				
+					ch->parent->log(
+						recv_thread_error,
+						Service::LogType::Error
+					);
+				
+				} catch (...) {	}
 				
 				throw;
 			
@@ -158,6 +177,10 @@ namespace MCPP {
 		
 		}
 		
+		#ifdef DEBUG
+		try {	ch->parent->log("Receive thread down",Service::LogType::Information);	} catch (...) {	}
+		#endif
+		
 		//	Panic of any of this was the
 		//	result of, or resulted in an
 		//	error
@@ -175,6 +198,10 @@ namespace MCPP {
 	
 	
 	void ConnectionHandler::recv_thread_impl () {
+	
+		#ifdef DEBUG
+		try {	parent->log("Receive thread up",Service::LogType::Information);	} catch (...) {	}
+		#endif
 	
 		//	Release send thread
 		sync.Enter();
@@ -455,7 +482,7 @@ namespace MCPP {
 				//	If necessary, purge
 				//	connections
 				
-				purge_connections(purge);
+				purge_connections(std::move(purge));
 			
 			}
 		

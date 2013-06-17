@@ -69,7 +69,6 @@ namespace MCPP {
 			
 			//	For interactive
 			
-			Mutex console_lock;
 			bool is_interactive;
 			
 			
@@ -216,7 +215,7 @@ namespace MCPP {
 			 *	\param [in] type
 			 *		The type of message to log.
 			 */
-			void WriteLog (const String & message, Service::LogType type);
+			void WriteLog (const String & message, Service::LogType type) noexcept;
 			
 			
 			/**
@@ -265,6 +264,20 @@ namespace MCPP {
 			 *	written.
 			 */
 			Event<void (const String &, Service::LogType)> OnLog;
+			/**
+			 *	Invoked before and after the server installs
+			 *	modules.
+			 *
+			 *	Useful if the front-end wishes to attach to
+			 *	some functionality in the server, basically
+			 *	useless otherwise.
+			 *
+			 *	Passed a boolean which is \em true if the
+			 *	callback is being invoked before modules are
+			 *	installed, \em false if the callback is being
+			 *	invoked after modules are installed.
+			 */
+			Event<void (bool)> OnInstall;
 			/**
 			 *	Invoked whenever data is received
 			 *	on a connection.  Passed the connection

@@ -7,7 +7,7 @@
 namespace MCPP {
 
 
-	static const String name("Chat support");
+	static const String name("Chat Support");
 	static const Word priority=1;
 	static const String mods_dir("chat_mods");
 	static const String log_prepend("Chat Support: ");
@@ -88,11 +88,7 @@ namespace MCPP {
 			);
 		
 		}
-	) {
-	
-		mods.Load();
-	
-	}
+	) {	}
 
 
 	const String & ChatModule::Name () const noexcept {
@@ -110,6 +106,9 @@ namespace MCPP {
 	
 	
 	void ChatModule::Install () {
+	
+		//	Get mods
+		mods.Load();
 	
 		//	Install ourself into the server
 		//	first, so that mods we load

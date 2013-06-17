@@ -8,7 +8,7 @@ INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
 OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
 #OPTIMIZATION=-O3
 OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
-GPP=g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
+GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 
 
 #	DEFAULT
@@ -23,9 +23,6 @@ clean:
 .PHONY: cleanall
 cleanall: clean
 	$(DEL) bin\*
-	$(DEL) bin\data_providers\*
-	$(DEL) bin\mods\*
-	$(DEL) bin\chat_mods\*
 
 
 #	LIBRARIES
@@ -85,8 +82,8 @@ obj/sha1.o \
 bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
 	$(GPP) -shared -o $@ obj/server.o obj/mod.o obj/nbt.o obj/listen_handler.o obj/connection.o obj/connection_handler.o obj/connection_manager.o obj/send_handle.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/new_delete.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
 
-obj/server.o: src/server.cpp
-	$(GPP) $? -c -o $@
+obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp
+	$(GPP) src/server.cpp -c -o $@
 
 obj/mod.o: src/mod.cpp
 	$(GPP) $? -c -o $@
@@ -127,8 +124,8 @@ obj/listen_handler.o: src/listen_handler.cpp
 obj/connection.o: src/connection.cpp
 	$(GPP) $? -c -o $@
 	
-obj/connection_handler.o: src/connection_handler.cpp
-	$(GPP) $? -c -o $@
+obj/connection_handler.o: src/connection_handler.cpp src/send_thread.cpp src/receive_thread.cpp
+	$(GPP) src/connection_handler.cpp -c -o $@
 	
 obj/connection_manager.o: src/connection_manager.cpp
 	$(GPP) $? -c -o $@
@@ -139,8 +136,8 @@ obj/send_handle.o: src/send_handle.cpp
 
 #	MINECRAFT COMMUNICATIONS
 	
-obj/packet.o: src/packet.cpp
-	$(GPP) $? -c -o $@
+obj/packet.o: src/packet.cpp src/protocol_analysis.cpp
+	$(GPP) src/packet.cpp -c -o $@
 	
 obj/packet_factory.o: src/packet_factory.cpp
 	$(GPP) $? -c -o $@
@@ -163,8 +160,8 @@ obj/sha1.o: src/sha1.cpp
 obj/url.o: src/url.cpp
 	$(GPP) $? -c -o $@
 	
-obj/http_handler.o: src/http_handler.cpp
-	$(GPP) $? -c -o $@
+obj/http_handler.o: src/http_handler.cpp src/http_handler_callbacks.cpp
+	$(GPP) src/http_handler.cpp -c -o $@
 	
 obj/http_request.o: src/http_request.cpp
 	$(GPP) $? -c -o $@
@@ -188,8 +185,8 @@ bin/data_providers/mysql_data_provider.dll: obj/mysql_data_provider.o obj/data_p
 	$(GPP) -shared -o bin/data_providers/data_provider.dll obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o
 	cmd /c "move bin\data_providers\data_provider.dll bin\data_providers\mysql_data_provider.dll"
 
-obj/mysql_data_provider.o: src/mysql_data_provider.cpp
-	$(GPP) $? -c -o $@
+obj/mysql_data_provider.o: src/mysql_data_provider.cpp src/login_info.cpp
+	$(GPP) src/mysql_data_provider.cpp -c -o $@
 	
 obj/data_provider.o: src/data_provider.cpp
 	$(GPP) $? -c -o $@
@@ -241,7 +238,10 @@ bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 #	SERVER FRONT-END
 
 .PHONY: front_end
-front_end: bin/server.exe
+front_end: bin/server.exe bin/mcpp.exe
 
-bin/server.exe: src/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -o $@ src/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+	
+bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll
+	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll

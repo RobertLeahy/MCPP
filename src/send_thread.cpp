@@ -8,6 +8,8 @@ namespace MCPP {
 	static Word send_sleep_timeout=50;
 	//	Duration of wait for sockets to change state
 	static Word send_wait_timeout=0;
+	static const String send_thread_error("Error in send thread");
+	static const String send_thread_error_what("Error in send thread: {0}");
 
 
 	void ConnectionHandler::send_thread (void * ptr) {
@@ -22,13 +24,30 @@ namespace MCPP {
 			
 			} catch (const std::exception & e) {
 			
-				//	TODO: Log
+				try {
+				
+					ch->parent->log(
+						String::Format(
+							send_thread_error_what,
+							e.what()
+						),
+						Service::LogType::Error
+					);
+				
+				} catch (...) {	}
 			
 				throw;
 			
 			} catch (...) {
 			
-				//	TODO: Log
+				try {
+				
+					ch->parent->log(
+						send_thread_error,
+						Service::LogType::Error
+					);
+				
+				} catch (...) {	}
 			
 				throw;
 			
@@ -50,6 +69,10 @@ namespace MCPP {
 	
 	
 	void ConnectionHandler::send_thread_impl () {
+	
+		#ifdef DEBUG
+		try {	parent->log("Send thread up",Service::LogType::Information);	} catch (...) {	}
+		#endif
 	
 		//	Wait for startup to complete
 		sync.Enter();
@@ -288,7 +311,7 @@ namespace MCPP {
 				
 				//	Purge
 				
-				purge_connections(purge);
+				purge_connections(std::move(purge));
 			
 			}
 			
@@ -298,10 +321,18 @@ namespace MCPP {
 		
 			stop=true;
 			
+			#ifdef DEBUG
+			try {	parent->log("Send thread down",Service::LogType::Information);	} catch (...) {	}
+			#endif
+			
 			//	Propagate error so it gets logged
 			throw;
 		
 		}
+		
+		#ifdef DEBUG
+		try {	parent->log("Send thread down",Service::LogType::Information);	} catch (...) {	}
+		#endif
 		
 		//	DIE
 	

@@ -2,10 +2,14 @@
 #include <utility>
 
 
-static const String name("Keep alive support and connection timeouts");
-static const String timeout("Timeout of {0}ms exceeded");
+static const String name("Keep Alive and Timeout Support");
+static const String timeout("Timeout of {0}ms exceeded (inactive for {1}ms)");
+static const String pa_banner("====PROTOCOL ANALYSIS====");
+static const String pa_inactive_template("{0}:{1} inactive for {2}ms: {3}");
+static const String pa_terminating("Terminating connection");
+static const String pa_will_not_terminate("Will not terminate");
 static const Word priority=1;
-static const Word timeout_milliseconds=60000;
+static const Word timeout_milliseconds=10000;
 static const Word keep_alive_milliseconds=5000;
 
 
@@ -49,6 +53,8 @@ class KeepAlive : public Module {
 				
 					if (lock.Execute([&] () {
 					
+						if (stop) return stop;
+					
 						wait.Sleep(
 							lock,
 							(timeout_milliseconds<keep_alive_milliseconds)
@@ -64,11 +70,33 @@ class KeepAlive : public Module {
 					
 						//	Check idle time
 						Word inactive=client->Inactive();
+						
+						if (RunningServer->ProtocolAnalysis) {
+						
+							String log(pa_banner);
+							log << Newline << String::Format(
+								pa_inactive_template,
+								client->IP(),
+								client->Port(),
+								inactive,
+								(inactive>=timeout_milliseconds)
+									?	pa_terminating
+									:	pa_will_not_terminate
+							);
+						
+							RunningServer->WriteLog(
+								log,
+								Service::LogType::Information
+							);
+						
+						}
+						
 						if (inactive>=timeout_milliseconds) {
 
 							client->Disconnect(
 								String::Format(
 									timeout,
+									timeout_milliseconds,
 									inactive
 								)
 							);

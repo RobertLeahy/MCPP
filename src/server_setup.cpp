@@ -74,7 +74,9 @@ inline void Server::server_startup () {
 	);
 	
 	//	Install mods
+	OnInstall(true);
 	mods->Install();
+	OnInstall(false);
 	
 	//	Try and fire up a connection
 	//	manager

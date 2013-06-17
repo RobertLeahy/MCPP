@@ -220,3 +220,6 @@ rleahylib/
 doc/
 build.txt
 build_make_error.txt
+*.exe
+log_*.txt
+server.txt

@@ -19,11 +19,21 @@ namespace MCPP {
 			panic(std::move(panic)),
 			recv(std::move(recv)),
 			log(std::move(log)),
-			pool(&pool)
+			pool(&pool),
+			stop(false),
+			watcher(thread_func,this)
 	{	}
 
 
 	ConnectionManager::~ConnectionManager () noexcept {
+	
+		//	Stop watcher
+		lock.Acquire();
+		stop=true;
+		wait.WakeAll();
+		lock.Release();
+		
+		watcher.Join();
 	
 		//	Clean up all handlers
 	
@@ -100,41 +110,11 @@ namespace MCPP {
 		try {
 		
 			pending.Add(std::move(conn));
-			
-			//	Should we spawn a new handler?
-			
-			handlers_lock.Acquire();
-			
-			try {
-			
-				SafeWord available=0;
-			
-				for (SmartPointer<ConnectionHandler> & handler : handlers) available+=SafeWord(handler->Available());
-				
-				//	Not enough handlers
-				//	spawn another
-				if (Word(available)<pending.Count()) {
-				
-					handlers.EmplaceBack(
-						SmartPointer<ConnectionHandler>::Make(*this)
-					);
-				
-				}
-			
-			} catch (...) {
-			
-				handlers_lock.Release();
-				
-				throw;
-			
-			}
-			
-			handlers_lock.Release();
 		
 		} catch (...) {
 		
 			pending_lock.Release();
-			
+		
 			throw;
 		
 		}
@@ -171,6 +151,180 @@ namespace MCPP {
 		pending_lock.Release();
 		
 		return returnthis;
+	
+	}
+	
+	
+	static const String watcher_error("Error in pending connection monitoring thread");
+	static const String watcher_error_what("Error in pending connection monitoring thread: {0}");
+	
+	
+	void ConnectionManager::thread_func (void * ptr) {
+	
+		ConnectionManager * cm=reinterpret_cast<ConnectionManager *>(ptr);
+	
+		try {
+		
+			try {
+			
+				cm->thread_func_impl();
+			
+			} catch (const std::exception & e) {
+			
+				try {
+				
+					cm->log(
+						String::Format(
+							watcher_error_what,
+							e.what()
+						),
+						Service::LogType::Error
+					);
+				
+				} catch (...) {	}
+			
+				throw;
+			
+			} catch (...) {
+			
+				try {
+				
+					cm->log(
+						watcher_error,
+						Service::LogType::Error
+					);
+				
+				} catch (...) {	}
+			
+				throw;
+			
+			}
+		
+		} catch (...) {
+		
+			try {
+			
+				cm->panic();
+			
+			} catch (...) {	}
+			
+			throw;
+		
+		}
+	
+	}
+	
+	
+	static const Word timeout=50;
+	
+	
+	void ConnectionManager::thread_func_impl () {
+	
+		#ifdef DEBUG
+		log("Watcher up",Service::LogType::Information);
+		
+		try {
+		#endif
+	
+		//	Loop until told to stop
+		for (;;) {
+		
+			//	Check stop and sleep if
+			//	not stopping
+			lock.Acquire();
+			
+			try {
+			
+				if (!stop) wait.Sleep(lock,timeout);
+				
+				if (stop) {
+				
+					lock.Release();
+					
+					break;
+				
+				}
+			
+			} catch (...) {
+			
+				lock.Release();
+				
+				throw;
+			
+			}
+			
+			lock.Release();
+		
+			//	Wait
+			Thread::Sleep(timeout);
+			
+			//	Determine whether we should spawn
+			//	a new handler
+			pending_lock.Acquire();
+			
+			try {
+			
+				//	If there are no pending connections,
+				//	it'd be pointless to go on
+				if (pending.Count()!=0) {
+				
+					//	Check the amount of
+					//	capacity in the running
+					//	handlers
+					
+					handlers_lock.Acquire();
+					
+					try {
+					
+						SafeWord available=0;
+						
+						for (SmartPointer<ConnectionHandler> & handler : handlers) available+=SafeWord(handler->Available());
+						
+						//	Insufficient handlers,
+						//	spawn another
+						if (Word(available)<pending.Count()) {
+						
+							handlers.EmplaceBack(
+								SmartPointer<ConnectionHandler>::Make(*this)
+							);
+						
+						}
+					
+					} catch (...) {
+					
+						handlers_lock.Release();
+						
+						throw;
+					
+					}
+					
+					handlers_lock.Release();
+				
+				}
+			
+			} catch (...) {
+			
+				pending_lock.Release();
+			
+				throw;
+			
+			}
+			
+			pending_lock.Release();
+		
+		}
+		
+		#ifdef DEBUG
+		} catch (...) {
+		
+			log("Watcher down",Service::LogType::Information);
+		
+			throw;
+		
+		}
+		
+		log("Watcher down",Service::LogType::Information);
+		#endif
 	
 	}
 

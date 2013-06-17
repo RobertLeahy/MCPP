@@ -317,7 +317,7 @@ namespace MCPP {
 			void send_thread_impl ();
 			static void recv_thread (void *);
 			void recv_thread_impl ();
-			inline void purge_connections (Vector<SmartPointer<Connection>> &);
+			inline void purge_connections (Vector<SmartPointer<Connection>>);
 		
 		
 		public:
@@ -433,6 +433,18 @@ namespace MCPP {
 			
 			//	Thread pool
 			ThreadPool * pool;
+			
+			//	Thread that watches
+			//	pending connections queue,
+			//	and its shutdown flag
+			Mutex lock;
+			CondVar wait;
+			bool stop;
+			Thread watcher;
+			
+			
+			static void thread_func (void *);
+			void thread_func_impl ();
 			
 			
 			Nullable<SmartPointer<Connection>> Dequeue ();

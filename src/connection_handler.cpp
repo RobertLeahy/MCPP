@@ -5,6 +5,8 @@ namespace MCPP {
 
 
 	static const Word max=SocketSet::MaxSetSize();
+	static const String purge_error("Error disconnecting {0}:{1}");
+	static const String purge_error_what("Error disconnecting {0}:{1}: {2}");
 
 
 	ConnectionHandler::ConnectionHandler (ConnectionManager & parent) : stop(false), normal_shutdown(false), sync(2), parent(&parent) {
@@ -49,7 +51,20 @@ namespace MCPP {
 		//	Purge all connections
 		//	so that they disassociate from this
 		//	handler
-		purge_connections(connections);
+		try {
+		
+			purge_connections(connections);
+			
+		} catch (...) {
+		
+			//	We have to make sure that
+			//	the connections disconnect
+			//	from the handler or we'll
+			//	have access violations
+			//	on our hands
+			for (auto & conn : connections) conn->disconnect();
+		
+		}
 
 		//	Safe for automatic cleanup now
 	
@@ -83,74 +98,110 @@ namespace MCPP {
 	}
 	
 	
-	inline void ConnectionHandler::purge_connections (Vector<SmartPointer<Connection>> & purge) {
+	inline void ConnectionHandler::purge_connections (Vector<SmartPointer<Connection>> purge) {
 	
+		//	Avoid locking unnecessarily
 		if (purge.Count()!=0) {
 		
 			connections_lock.Write();
 			
 			try {
-			
+				
 				for (auto & conn : purge) {
 				
+					//	Disassociate connection from
+					//	this handler
+					conn->disconnect();
+				
+					//	Search handler's list of connections
 					for (Word i=0;i<connections.Count();++i) {
 					
 						if (static_cast<Connection *>(connections[i])==static_cast<Connection *>(conn)) {
-						
-							//	Disassociate connection from this
-							//	handler
-							conn->disconnect();
-						
-							//	Capture these
+
+							//	Capture these callbacks.
+							//
+							//	This avoids a situation wherein
+							//	the connection manager is
+							//	destroyed while the asynchronous
+							//	disconnect handling callback
+							//	is still running, which leads
+							//	to access violations or simply
+							//	insidious behaviour.
 							const auto & disconnect=parent->disconnect;
 							const auto & panic=parent->panic;
-							parent->pool->Enqueue(
-								[=] () mutable {
-									
-									String reason;
+							const auto & log_callback=parent->log;
+							parent->pool->Enqueue([=] () mutable {
+							
+								String reason;
+								try {
+								
+									reason=conn->reason_lock.Execute([&] () {	return conn->reason;	});
+								
+								} catch (...) {	}
+								
+								try {
+								
 									try {
 									
-										reason=conn->reason_lock.Execute([conn] () {	return conn->reason;	});
+										disconnect(conn,reason);
 									
-									} catch (...) {	}
-									
-									try {
+									} catch (const std::exception & e) {
 									
 										try {
 										
-											disconnect(conn,reason);
+											log_callback(
+												String::Format(
+													purge_error_what,
+													conn->IP(),
+													conn->Port(),
+													e.what()
+												),
+												Service::LogType::Error
+											);
 										
-										} catch (const std::exception & e) {
-										
-											//	TODO: Log
-										
-											throw;
-										
-										} catch (...) {
-										
-											//	TODO: Log
-										
-											throw;
-										
-										}
-									
-									} catch (...) {
-									
-										try {
-									
-											panic();
-											
 										} catch (...) {	}
 										
 										throw;
 									
+									} catch (...) {
+									
+										try {
+										
+											log_callback(
+												String::Format(
+													purge_error,
+													conn->IP(),
+													conn->Port()
+												),
+												Service::LogType::Error
+											);
+										
+										} catch (...) {	}
+									
+										throw;
+									
 									}
 								
+								} catch (...) {
+								
+									try {
+									
+										panic();
+									
+									} catch (...) {	}
+									
+									throw;
+								
 								}
-							);
-						
+							
+							});
+							
+							//	Delete it
 							connections.Delete(i);
-						
+							
+							//	No need to loop anymore,
+							//	in fact due to the above
+							//	looping is probably dangerous
 							break;
 						
 						}
