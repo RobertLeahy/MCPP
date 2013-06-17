@@ -1,5 +1,6 @@
 #include <curl.h>
 #include <system_error>
+#include <type_traits>
 
 
 void print_bytes (const Vector<Byte> & buffer) {
@@ -20,6 +21,8 @@ void print_bytes (const Vector<Byte> & buffer) {
 
 
 bool test () {
+
+	return false;
 
 	SHA1 hash;
 	hash.Update(UTF8().Encode("hello"));

@@ -21,7 +21,7 @@ static bool tick_stop;
 static Mutex console_lock;
 
 
-void tick_thread_func (void *) {
+void tick_thread_func () {
 
 	Packet packet;
 	packet.SetType<PacketTypeMap<0x04>>();
@@ -65,7 +65,7 @@ void tick_thread_func (void *) {
 }
 
 
-void thread_func (void *) {
+void thread_func () {
 
 	Packet packet;
 	packet.SetType<PacketTypeMap<0x0D>>();
@@ -117,46 +117,30 @@ void thread_func (void *) {
 int Main (const Vector<const String> & args) {
 
 	#ifdef DEBUG
-	//if (test()) return EXIT_SUCCESS;
+	if (test()) return EXIT_SUCCESS;
 	#endif
 	
 	RunningServer.Construct();
 	
 	RunningServer->ProtocolAnalysis=true;
-	RunningServer->OnInstall.Add([] (bool before) {
-	
-		if (before) return;
+	RunningServer->OnLogin.Add([] (SmartPointer<Client> client) {
 		
-		RunningServer->Router[0xCD]=[] (SmartPointer<Client> client, Packet) {
+		Packet packet;
+		packet.SetType<PacketTypeMap<0x06>>();
 		
-			Packet packet;
-			packet.SetType<PacketTypeMap<0x06>>();
-			
-			packet.Retrieve<Int32>(0)=0;
-			packet.Retrieve<Int32>(1)=0;
-			packet.Retrieve<Int32>(2)=0;
-			
-			client->Send(packet);
-			
-			packet.SetType<PacketTypeMap<0x09>>();
-			
-			packet.Retrieve<Int32>(0)=0;
-			packet.Retrieve<SByte>(1)=1;
-			packet.Retrieve<SByte>(2)=1;
-			packet.Retrieve<Int16>(3)=256;
-			packet.Retrieve<String>(4)="default";
-			
-			client->Send(packet);
-			
-			map_lock.Execute([&] () {
-			
-				auto iter=map.find(client->GetConn());
-				
-				if (iter!=map.end()) iter->second=true;
-			
-			});
+		packet.Retrieve<Int32>(0)=0;
+		packet.Retrieve<Int32>(1)=0;
+		packet.Retrieve<Int32>(2)=0;
 		
-		};
+		client->Send(packet);
+		
+		map_lock.Execute([&] () {
+		
+			auto iter=map.find(client->GetConn());
+			
+			if (iter!=map.end()) iter->second=true;
+		
+		});
 	
 	});
 	

@@ -1,6 +1,5 @@
 #include <client.hpp>
 #include <server.hpp>
-#include <type_traits>
 
 
 namespace MCPP {
@@ -9,8 +8,9 @@ namespace MCPP {
 	static const String pa_banner("====PROTOCOL ANALYSIS====");
 	static const String send_pa_template("Server ==> {0}:{1} - Packet of type {2}");
 	static const String encrypt_banner("====ENCRYPTION ENABLED====");
-	static const String key_pa("Encryption enabled with key:");
-	static const String iv_pa("Encryption enabled with IV:");
+	static const String encrypt_desc("Connection with {0}:{1} encrypted");
+	static const String key_pa("Key:");
+	static const String iv_pa("Initialization Vector:");
 	static const String recv_pa_template("{0}:{1} ==> Server - Packet of type {2}");
 	
 	
@@ -67,21 +67,24 @@ namespace MCPP {
 		:	conn(std::move(conn)),
 			packet_in_progress(false),
 			packet_encrypted(false),
+			state(ClientState::Connected),
 			inactive(Timer::CreateAndStart())
-	{
-	
-		state=static_cast<Word>(ClientState::Connected);
-	
-	}
+	{	}
 	
 	
-	void Client::EnableEncryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
+	void Client::enable_encryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
 	
 		//	Protocol analysis
 		if (RunningServer->ProtocolAnalysis) {
 		
 			String log(pa_banner);
 			log	<<	Newline
+				<<	String::Format(
+						encrypt_desc,
+						IP(),
+						Port()
+					)
+				<<	Newline
 				<<	key_pa
 				<<	Newline
 				<<	buffer_format(key)
@@ -96,118 +99,126 @@ namespace MCPP {
 			);
 		
 		}
+		
+		//	Enable encryption
+		encryptor.Construct(key,iv);
 	
-		comm_lock.Write([&] () {	encryptor.Construct(key,iv);	});
+	}
+	
+	
+	SmartPointer<SendHandle> Client::send (const Packet & packet) {
+	
+		//	Protocol analysis
+		if (RunningServer->ProtocolAnalysis) {
+		
+			String log(pa_banner);
+			log	<<	Newline
+				<<	String::Format(
+						send_pa_template,
+						IP(),
+						Port(),
+						byte_format(packet.Type())
+					)
+				<<	Newline
+				<<	packet.ToString();
+				
+			RunningServer->WriteLog(
+				log,
+				Service::LogType::Information
+			);
+		
+		}
+		
+		return conn->Send(
+			//	Encrypt if necessary
+			encryptor.IsNull()
+				?	packet.ToBytes()
+				:	encryptor->Encrypt(packet.ToBytes())
+		);
+	
+	}
+	
+	
+	void Client::EnableEncryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
+	
+		write([&] () {	enable_encryption(key,iv);	});
 	
 	}
 	
 	
 	SmartPointer<SendHandle> Client::Send (const Packet & packet) {
 	
-		//	Protocol analysis
-		if (RunningServer->ProtocolAnalysis) {
-		
-			String log(pa_banner);
-			log << Newline << String::Format(
-				send_pa_template,
-				conn->IP(),
-				conn->Port(),
-				byte_format(packet.Type())
-			) << Newline << packet.ToString();
-			
-			RunningServer->WriteLog(
-				log,
-				Service::LogType::Information
-			);
-		
-		}
+		return read([&] () {	return send(packet);	});
 	
-		//	Lock
-		return comm_lock.Read([&] () {
+	}
+	
+	
+	SmartPointer<SendHandle> Client::Send (const Packet & packet, ClientState state) {
+	
+		return write([&] () {
 		
-			//	Send
-			return conn->Send(
-				//	Is encryption on?
-				encryptor.IsNull()
-						//	No, send plaintext
-					?	packet.ToBytes()
-						//	Yes, send ciphertext
-					:	encryptor->Encrypt(
-							packet.ToBytes()
-						)
-			);
+			this->state=state;
+			
+			return send(packet);
 		
 		});
 	
 	}
 	
 	
-	SmartPointer<SendHandle> Client::Send (const Packet & packet, const Vector<Byte> & key, const Vector<Byte> & iv) {
+	SmartPointer<SendHandle> Client::Send (const Packet & packet, const Vector<Byte> & key, const Vector<Byte> & iv, bool before) {
 	
-		//	Protocol Analysis
-		if (RunningServer->ProtocolAnalysis) {
+		return write([&] () {
 		
-			String log(pa_banner);
-			log	<< 	Newline
-				<< 	String::Format(
-						send_pa_template,
-						conn->IP(),
-						conn->Port(),
-						byte_format(packet.Type())
-					)
-				<<	Newline
-				<<	packet.ToString()
-				<<	Newline
-				<<	encrypt_banner
-				<<	Newline
-				<<	key_pa
-				<<	Newline
-				<<	buffer_format(key)
-				<<	Newline
-				<<	iv_pa
-				<<	Newline
-				<<	buffer_format(iv);
-				
-			RunningServer->WriteLog(
-				log,
-				Service::LogType::Information
-			);
+			SmartPointer<SendHandle> returnthis;
+			
+			//	Perform send before if requested
+			if (before) returnthis=send(packet);
 		
-		}
+			//	Enable encryption only
+			//	if it was previously
+			//	disabled
+			if (encryptor.IsNull()) enable_encryption(key,iv);
+			
+			//	Perform send after if requested
+			if (!before) returnthis=send(packet);
+			
+			//	Return
+			return returnthis;
+		
+		});
 	
-		//	Lock
-		return comm_lock.Write([&] () {
+	}
+	
+	
+	SmartPointer<SendHandle> Client::Send (
+		const Packet & packet,
+		const Vector<Byte> & key,
+		const Vector<Byte> & iv,
+		ClientState state,
+		bool before
+	) {
+	
+		return write([&] () {
 		
-			//	If encryption is not enabled,
-			//	send plaintext and then
-			//	enable it
-			if (encryptor.IsNull()) {
+			//	Set state
+			this->state=state;
 			
-				//	Plaintext send
-				auto handle=conn->Send(
-					packet.ToBytes()
-				);
-				
-				//	Enable encryption
-				encryptor.Construct(key,iv);
-				
-				//	Atomically set state
-				SetState(ClientState::Authenticated);
-				
-				//	Return send handle
-				return handle;
+			SmartPointer<SendHandle> returnthis;
 			
-			}
+			//	Perform send before if requested
+			if (before) returnthis=send(packet);
 			
-			//	If encryption is already enabled,
-			//	ignore the spurious request to
-			//	enable it, and perform an encrypted
-			//	send
-			return conn->Send(
-				encryptor->Encrypt(
-					packet.ToBytes()
-				)
-			);
+			//	Enable encryption only
+			//	if it was previously
+			//	disabled
+			if (encryptor.IsNull()) enable_encryption(key,iv);
+			
+			//	Perform send after if requested
+			if (!before) returnthis=send(packet);
+			
+			//	Return
+			return returnthis;
 		
 		});
 	
@@ -249,7 +260,7 @@ namespace MCPP {
 		
 		//	Acquire lock so encryption
 		//	state doesn't change
-		return comm_lock.Read([&] () {
+		return read([&] () {
 		
 			//	There's no encryption if...
 			if (
@@ -328,16 +339,14 @@ namespace MCPP {
 	
 	void Client::SetState (ClientState state) noexcept {
 	
-		this->state=static_cast<Word>(state);
+		comm_lock.Write([&] () {	this->state=state;	});
 	
 	}
 	
 	
 	ClientState Client::GetState () const noexcept {
 	
-		return static_cast<ClientState>(
-			static_cast<Word>(state)
-		);
+		return comm_lock.Read([&] () {	return state;	});
 	
 	}
 	

@@ -39,7 +39,10 @@ enum class AuthenticationState {
 	//	server has shared secret, waiting
 	//	for minecrafte.net authentication
 	//	confirmation
-	WaitingForAuthentication
+	WaitingForAuthentication,
+	//	Encryption has been enabled,
+	//	waiting on 0xCD
+	EncryptionEnabled
 };
 
 
@@ -161,6 +164,7 @@ class Authentication : public Module {
 			//
 			//	-	0x02 Handshake
 			//	-	0xFC Encryption Response
+			//	-	0xCD Client Statuses
 			
 			//	Extract the previous 0x02
 			//	handler (if any)
@@ -592,15 +596,17 @@ class Authentication : public Module {
 										auto & data=loc->second;
 										
 										//	Simultaneously send the
-										//	encryption response, set
-										//	the client to authenticated
-										//	and enable encryption on this
-										//	connection
+										//	encryption response and
+										//	enable encryption on
+										//	the client's connection
 										client->Send(
 											reply,
 											data.Secret,
 											data.Secret
 										);
+										
+										//	Advance state
+										data.State=AuthenticationState::EncryptionEnabled;
 										
 										return true;
 									
@@ -632,6 +638,140 @@ class Authentication : public Module {
 					});
 				
 				});
+			
+			};
+			
+			//	Extract the previous 0xCD
+			//	handler (if any)
+			//
+			//	Chaining is very important
+			//	as this packet can have
+			//	different payloads and be
+			//	interpreted in different ways
+			//
+			//	We're only interested in
+			//	handling it right after
+			//	authentication, but some
+			//	other module might want to
+			//	handle it when it's sent when
+			//	the player dies and is then
+			//	ready to respawn
+			prev=std::move(RunningServer->Router[0xCD]);
+			
+			//	Install our own handler
+			RunningServer->Router[0xCD]=[=] (SmartPointer<Client> client, Packet packet) {
+			
+				//	We're only interested in newly-connection
+				//	clients, and clients sending 0 as the
+				//	payload
+				if (!(
+					(packet.Retrieve<SByte>(0)==0) ||
+					(client->GetState()==ClientState::Connected)
+				)) {
+				
+					//	Chain
+					if (prev) prev(
+						std::move(client),
+						std::move(packet)
+					);
+					//	If there's nothing to chain to,
+					//	kill the client with a protocol
+					//	error
+					else client->Disconnect(protocol_error);
+					
+					//	Don't proceed
+					return;
+				
+				}
+				
+				//	Client made an error, and
+				//	is to be disconnected
+				bool kill=false;
+				//	We already handled the error,
+				//	don't set a new reason, just
+				//	disconnect
+				bool error=true;
+				
+				//	We need to fetch our information about
+				//	this client
+				map_lock.Read([&] () {
+				
+					//	Grab data from the map
+					
+					auto loc=map.find(client->GetConn());
+					if (loc==map.end()) {
+					
+						//	The client has been
+						//	disconnected
+						kill=true;
+						error=false;
+						
+						return;
+					
+					}
+					
+					auto & data=loc->second;
+					
+					//	Lock this client's data
+					data.Lock->Execute([&] () {
+					
+						//	Verify client's state
+						if (data.State!=AuthenticationState::EncryptionEnabled) {
+						
+							//	Wrong state, ERROR
+							kill=true;
+							
+							return;
+						
+						}
+						
+						//	Hit the client with a 0x01
+						Packet reply;
+						reply.SetType<PacketTypeMap<0x01>>();
+						
+						//	TODO: Populate this data
+						//	properly
+						reply.Retrieve<Int32>(0)=1;
+						reply.Retrieve<String>(1)="default";
+						reply.Retrieve<SByte>(2)=0;
+						reply.Retrieve<SByte>(3)=0;
+						reply.Retrieve<SByte>(4)=0;
+						reply.Retrieve<SByte>(5)=0;
+						reply.Retrieve<SByte>(6)=20;
+						
+						//	Atomically authenticate the
+						//	player, send this packet
+						//	to them, and fire the
+						//	authenticate event
+						client->Send(
+							reply,
+							ClientState::Authenticated,
+							[&] (Client &, SmartPointer<SendHandle>) {
+							
+								RunningServer->OnLogin(client);
+							
+							}
+						);
+					
+					});
+				
+				});
+				
+				//	Disconnect if necessary
+				if (kill) {
+				
+					if (error) client->Disconnect(protocol_error);
+					
+					//	Don't chain
+					return;
+				
+				}
+				
+				//	Chain (if applicable)
+				if (prev) prev(
+					std::move(client),
+					std::move(packet)
+				);
 			
 			};
 		

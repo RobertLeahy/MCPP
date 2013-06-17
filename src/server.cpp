@@ -357,6 +357,8 @@ namespace MCPP {
 			OnConnect.Clear();
 			OnDisconnect.Clear();
 			OnLog.Clear();
+			OnLogin.Clear();
+			OnInstall.Clear();
 			OnReceive=ReceiveCallback();
 			
 			//	Clean up data provider

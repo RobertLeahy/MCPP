@@ -279,6 +279,14 @@ namespace MCPP {
 			 */
 			Event<void (bool)> OnInstall;
 			/**
+			 *	Invoked when any client is logged in.
+			 *
+			 *	This callback is guaranteed to have ended
+			 *	before any further packets from that
+			 *	client are dispatched to handlers.
+			 */
+			Event<void (SmartPointer<Client>)> OnLogin;
+			/**
 			 *	Invoked whenever data is received
 			 *	on a connection.  Passed the connection
 			 *	on which the data was received, and
