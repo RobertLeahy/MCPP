@@ -18,7 +18,7 @@ static UInt128 tick=0;
 static Mutex tick_lock;
 static CondVar tick_wait;
 static bool tick_stop;
-static Mutex console_lock;
+static Nullable<ThreadPool> console_write;
 
 
 void tick_thread_func () {
@@ -67,16 +67,18 @@ void tick_thread_func () {
 
 void thread_func () {
 
+	typedef PacketTypeMap<0x0D> pt;
+
 	Packet packet;
-	packet.SetType<PacketTypeMap<0x0D>>();
+	packet.SetType<pt>();
 	
-	packet.Retrieve<Double>(0)=0.0;
-	packet.Retrieve<Double>(1)=0.0;
-	packet.Retrieve<Double>(2)=74.0;
-	packet.Retrieve<Double>(3)=0.0;
-	packet.Retrieve<Single>(4)=0.0;
-	packet.Retrieve<Single>(5)=0.0;
-	packet.Retrieve<bool>(6)=true;
+	packet.Retrieve<pt,0>()=0.0;
+	packet.Retrieve<pt,1>()=0.0;
+	packet.Retrieve<pt,2>()=74.0;
+	packet.Retrieve<pt,3>()=0.0;
+	packet.Retrieve<pt,4>()=0.0;
+	packet.Retrieve<pt,5>()=0.0;
+	packet.Retrieve<pt,6>()=true;
 
 	for (;;) {
 	
@@ -116,21 +118,26 @@ void thread_func () {
 
 int Main (const Vector<const String> & args) {
 
+	Memory::NetAlloc=0;
+
 	#ifdef DEBUG
 	if (test()) return EXIT_SUCCESS;
 	#endif
-	
+
+	console_write.Construct(1);
 	RunningServer.Construct();
 	
-	RunningServer->ProtocolAnalysis=true;
+	//RunningServer->ProtocolAnalysis=true;
 	RunningServer->OnLogin.Add([] (SmartPointer<Client> client) {
 		
-		Packet packet;
-		packet.SetType<PacketTypeMap<0x06>>();
+		typedef PacketTypeMap<0x06> sp;
 		
-		packet.Retrieve<Int32>(0)=0;
-		packet.Retrieve<Int32>(1)=0;
-		packet.Retrieve<Int32>(2)=0;
+		Packet packet;
+		packet.SetType<sp>();
+		
+		packet.Retrieve<sp,0>()=0;
+		packet.Retrieve<sp,1>()=0;
+		packet.Retrieve<sp,2>()=0;
 		
 		client->Send(packet);
 		
@@ -169,14 +176,28 @@ int Main (const Vector<const String> & args) {
 	
 	RunningServer->OnLog.Add([] (const String & log, Service::LogType) {
 	
-		console_lock.Execute([&] () {	StdOut << log << Newline;	});
+		console_write->Enqueue([=] () {	StdOut << log << Newline;	});
 	
 	});
 	
 	Thread t(thread_func);
 	Thread t1(tick_thread_func);
-	
+
 	RunningServer->StartInteractive(args);
+	
+	/*Thread alloc_count([] () {
+	
+		for (;;) {
+		
+			Thread::Sleep(100);
+			
+			Word net_alloc=Memory::NetAlloc;
+			
+			StdOut << "Allocated memory blocks: " << net_alloc << Newline;
+		
+		}
+	
+	});*/
 	
 	StdIn.ReadLine();
 	//for (;;) Thread::Sleep(1000);

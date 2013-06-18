@@ -13,7 +13,7 @@ static const String login_error_log("Error communicating with minecraft.net, HTT
 static const String auth_fail("Failed to verify username");
 static const String auth_fail_log("Failed to verify username, minecraft.net says \"{0}\"");
 static const String auth_callback_error("Error during authentication");
-static const String logged_in("{0} : {1} logged in as {2}");
+static const String logged_in("{0}:{1} logged in as {2}");
 static const String pa_banner("====PROTOCOL ANALYSIS====");
 static const String http_request_template("HTTP request ==> {0}");
 static const String http_success_template("HTTP response <== {0} - Status: 200 - Time elapsed: {1}ns - Response body ({2} grapheme{3}, {4} code point{5}):");

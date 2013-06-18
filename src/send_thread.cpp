@@ -80,7 +80,7 @@ namespace MCPP {
 		try {
 		
 			//	Create poll state object
-			//	to ues in polling
+			//	to use in polling
 			PollState ps;
 			ps.SetWrite();
 		

@@ -28,7 +28,7 @@ namespace MCPP {
 		
 		
 			//	An array of routes
-			PacketHandler routes [std::numeric_limits<Byte>::max()];
+			PacketHandler routes [std::numeric_limits<Byte>::max()+1];
 			//	Whether packets destined for
 			//	non-existent routes should
 			//	cause the offending client to

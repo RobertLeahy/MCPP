@@ -1043,6 +1043,20 @@ namespace MCPP {
 			 *		activity.
 			 */
 			Word Inactive () const;
+			
+			
+			/**
+			 *	Retrieves the number of bytes of
+			 *	cleartext in the object's internal
+			 *	buffer.
+			 *
+			 *	Not thread safe.
+			 *
+			 *	\return
+			 *		The number of bytes in the buffer.
+			 */
+			Word Count () const noexcept;
+			
 	
 	
 	};

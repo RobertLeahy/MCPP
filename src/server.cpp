@@ -145,7 +145,11 @@ namespace MCPP {
 				if (
 					//	0 = unlimited
 					(MaximumBytes!=0) &&
-					(buffer.Count()>MaximumBytes)
+					(
+						//	Check both buffers
+						(buffer.Count()>MaximumBytes) ||
+						(client->Count()>MaximumBytes)
+					)
 				) client->Disconnect(buffer_too_long);
 			
 			} catch (const std::exception & e) {
@@ -208,17 +212,17 @@ namespace MCPP {
 			};
 			
 			//	Is there a thread pool?
-			if (pool.IsNull()) {
+			//if (pool.IsNull()) {
 			
 				//	Log synchronously
 				callback();
 			
-			} else {
+			/*} else {
 			
 				//	Log asynchronously
 				pool->Enqueue(callback);
 			
-			}
+			}*/
 			
 		} catch (...) {	}
 	

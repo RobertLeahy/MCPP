@@ -251,10 +251,6 @@ namespace MCPP {
 		//	Check for null
 		if (buffer==nullptr) throw std::out_of_range(NullPointerError);
 		
-		//	Short-circuit out of the buffer
-		//	happens to be empty
-		if (buffer->Count()==0) return false;
-		
 		//	This is activity
 		Active();
 		
@@ -396,6 +392,13 @@ namespace MCPP {
 	Word Client::Inactive () const {
 	
 		return inactive_lock.Execute([&] () {	return inactive.ElapsedMilliseconds();	});
+	
+	}
+	
+	
+	Word Client::Count () const noexcept {
+	
+		return encryption_buffer.Count();
 	
 	}
 

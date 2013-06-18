@@ -208,6 +208,11 @@ namespace MCPP {
 		
 		try {
 		
+			//	Poll state to use
+			//	in polling
+			PollState ps;
+			ps.SetRead();
+		
 			//	Loop until told to stop
 			while (!stop) {
 			
@@ -316,8 +321,7 @@ namespace MCPP {
 				//	Only proceed if there are sockets
 				//	to select from
 				if (num!=0) {
-				
-					//	Select
+
 					if (Socket::Select(&read,nullptr,nullptr,recv_wait_timeout)!=0) {
 						
 						//	Acquire lock
@@ -328,131 +332,167 @@ namespace MCPP {
 							for (SmartPointer<Connection> & conn : connections)
 							if (read.Contains(conn->socket)) {
 							
-								//	Receive data
+								//	Lock to receive data
 								conn->recv_lock.Acquire();
 								
 								try {
 								
-									//	If a receive processing task is running
-									//	we read into the alternate buffer
+									//	Did we kill the client?
+									bool killed=false;
+									
+									//	In order to avoid blocking
+									//	while data is being handled
+									//	we use an alternate buffer
+									//	while a task processing
+									//	received data is running
+									//
+									//	This ensures that data is
+									//	processed/received contiguously
+									//	and that this thread doesn't
+									//	block
 									bool use_primary=!conn->recv_task;
-									
-									//	If we're reading into the primary buffer,
-									//	there's no task, but there's a chance
-									//	there's data in the alternate buffer,
-									//	so copy it over
-									if (use_primary) {
-									
-										//	Copy alternate buffer
-										conn->recv.Add(
-											conn->recv_alt.begin(),
-											conn->recv_alt.end()
-										);
-										
-										//	Clear alternate buffer
-										conn->recv_alt.SetCount(0);
-									
-									}
 									
 									Vector<Byte> & buffer=use_primary ? conn->recv : conn->recv_alt;
 									
-									//	If buffer is as large is possible, resize
-									if (buffer.Capacity()==buffer.Count()) buffer.SetCapacity();
+									//	Amount of data in the buffer
+									//	before the receive
+									Word before=buffer.Count();
 									
-									//	Attempt to receive into buffer
-									try {
+									//	We know we can read at least some
+									//	data, but we don't know how much
+									//	
+									//	To avoid the overhead of looping
+									//	again just to read from this
+									//	socket once more, we poll the socket
+									//	and keep reading until either it
+									//	dies or until it's no longer
+									//	flagged as readable
+									do {
 									
-										if (conn->socket.Receive(&buffer)==0) {
+										//	If the buffer is at maximum
+										//	capacity, make it bigger
+										if (buffer.Capacity()==buffer.Count()) buffer.SetCapacity();
 										
-											//	Remote end closed, die
-											purge.EmplaceBack(conn);
+										//	Try and receive
+										try {
 										
-										} else {
-										
-											//	Receive successful
+											Word count=conn->socket.Receive(&buffer);
 											
-											//	If we're reading into the
-											//	main buffer, dispatch event
-											if (use_primary) {
+											//	If we received nothing, that
+											//	means that the socket was flagged
+											//	readable but had no data to be read,
+											//	i.e. the client disconnected
+											if (count==0) {
 											
-												//	Capture this
-												const auto & recv=parent->recv;
-												parent->pool->Enqueue(
-													[=] () mutable {
-													
-														loop:
-													
-														//	Invoke callback
-														try {
-														
-															recv(
-																conn,
-																conn->recv
-															);
-														
-														} catch (...) {	}
-														
-														//	Check for more data
-														conn->recv_lock.Acquire();
-														
-														try {
-														
-															//	If there's more data, continue
-															//	after copying buffers
-															if (conn->recv_alt.Count()!=0) {
-															
-																conn->recv.Add(
-																	conn->recv_alt.begin(),
-																	conn->recv_alt.end()
-																);
-																
-																conn->recv_alt.SetCount(0);
-																
-																//	Make sure we release lock
-																conn->recv_lock.Release();
-																
-																//	Back to the top...
-																goto loop;
-															
-															}
-														
-														} catch (...) {
-													
-															conn->recv_lock.Release();
-															
-															conn->recv_task=false;
-															
-															conn->recv_wait.WakeAll();
-															
-															throw;
-													
-														}
-														
-														//	Clear the task 
-														conn->recv_task=false;
-														
-														//	We're done, alert
-														conn->recv_wait.WakeAll();
-														
-														conn->recv_lock.Release();
-													
-													}
-												);
+												killed=true;
 												
-												//	Task in progress...
-												conn->recv_task=true;
-												
+												purge.EmplaceBack(conn);
+											
 											}
+										
+										} catch (const SocketException &) {
+										
+											//	Exception means something
+											//	went wrong on the socket,
+											//	so kill it
+											
+											killed=true;
+											
+											purge.EmplaceBack(conn);
 										
 										}
 									
-									} catch (const SocketException & e) {
+									} while (
+										!killed &&	//	Don't try and read from a socket that's dead
+										conn->socket.Poll(
+											ps,
+											0	//	Don't block
+										).Read()
+									);
 									
-										//	Connection was closed ungracefully
-										purge.EmplaceBack(conn);
+									//	If we're reading into
+									//	the primary buffer,
+									//	and if we added to that
+									//	buffer, we need to dispatch
+									//	a worker to process
+									//	that data
+									if (
+										use_primary &&
+										(buffer.Count()!=before)
+									) {
+									
+										//	Capture this
+										const auto & recv=parent->recv;
+										//	Dispatch worker
+										parent->pool->Enqueue([=] () mutable {
+										
+											//	We come back here if there's
+											//	more data to process after
+											//	the callback completes
+											loop:
+										
+											//	Invoke the processing
+											//	callback
+											try {
+											
+												recv(
+													conn,
+													conn->recv
+												);
+											
+											} catch (...) {	}
+											
+											//	Check to see if more
+											//	data was written into
+											//	the alternate buffer
+											//	while we processed
+											
+											conn->recv_lock.Acquire();
+											
+											try {
+											
+												//	If there's more data,
+												//	copy the alternate
+												//	buffer and loop
+												if (conn->recv_alt.Count()!=0) {
+												
+													conn->recv.Add(
+														conn->recv_alt.begin(),
+														conn->recv_alt.end()
+													);
+													
+													conn->recv_alt.SetCount(0);
+													
+													//	Be sure to release the lock...
+													conn->recv_lock.Release();
+													
+													//	LOOP
+													goto loop;
+												
+												}
+											
+											} catch (...) {
+											
+												conn->recv_task=false;
+												conn->recv_wait.WakeAll();
+												conn->recv_lock.Release();
+												
+												throw;
+											
+											}
+											
+											conn->recv_task=false;
+											conn->recv_wait.WakeAll();
+											conn->recv_lock.Release();
+										
+										});
+										
+										//	Flag a task as being
+										//	in progress
+										conn->recv_task=true;
 									
 									}
-								
+									
 								} catch (...) {
 								
 									conn->recv_lock.Release();

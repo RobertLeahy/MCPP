@@ -253,6 +253,64 @@ namespace MCPP {
 			
 			
 			/**
+			 *	Retrieves an element of this packet.
+			 *
+			 *	If the element has not been accessed or
+			 *	written, it will be returned default
+			 *	constructed.
+			 *
+			 *	\tparam T
+			 *		The type that this packet has been
+			 *		imbued with.
+			 *	\tparam offset
+			 *		The zero-relative offset of the item
+			 *		to retrieve.
+			 *
+			 *	\return
+			 *		A reference to the requested element.
+			 */
+			template <typename T, Word offset>
+			typename T::template RetrieveType<offset>::Type & Retrieve () {
+				
+				init<typename T::template RetrieveType<offset>::Type>(offset);
+				
+				return *reinterpret_cast<typename T::template RetrieveType<offset>::Type *>(
+					buffer+metadata[offset].Item<0>()
+				);
+			
+			}
+			
+			
+			/**
+			 *	Retrieves an element of this packet.
+			 *
+			 *	If the element has not been accessed or
+			 *	written, it will be returned default
+			 *	constructed.
+			 *
+			 *	\tparam T
+			 *		The type that this packet has been
+			 *		imbued with.
+			 *	\tparam offset
+			 *		The zero-relative offset of the item
+			 *		to retrieve.
+			 *
+			 *	\return
+			 *		A reference to the requested element.
+			 */
+			template <typename T, Word offset>
+			const typename T::template RetrieveType<offset>::Type & Retrieve () const {
+				
+				init<typename T::template RetrieveType<offset>::Type>(offset);
+				
+				return *reinterpret_cast<typename T::template RetrieveType<offset>::Type *>(
+					buffer+metadata[offset].Item<0>()
+				);
+			
+			}
+			
+			
+			/**
 			 *	Imbues this packet with a type.
 			 *
 			 *	\tparam T

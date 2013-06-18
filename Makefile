@@ -14,7 +14,7 @@ GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe 
 #	DEFAULT
 
 .PHONY: all
-all: mods front_end
+all: mods front_end test
 
 .PHONY: clean
 clean:
@@ -74,13 +74,13 @@ obj/url.o \
 obj/http_handler.o \
 obj/http_request.o \
 obj/mod_loader.o \
-obj/new_delete.o \
 obj/random.o \
 obj/thread_pool.o \
 obj/thread_pool_handle.o \
 obj/sha1.o \
+obj/new_delete.o \
 bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ obj/server.o obj/mod.o obj/nbt.o obj/listen_handler.o obj/connection.o obj/connection_handler.o obj/connection_manager.o obj/send_handle.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/new_delete.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
+	$(GPP) -shared -o $@ obj/server.o obj/new_delete.o obj/mod.o obj/nbt.o obj/listen_handler.o obj/connection.o obj/connection_handler.o obj/connection_manager.o obj/send_handle.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
 
 obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp
 	$(GPP) src/server.cpp -c -o $@
@@ -181,8 +181,8 @@ data_providers: bin/data_provider.dll
 bin/data_provider.dll: bin/data_providers/mysql_data_provider.dll
 	cmd /c "copy bin\data_providers\mysql_data_provider.dll bin\data_provider.dll"
 	
-bin/data_providers/mysql_data_provider.dll: obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o
-	$(GPP) -shared -o bin/data_providers/data_provider.dll obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o
+bin/data_providers/mysql_data_provider.dll: obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o
+	$(GPP) -shared -o bin/data_providers/data_provider.dll obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o
 	cmd /c "move bin\data_providers\data_provider.dll bin\data_providers\mysql_data_provider.dll"
 
 obj/mysql_data_provider.o: src/mysql_data_provider.cpp src/login_info.cpp
@@ -208,31 +208,45 @@ mods: \
 bin/mods/ping.dll \
 bin/mods/auth.dll \
 bin/mods/keep_alive.dll \
-bin/mods/chat.dll
+bin/mods/chat.dll \
+bin/chat_mods/basic_chat.dll \
+bin/mods/disconnect.dll
 
 
 #	PING SUPPORT
 
-bin/mods/ping.dll: src/ping/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ src/ping/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+bin/mods/ping.dll: src/ping/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+	$(GPP) -shared -o $@ src/ping/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll
 	
 
 #	AUTHENTICATION SUPPORT
 
-bin/mods/auth.dll: src/auth/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ src/auth/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+bin/mods/auth.dll: src/auth/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+	$(GPP) -shared -o $@ src/auth/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll
 	
 	
 #	KEEP ALIVE SUPPORT
 
-bin/mods/keep_alive.dll: src/keep_alive/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ src/keep_alive/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+bin/mods/keep_alive.dll: src/keep_alive/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+	$(GPP) -shared -o $@ src/keep_alive/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll
+	
+	
+#	DISCONNECT SUPPORT
+
+bin/mods/disconnect.dll: src/disconnect/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+	$(GPP) -shared -o $@ src/disconnect/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll
 	
 	
 #	CHAT SUPPORT
 
-bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+	$(GPP) -shared -o $@ src/chat/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll
+	
+
+#	CHAT SUB-MODULES
+
+bin/chat_mods/basic_chat.dll: bin/mods/chat.dll src/basic_chat/main.cpp obj/new_delete.o
+	$(GPP) -shared -o $@ src/basic_chat/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll
 	
 	
 #	SERVER FRONT-END
@@ -240,8 +254,18 @@ bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 .PHONY: front_end
 front_end: bin/server.exe bin/mcpp.exe
 
-bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
+bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
 	
-bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll
-	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll
+bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
+	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
+	
+	
+#	TEST
+
+
+.PHONY: test
+test: bin/test.exe
+
+bin/test.exe: bin/rleahy_lib.dll src/test/test.cpp
+	$(GPP) -o $@ bin/rleahy_lib.dll src/test/test.cpp

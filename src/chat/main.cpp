@@ -165,15 +165,18 @@ namespace MCPP {
 	}
 	
 	
-	void ChatModule::Broadcast (const String & message) const {
+	void ChatModule::Broadcast (String message) const {
 
+		typedef PacketTypeMap<0x03> pt;
+	
+		Packet packet;
+		packet.SetType<pt>();
+		
+		packet.Retrieve<pt,0>()=std::move(message);
+		
 		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
 		
 			if (client->GetState()==ClientState::Authenticated) {
-			
-				Packet packet;
-				packet.SetType<PacketTypeMap<0x03>>();
-				packet.Retrieve<String>(0)=message;
 			
 				client->Send(packet);
 			
@@ -184,16 +187,19 @@ namespace MCPP {
 	}
 	
 	
-	Vector<String> ChatModule::Send (const Vector<String> & usernames, const String & message) const {
+	Vector<String> ChatModule::Send (const Vector<String> & usernames, String message) const {
 	
 		//	A list of users that couldn't
 		//	be found
 		Vector<String> dne;
 		
 		//	Packet to send
+		typedef PacketTypeMap<0x03> pt;
+		
 		Packet packet;
-		packet.SetType<PacketTypeMap<0x03>>();
-		packet.Retrieve<String>(0)=message;
+		packet.SetType<pt>();
+		
+		packet.Retrieve<pt,0>()=std::move(message);
 		
 		//	Scan the list of recipients
 		for (const auto & s : usernames) {

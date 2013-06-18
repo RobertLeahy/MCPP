@@ -14,7 +14,15 @@ namespace MCPP {
 
 
 	/**
-	 *	A moduler framework for conveniently
+	 *	The type of callback which shall be
+	 *	invoked whenever a new chat message
+	 *	arrives.
+	 */
+	typedef std::function<void (SmartPointer<Client>, const String &)> ChatHandler;
+
+
+	/**
+	 *	A modular framework for conveniently
 	 *	implementing chat-related functionalities.
 	 */
 	class ChatModule : public Module {
@@ -81,7 +89,7 @@ namespace MCPP {
 			 *	The callback that shall be invoked
 			 *	when a new chat message arrives.
 			 */
-			std::function<void (SmartPointer<Client>, const String &)> Chat;
+			ChatHandler Chat;
 			
 			
 			/**
@@ -103,15 +111,14 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Sends a message to all connected and
-			 *	authenticated clients.
+			 *	Sends a message to all authenticated clients.
 			 *
 			 *	\param [in] message
 			 *		The message to send.  This message
 			 *		is sent verbatim, no further
 			 *		processing is applied.
 			 */
-			void Broadcast (const String & message) const;
+			void Broadcast (String message) const;
 			/**
 			 *	Sends a message to connected and
 			 *	authenticated users with a certain username.
@@ -131,7 +138,7 @@ namespace MCPP {
 			 *		usernames in \em usernames which
 			 *		were not found.
 			 */
-			Vector<String> Send (const Vector<String> & usernames, const String & message) const;
+			Vector<String> Send (const Vector<String> & usernames, String message) const;
 	
 	
 	};

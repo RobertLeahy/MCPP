@@ -20,7 +20,7 @@ namespace MCPP {
 	
 	inline void PacketRouter::init () noexcept {
 	
-		for (Word i=0;i<std::numeric_limits<Byte>::max();++i) {
+		for (Word i=0;i<std::numeric_limits<Byte>::max()+1;++i) {
 		
 			new (&routes[i]) PacketHandler ();
 		
