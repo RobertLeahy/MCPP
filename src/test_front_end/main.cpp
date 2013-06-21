@@ -151,12 +151,12 @@ int Main (const Vector<const String> & args) {
 	
 	});
 	
-	RunningServer->OnConnect.Add([] (SmartPointer<Connection> conn) {
+	RunningServer->OnConnect.Add([] (SmartPointer<Client> client) {
 	
 		map_lock.Execute([&] () {
 		
 			map.emplace(
-				static_cast<Connection *>(conn),
+				client->GetConn(),
 				false
 			);
 		
@@ -164,11 +164,11 @@ int Main (const Vector<const String> & args) {
 	
 	});
 	
-	RunningServer->OnDisconnect.Add([] (SmartPointer<Connection> conn, const String & reason) {
+	RunningServer->OnDisconnect.Add([] (SmartPointer<Client> client, const String & reason) {
 	
 		map_lock.Execute([&] () {
 		
-			map.erase(static_cast<Connection *>(conn));
+			map.erase(client->GetConn());
 		
 		});
 	
@@ -184,6 +184,26 @@ int Main (const Vector<const String> & args) {
 	Thread t1(tick_thread_func);
 
 	RunningServer->StartInteractive(args);
+	
+	//	Test
+	/*std::function<void ()> callback;
+	callback=[&] () {
+	
+		RunningServer->WriteLog(
+			"Tick",
+			Service::LogType::Information
+		);
+		
+		RunningServer->Pool().Enqueue(
+			1000,
+			callback
+		);
+	
+	};
+	RunningServer->Pool().Enqueue(
+		1000,
+		callback
+	);*/
 	
 	/*Thread alloc_count([] () {
 	

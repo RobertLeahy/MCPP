@@ -173,6 +173,10 @@ namespace MCPP {
 			String reason;
 			volatile bool disconnect_flag;
 			
+			//	Bytes sent/received
+			std::atomic<UInt64> sent;
+			std::atomic<UInt64> received;
+			
 			
 			void connect (Mutex * lock, CondVar * signal) noexcept;
 			void disconnect () noexcept;
@@ -272,6 +276,26 @@ namespace MCPP {
 			 *		closed.
 			 */
 			void Disconnect (String && reason) noexcept;
+			
+			
+			/**
+			 *	Retrieves the number of bytes that have
+			 *	been sent over this connection.
+			 *
+			 *	\return
+			 *		The number of bytes sent over this
+			 *		connection.
+			 */
+			UInt64 Sent () const noexcept;
+			/**
+			 *	Retrieves the number of bytes received
+			 *	on this connection.
+			 *
+			 *	\return
+			 *		The number of bytes received on
+			 *		this connection.
+			 */
+			UInt64 Received () const noexcept;
 	
 	
 	};

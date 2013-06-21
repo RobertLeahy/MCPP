@@ -234,6 +234,7 @@ namespace MCPP {
 					Word priority=ptr->Priority();
 					Word insert=0;
 					
+					bool found=false;
 					for (Word i=0;i<mods.Count();++i) {
 					
 						//	Check the priority of this element,
@@ -244,11 +245,17 @@ namespace MCPP {
 						
 							insert=i;
 							
+							found=true;
+							
 							break;
 						
 						}
 					
 					}
+					
+					//	If we didn't find an insertion point,
+					//	insert at the end
+					if (!found) insert=mods.Count();
 					
 					//	Create tuple in place
 					mods.Emplace(

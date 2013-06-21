@@ -28,12 +28,6 @@ namespace MCPP {
 	class ChatModule : public Module {
 	
 	
-		private:
-		
-		
-			ModuleLoader mods;
-	
-	
 		public:
 		
 		
@@ -98,6 +92,7 @@ namespace MCPP {
 			 
 			 
 			ChatModule ();
+			virtual ~ChatModule () noexcept;
 			
 			
 			/**
@@ -139,6 +134,30 @@ namespace MCPP {
 			 *		were not found.
 			 */
 			Vector<String> Send (const Vector<String> & usernames, String message) const;
+			/**
+			 *	Sends a message to a client.
+			 *
+			 *	\param [in] client
+			 *		The client to send the message to.
+			 *	\param [in] message
+			 *		The message to send.
+			 */
+			void Send (SmartPointer<Client> client, String message) const;
+			/**
+			 *	Sends a message to a client.
+			 *
+			 *	\param [in] username
+			 *		The username to send the message to.
+			 *	\param [in] message
+			 *		The message to send.
+			 *
+			 *	\return
+			 *		\em true if \em username represents
+			 *		a user connected to this server and
+			 *		\em message was sent, \em false
+			 *		otherwise.
+			 */
+			bool Send (String username, String message) const;
 	
 	
 	};

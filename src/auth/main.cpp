@@ -144,18 +144,18 @@ class Authentication : public Module {
 			//	disconnect events so we can
 			//	manage our data structures
 			
-			RunningServer->OnConnect.Add([&] (SmartPointer<Connection> conn) {
+			RunningServer->OnConnect.Add([&] (SmartPointer<Client> client) {
 			
 				//	Add this client to the map
-				map_lock.Write([&] () {	map.emplace(static_cast<Connection *>(conn),AuthenticationClient());	});
+				map_lock.Write([&] () {	map.emplace(client->GetConn(),AuthenticationClient());	});
 			
 			});
 			
-			RunningServer->OnDisconnect.Add([&] (SmartPointer<Connection> conn, const String &) {
+			RunningServer->OnDisconnect.Add([&] (SmartPointer<Client> client, const String &) {
 			
 				//	Remove this client from the map
 				//	if they're in the map
-				map_lock.Write([&] () {	map.erase(static_cast<Connection *>(conn));	});
+				map_lock.Write([&] () {	map.erase(client->GetConn());	});
 			
 			});
 		
@@ -251,11 +251,7 @@ class Authentication : public Module {
 						
 						//	Retrieve client's username
 						//	from the packet
-						client->SetUsername(
-							std::move(
-								packet.Retrieve<String>(1)
-							)
-						);
+						client->SetUsername(packet.Retrieve<String>(1));
 						
 						//	Prepare a response
 						Packet reply;
@@ -269,7 +265,6 @@ class Authentication : public Module {
 						data.ServerID=ASCII().Decode(ascii.begin(),ascii.end());
 
 						reply.Retrieve<String>(0)=data.ServerID;
-						//reply.Retrieve<String>(0)=RunningServer->GetServerID();
 						
 						//	Our public key
 						reply.Retrieve<Vector<Byte>>(1)=key.PublicKey();

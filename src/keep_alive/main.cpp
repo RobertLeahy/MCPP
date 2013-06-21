@@ -1,169 +1,57 @@
 #include <common.hpp>
 #include <utility>
+#include <unordered_map>
+#include <functional>
 
 
-static const String name("Keep Alive and Timeout Support");
-static const String timeout("Timeout of {0}ms exceeded (inactive for {1}ms)");
+static const String name ("Keep Alive, Latency, and Timeout Support");
+static const String timeout("Timeout of {0} ms exceeded (inactive for {1}ms)");
 static const String pa_banner("====PROTOCOL ANALYSIS====");
 static const String pa_inactive_template("{0}:{1} inactive for {2}ms: {3}");
+static const String pa_ping("{0}:{1} replied to keep alive, latency is {2}ms");
 static const String pa_terminating("Terminating connection");
 static const String pa_will_not_terminate("Will not terminate");
 static const Word priority=1;
 static const Word timeout_milliseconds=10000;
 static const Word keep_alive_milliseconds=5000;
+static const String protocol_error("Protocol error");
+static const String ping_timed_out("Ping timed out ({0}ms)");
+
+
+class KeepAliveInfo {
+
+
+	public:
+	
+	
+		//	Time since the last keep alive
+		//	was sent
+		Timer Latency;
+		//	ID that was last sent
+		Int32 ID;
+		//	Are we waiting on a keep alive?
+		bool Waiting;
+		
+		
+		KeepAliveInfo () noexcept : Waiting(false) {	}
+
+
+};
 
 
 class KeepAlive : public Module {
 
 
 	private:
-	
-	
-		Mutex lock;
-		CondVar wait;
-		Thread worker;
-		bool stop;
-		Random<Int32> generator;
-		Barrier barrier;
-		
-		
-		static void thread_func (void * ptr) noexcept {
-		
-			try {
-			
-				reinterpret_cast<KeepAlive *>(ptr)->thread_func_impl();
-			
-			} catch (...) {
-			
-				RunningServer->Panic();
-			
-			}
-		
-		}
-		
-		
-		void thread_func_impl () {
-		
-			barrier.Enter();
-			
-			try {
-		
-				//	Loop until stopped
-				for (;;) {
-				
-					if (lock.Execute([&] () {
-					
-						if (stop) return stop;
-					
-						wait.Sleep(
-							lock,
-							(timeout_milliseconds<keep_alive_milliseconds)
-								?	timeout_milliseconds
-								:	keep_alive_milliseconds
-						);
-						
-						return stop;
-					
-					})) break;
-					
-					RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
-					
-						//	Check idle time
-						Word inactive=client->Inactive();
-						
-						if (RunningServer->ProtocolAnalysis) {
-						
-							String log(pa_banner);
-							log << Newline << String::Format(
-								pa_inactive_template,
-								client->IP(),
-								client->Port(),
-								inactive,
-								(inactive>=timeout_milliseconds)
-									?	pa_terminating
-									:	pa_will_not_terminate
-							);
-						
-							RunningServer->WriteLog(
-								log,
-								Service::LogType::Information
-							);
-						
-						}
-						
-						if (inactive>=timeout_milliseconds) {
 
-							client->Disconnect(
-								String::Format(
-									timeout,
-									timeout_milliseconds,
-									inactive
-								)
-							);
-							
-							//	Next client
-							return;
-						
-						}
-					
-						//	Send keep alive if applicable
-						if (client->GetState()==ClientState::Authenticated) {
-						
-							Packet keep_alive;
-							keep_alive.SetType<PacketTypeMap<0x00>>();
-							keep_alive.Retrieve<Int32>(0)=generator();
-							
-							client->Send(keep_alive);
-						
-						}
-					
-					});
-				
-				}
-				
-			} catch (...) {
-			
-				barrier.Enter();
-				
-				throw;
-			
-			}
-			
-			barrier.Enter();
-			
-		}
+
+		std::unordered_map<const Connection *,KeepAliveInfo> map;
+		Mutex map_lock;
+		Random<Int32> generator;
+		std::function<void ()> callback;
 
 
 	public:
-	
-	
-		KeepAlive () : stop(false), barrier(2) {
-			
-			//	Start worker, it'll wait on barrier
-			worker=Thread(
-				thread_func,
-				this
-			);
-		
-		}
-	
-	
-		virtual ~KeepAlive () noexcept override {
-		
-			lock.Execute([&] () {
-			
-				stop=true;
-				
-				wait.WakeAll();
-			
-			});
-			
-			//	Wait
-			barrier.Enter();
-			
-			worker.Join();
-		
-		}
 	
 	
 		virtual Word Priority () const noexcept override {
@@ -182,29 +70,220 @@ class KeepAlive : public Module {
 		
 		virtual void Install () override {
 		
-			//	Release the worker
-			barrier.Enter();
+			//	We need to handle keep alives
 			
-			//	Install a dummy handler for
-			//	0x00 so even if the router
-			//	is set to disconnect the client
-			//	on packets with no handler,
-			//	we can still gracefully handle
-			//	incoming keep alives (which
-			//	we just ignore).
-			
-			//	Grab old handler (if any)
+			//	Old keep alive handler
 			PacketHandler prev(std::move(RunningServer->Router[0x00]));
 			
-			RunningServer->Router[0x00]=[=] (SmartPointer<Client> conn, Packet packet) {
+			//	Install our handler
+			RunningServer->Router[0x00]=[=] (SmartPointer<Client> client, Packet packet) {
 			
-				//	Chain through if applicable
+				typedef PacketTypeMap<0x00> pt;
+			
+				//	Check the ID
+				//
+				//	If it's zero this is the client
+				//	pinging us, just send that right
+				//	back at them.
+				if (packet.Retrieve<pt,0>()==0) {
+				
+					Packet reply;
+					reply.SetType<pt>();
+					reply.Retrieve<pt,0>()=0;
+					
+					client->Send(reply);
+				
+				//	If it's not zero this is the client
+				//	responding to us
+				} else {
+				
+					map_lock.Execute([&] () {
+					
+						//	Look up our data about the client
+						auto & data=map[client->GetConn()];
+						
+						//	Compare IDs
+						if (packet.Retrieve<pt,0>()==data.ID) {
+						
+							//	They match, complete keep alive
+							
+							data.Latency.Stop();
+							
+							//	Set ping
+							client->Ping=data.Latency.ElapsedMilliseconds();
+							
+							//	Protocol analysis
+							if (RunningServer->ProtocolAnalysis) {
+							
+								String log(pa_banner);
+								log << Newline << String::Format(
+									pa_ping,
+									client->IP(),
+									client->Port(),
+									static_cast<Word>(client->Ping)
+								);
+								
+								RunningServer->WriteLog(
+									log,
+									Service::LogType::Information
+								);
+							
+							}
+							
+							//	No longer waiting for a reply
+							//	to that keep alive
+							data.Waiting=false;
+						
+						//	That's a protocol error
+						} else {
+						
+							client->Disconnect(protocol_error);
+						
+						}
+					
+					});
+				
+				}
+				
+				//	Chain
 				if (prev) prev(
-					std::move(conn),
+					std::move(client),
 					std::move(packet)
 				);
 			
 			};
+			
+			//	Start the loop of callbacks to
+			//	ping the client and see if they
+			//	should be disconnected for
+			//	inactivity
+			
+			//	Kind of a little hack here to
+			//	get a lambda to capture itself...
+			callback=[=] () {
+			
+				//	Loop for all clients
+				RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+				
+					//	How long have they been inactive?
+					Word inactive=client->Inactive();
+					
+					//	Did they time out?
+					bool timed_out=inactive>timeout_milliseconds;
+					
+					//	Protocol analysis
+					if (RunningServer->ProtocolAnalysis) {
+					
+						String log(pa_banner);
+						log << Newline << String::Format(
+							pa_inactive_template,
+							client->IP(),
+							client->Port(),
+							inactive,
+							timed_out ? pa_terminating : pa_will_not_terminate
+						);
+						
+						RunningServer->WriteLog(
+							log,
+							Service::LogType::Information
+						);
+					
+					}
+					
+					//	Kill if they've timed out
+					if (timed_out) {
+					
+						client->Disconnect(
+							String::Format(
+								timeout,
+								timeout_milliseconds,
+								inactive
+							)
+						);
+					
+					//	Send them a ping
+					//	but only if they've
+					//	logged in
+					} else if (client->GetState()==ClientState::Authenticated) {
+					
+						//	Generate a random ID that isn't
+						//	zero
+						Int32 id=generator();
+						//	We could loop, but just make it
+						//	not-zero by adding 1
+						if (id==0) ++id;
+					
+						map_lock.Execute([&] () {
+						
+							auto & data=map[client->GetConn()];
+							
+							//	Are we waiting on a ping
+							//	back?
+							if (data.Waiting) {
+							
+								//	Kill them
+								client->Disconnect(
+									String::Format(
+										ping_timed_out,
+										data.Latency.ElapsedMilliseconds()
+									)
+								);
+							
+							//	We can send them a new
+							//	keep alive
+							} else {
+							
+								typedef PacketTypeMap<0x00> pt;
+								
+								Packet ping;
+								ping.SetType<pt>();
+								ping.Retrieve<pt,0>()=id;
+								
+								data.ID=id;
+								
+								data.Latency.Reset();
+								data.Latency.Start();
+								
+								client->Send(ping);
+							
+							}
+						
+						});
+					
+					}
+				
+				});
+				
+				//	Enqueue this task again
+				RunningServer->Pool().Enqueue(
+					(timeout_milliseconds>keep_alive_milliseconds)
+						?	keep_alive_milliseconds
+						:	timeout_milliseconds,
+					callback
+				);
+			
+			};
+			//	Enqueue
+			RunningServer->Pool().Enqueue(
+				(timeout_milliseconds>keep_alive_milliseconds)
+					?	keep_alive_milliseconds
+					:	timeout_milliseconds,
+				callback
+			);
+			
+			//	We need to hook into connect/disconnect
+			//	to maintain our data structure
+			RunningServer->OnConnect.Add([=] (SmartPointer<Client> client) {
+			
+				map_lock.Execute([&] () {	map.emplace(client->GetConn(),KeepAliveInfo());	});
+			
+			});
+			
+			RunningServer->OnDisconnect.Add([=] (SmartPointer<Client> client, const String &) {
+			
+				map_lock.Execute([&] () {	map.erase(client->GetConn());	});
+			
+			});
 		
 		}
 

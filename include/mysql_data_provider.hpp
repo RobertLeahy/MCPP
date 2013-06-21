@@ -37,6 +37,9 @@ namespace MCPP {
 			//	Statements
 			MYSQL_STMT * log_stmt;
 			MYSQL_STMT * setting_stmt;
+			MYSQL_STMT * kvp_stmt;
+			MYSQL_STMT * kvp_delete_pair_stmt;
+			MYSQL_STMT * kvp_insert_stmt;
 			
 			
 			//	Thread pool for worker
@@ -79,6 +82,9 @@ namespace MCPP {
 			
 			virtual void WriteLog (const String & log, Service::LogType type) override;
 			virtual Nullable<String> GetSetting (const String & setting) override;
+			virtual Vector<Nullable<String>> GetValues (const String & key) override;
+			virtual void DeleteValues (const String & key, const String & value) override;
+			virtual void InsertValue (const String & key, const String & value) override;
 	
 	
 	};

@@ -62,16 +62,15 @@ inline void Server::server_startup () {
 	Word num_threads;
 	if (
 		num_threads_str.IsNull() ||
-		!num_threads_str->ToInteger(&num_threads)
+		!num_threads_str->ToInteger(&num_threads) ||
+		(num_threads==0)
 	) num_threads=default_num_threads;
 	
-	//	Fire up the thread pool
-	pool.Construct(num_threads);
-
 	//	Panic callback
-	PanicType panic(
-		[=] () -> void {	Panic();	}
-	);
+	PanicType panic([=] () -> void {	Panic();	});
+	
+	//	Fire up the thread pool
+	pool.Construct(num_threads,panic);
 	
 	//	Install mods
 	OnInstall(true);
@@ -81,8 +80,107 @@ inline void Server::server_startup () {
 	//	Try and fire up a connection
 	//	manager
 	connections.Construct(
-		OnConnect,
-		OnDisconnect,
+		[=] (SmartPointer<Connection> conn) {
+		
+			try {
+		
+				//	Save IP and port number
+				IPAddress ip=conn->IP();
+				UInt16 port=conn->Port();
+				
+				//	Create client object
+				auto client=SmartPointer<Client>::Make(
+					std::move(
+						conn
+					)
+				);
+				
+				//	Add to the client list
+				Clients.Add(client);
+				
+				//	Log
+				auto clients=Clients.Count();
+				WriteLog(
+					String::Format(
+						connected,
+						ip,
+						port,
+						clients,
+						(clients==1) ? "is" : "are",
+						(clients==1) ? "" : "s"
+					),
+					Service::LogType::Information
+				);
+				
+				//	Fire event handler
+				OnConnect(std::move(client));
+				
+			} catch (...) {
+			
+				//	Panic on error
+				Panic();
+				
+				throw;
+			
+			}
+		
+		},
+		[=] (SmartPointer<Connection> conn, const String & reason) {
+		
+			try {
+			
+				//	Look up the client
+				auto client=Clients[*conn];
+				
+				//	Remove the client from the
+				//	list
+				Clients.Remove(*conn);
+				
+				//	Fire event handler
+				OnDisconnect(client,reason);
+				
+				//	Log
+				String disconnect_template;
+				
+				//	If there's no reason, choose
+				//	the template with no reason
+				if (reason.Size()==0) {
+				
+					disconnect_template=disconnected;
+				
+				} else {
+				
+					//	Fill the reason into the template
+					disconnect_template=String::Format(
+						disconnected_with_reason,
+						reason
+					);
+				
+				}
+				
+				auto clients=Clients.Count();
+				WriteLog(
+					String::Format(
+						disconnect_template,
+						conn->IP(),
+						conn->Port(),
+						clients,
+						(clients==1) ? "is" : "are",
+						(clients==1) ? "" : "s"
+					),
+					Service::LogType::Information
+				);
+			
+			} catch (...) {
+			
+				//	Panic on error
+				Panic();
+				
+				throw;
+			
+			}
+		
+		},
 		OnReceive,
 		log,
 		panic,

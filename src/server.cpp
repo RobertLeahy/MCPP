@@ -44,90 +44,6 @@ namespace MCPP {
 
 
 	Server::Server () : Service(service_name), running(false), data(nullptr), ProtocolAnalysis(false), Router(true) {
-	
-		OnConnect.Add(
-			[=] (SmartPointer<Connection> conn) {
-			
-				try {
-				
-					//	Save IP and port number
-					IPAddress ip=conn->IP();
-					UInt16 port=conn->Port();
-					
-					//	Add client to client list
-					Clients.Add(SmartPointer<Client>::Make(std::move(conn)));
-					
-					//	Log
-					auto clients=Clients.Count();
-					WriteLog(
-						String::Format(
-							connected,
-							ip,
-							port,
-							clients,
-							(clients==1) ? "is" : "are",
-							(clients==1) ? "" : "s"
-						),
-						Service::LogType::Information
-					);
-				
-				} catch (...) {
-				
-					//	TODO: Add panic code
-				
-				}
-				
-			}
-		);
-		
-		OnDisconnect.Add(
-			[=] (SmartPointer<Connection> conn, const String & reason) {
-			
-				try {
-				
-					//	Remove client from list of clients
-					Clients.Remove(*conn);
-					
-					//	Choose a log template
-					String disconnect_template;
-					
-					//	If there's no reason, choose
-					//	the template with no reason
-					if (reason.Size()==0) {
-					
-						disconnect_template=disconnected;
-					
-					} else {
-					
-						//	Fill the reason into the template
-						disconnect_template=String::Format(
-							disconnected_with_reason,
-							reason
-						);
-					
-					}
-					
-					auto clients=Clients.Count();
-					WriteLog(
-						String::Format(
-							disconnect_template,
-							conn->IP(),
-							conn->Port(),
-							clients,
-							(clients==1) ? "is" : "are",
-							(clients==1) ? "" : "s"
-						),
-						Service::LogType::Information
-					);
-				
-				} catch (...) {
-				
-					//	TODO: Add panic code
-				
-				}
-			
-			}
-		);
 		
 		OnReceive=[=] (SmartPointer<Connection> conn, Vector<Byte> & buffer) {
 		
@@ -212,17 +128,17 @@ namespace MCPP {
 			};
 			
 			//	Is there a thread pool?
-			//if (pool.IsNull()) {
+			if (pool.IsNull()) {
 			
 				//	Log synchronously
 				callback();
 			
-			/*} else {
+			} else {
 			
 				//	Log asynchronously
 				pool->Enqueue(callback);
 			
-			}*/
+			}
 			
 		} catch (...) {	}
 	

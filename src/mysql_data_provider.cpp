@@ -2,6 +2,7 @@
 #include <cstring>
 #include <type_traits>
 #include <errmsg.h>
+#include <utility>
 
 
 namespace MCPP {
@@ -32,6 +33,9 @@ namespace MCPP {
 	//	Queries
 	static const char * log_query="INSERT INTO `log` (`type`,`text`) VALUES (?,?)";
 	static const char * setting_query="SELECT `value` FROM `settings` WHERE `setting`=?";
+	static const char * kvp_query="SELECT `value` FROM `keyvaluepairs` WHERE `key`=?";
+	static const char * kvp_delete_pair_query="DELETE FROM `keyvaluepairs` WHERE `key`=? AND `value`=?";
+	static const char * kvp_insert_query="INSERT INTO `keyvaluepairs` (`key`,`value`) VALUES (?,?)";
 	
 	
 	//	Encodes a Unicode string such that
@@ -131,6 +135,8 @@ namespace MCPP {
 	
 		destroy_stmt(log_stmt);
 		destroy_stmt(setting_stmt);
+		destroy_stmt(kvp_stmt);
+		destroy_stmt(kvp_delete_pair_stmt);
 	
 	}
 	
@@ -225,9 +231,14 @@ namespace MCPP {
 			port(port),
 			log_stmt(nullptr),
 			setting_stmt(nullptr),
+			kvp_stmt(nullptr),
+			kvp_delete_pair_stmt(nullptr),
+			kvp_insert_stmt(nullptr),
 			pool(
 				//	Single worker thread
 				1,
+				//	On panic do nothing
+				std::function<void ()>(),
 				//	Initializer to be run
 				//	in the worker before
 				//	it starts work
@@ -437,14 +448,249 @@ namespace MCPP {
 		handle->Wait();
 		
 		//	Was the worker successful?
-		if (handle->Success()) return Nullable<String>(
-			std::move(
-				*(handle->Result<Nullable<String>>())
-			)
+		if (handle->Success()) return std::move(
+			*(handle->Result<Nullable<String>>())
 		);
 		
 		//	Failure
 		throw std::runtime_error(mysql_failed);
+	
+	}
+	
+	
+	Vector<Nullable<String>> MySQLDataProvider::GetValues (const String & key) {
+	
+		//	Dispatch worker thread
+		//	to retrieve value
+		auto handle=pool.Enqueue([&] () -> Vector<Nullable<String>> {
+		
+			//	Setup parameter
+			MYSQL_BIND param;
+			memset(&param,0,sizeof(MYSQL_BIND));
+			param.buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> key_encoded(db_encode(key));
+			param.buffer=to_char(key_encoded);
+			param.buffer_length=key_encoded.Length();
+			
+			//	Setup result
+			MYSQL_BIND result;
+			memset(&result,0,sizeof(MYSQL_BIND));
+			result.buffer_type=MYSQL_TYPE_STRING;
+			unsigned long real_length=0;
+			result.length=&real_length;
+			my_bool is_null;
+			result.is_null=&is_null;
+			
+			//	Is the server still there?
+			keep_alive();
+			
+			//	Regenerate prepared statement if
+			//	necessary
+			prepare_stmt(kvp_stmt,kvp_query);
+			
+			//	Bind and execute
+			if (
+				(mysql_stmt_bind_param(kvp_stmt,&param)!=0) ||
+				(mysql_stmt_bind_result(kvp_stmt,&result)!=0) ||
+				(mysql_stmt_execute(kvp_stmt)!=0)
+			) throw std::runtime_error(mysql_stmt_error(kvp_stmt));
+			
+			//	Prepare a buffer to return
+			Vector<Nullable<String>> buffer;
+			
+			//	Loop, execute, and fetch
+			int success;
+			for (;;) {
+			
+				//	Fetch
+				if ((success=mysql_stmt_fetch(kvp_stmt))==1) throw std::runtime_error(
+					mysql_stmt_error(
+						kvp_stmt
+					)
+				);
+			
+				//	We're done if there's no
+				//	more data
+				if (success==MYSQL_NO_DATA) break;
+				
+				//	Current value
+				Nullable<String> value;
+				
+				//	No further processing needed
+				//	if the database value is null
+				if (!is_null) {
+				
+					//	If it's the empty string all
+					//	we need to do is default construct
+					//	a string and we're good
+					if (real_length==0) {
+					
+						value.Construct();
+					
+					//	Otherwise we need to extract the
+					//	value from the database
+					} else {
+					
+						//	Allocate a sufficiently-sized
+						//	buffer to hold the raw data
+						//	from the database
+						Word buffer_len=Word(
+							SafeInt<
+								decltype(real_length)
+							>(
+								real_length
+							)
+						);
+						Vector<Byte> from_db(buffer_len);
+						
+						//	Wire buffer into the result bind
+						result.buffer=to_char(from_db);
+						result.buffer_length=real_length;
+						
+						//	Retrieve actual data
+						if (mysql_stmt_fetch_column(
+							kvp_stmt,
+							&result,
+							0,
+							0
+						)!=0) throw std::runtime_error(mysql_stmt_error(kvp_stmt));
+						
+						//	Success, butter in data,
+						//	set the count
+						from_db.SetCount(buffer_len);
+						
+						//	Decode the string
+						value.Construct(
+							UTF8().Decode(
+								from_db.begin(),
+								from_db.end()
+							)
+						);
+						
+						//	Make sure the result bind
+						//	is reset to a consistent/sane
+						//	state
+						result.buffer=nullptr;
+						result.buffer_length=0;
+					
+					}
+				
+				}
+				
+				//	Add the extracted value
+				//	to our list of values
+				buffer.Add(std::move(value));
+				
+			}
+			
+			//	All values extracted, return
+			return buffer;
+		
+		});
+		
+		//	Wait for database operation
+		//	to complete
+		handle->Wait();
+		
+		//	Did the worker succeed?
+		if (handle->Success()) return std::move(
+			*(handle->Result<Vector<Nullable<String>>>())
+		);
+		
+		//	Failure
+		throw std::runtime_error(mysql_failed);
+	
+	}
+	
+	
+	void MySQLDataProvider::DeleteValues (const String & key, const String & value) {
+	
+		//	Dispatch worker to delete
+		//	from the database
+		auto handle=pool.Enqueue([&] () {
+		
+			//	Setup parameters
+			MYSQL_BIND param [2];
+			memset(param,0,sizeof(MYSQL_BIND)*2);
+			
+			//	Parameter #1 - Key
+			param[0].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> key_encoded(db_encode(key));
+			param[0].buffer=to_char(key_encoded);
+			param[0].buffer_length=key_encoded.Length();
+			
+			//	Parameter #2 - Value
+			param[1].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> value_encoded(db_encode(value));
+			param[1].buffer=to_char(value_encoded);
+			param[1].buffer_length=value_encoded.Length();
+			
+			//	Is the server still there?
+			keep_alive();
+			
+			//	Regenerate the prepared statement
+			//	if necessary
+			prepare_stmt(kvp_delete_pair_stmt,kvp_delete_pair_query);
+			
+			//	Bind and execute
+			if (
+				(mysql_stmt_bind_param(kvp_delete_pair_stmt,param)!=0) ||
+				(mysql_stmt_execute(kvp_delete_pair_stmt)!=0)
+			) throw std::runtime_error(mysql_stmt_error(kvp_delete_pair_stmt));
+		
+		});
+		
+		//	Wait for worker to finish
+		handle->Wait();
+		
+		//	Throw on error
+		if (!handle->Success()) throw std::runtime_error(mysql_failed);
+	
+	}
+	
+	
+	void MySQLDataProvider::InsertValue (const String & key, const String & value) {
+	
+		//	Dispatch worker to insert
+		//	into the database
+		auto handle=pool.Enqueue([&] () {
+		
+			//	Setup parameters
+			MYSQL_BIND param [2];
+			memset(param,0,sizeof(MYSQL_BIND)*2);
+			
+			//	Parameter #1 - Key
+			param[0].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> key_encoded(db_encode(key));
+			param[0].buffer=to_char(key_encoded);
+			param[0].buffer_length=key_encoded.Length();
+			
+			//	Parameter #2 - Value
+			param[1].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> value_encoded(db_encode(value));
+			param[1].buffer=to_char(value_encoded);
+			param[1].buffer_length=value_encoded.Length();
+			
+			//	Is the server still there?
+			keep_alive();
+			
+			//	Regenerate the prepared statement
+			//	if necessary
+			prepare_stmt(kvp_insert_stmt,kvp_insert_query);
+			
+			//	Bind and execute
+			if (
+				(mysql_stmt_bind_param(kvp_insert_stmt,param)!=0) ||
+				(mysql_stmt_execute(kvp_insert_stmt)!=0)
+			) throw std::runtime_error(mysql_stmt_error(kvp_insert_stmt));
+		
+		});
+			
+		//	Wait for worker to finish
+		handle->Wait();
+		
+		//	Throw on error
+		if (!handle->Success()) throw std::runtime_error(mysql_failed);
 	
 	}
 

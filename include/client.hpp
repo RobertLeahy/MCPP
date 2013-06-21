@@ -119,7 +119,7 @@ namespace MCPP {
 		private:
 		
 		
-			//	Connection to client
+			//	Connection to connection
 			SmartPointer<Connection> conn;
 			
 			//	This lock must be held
@@ -131,8 +131,8 @@ namespace MCPP {
 			//	The following allow comm_lock
 			//	to be "recursively" acquired
 			//	during send atomic callbacks
-			std::atomic<bool> comm_locked;
-			std::atomic<Word> comm_locked_id;
+			mutable std::atomic<bool> comm_locked;
+			mutable std::atomic<Word> comm_locked_id;
 			
 			//	Encryption
 			
@@ -167,6 +167,10 @@ namespace MCPP {
 			mutable Timer inactive;
 			mutable Mutex inactive_lock;
 			
+			//	Client's connected time
+			mutable Timer connected;
+			mutable Mutex connected_lock;
+			
 			
 			void enable_encryption (const Vector<Byte> &, const Vector<Byte> &);
 			SmartPointer<SendHandle> send (const Packet &);
@@ -178,7 +182,7 @@ namespace MCPP {
 					decltype(std::declval<T>()()),
 					void
 				>::value
-			>::type read (T && callback) noexcept(noexcept(callback())) {
+			>::type read (T && callback) const noexcept(noexcept(callback())) {
 			
 				bool locked;
 				if (
@@ -218,7 +222,7 @@ namespace MCPP {
 					void
 				>::value,
 				decltype(std::declval<T>()())
-			>::type read (T && callback) noexcept(
+			>::type read (T && callback) const noexcept(
 				std::is_nothrow_move_constructible<decltype(callback())>::value &&
 				noexcept(callback())
 			) {
@@ -266,7 +270,7 @@ namespace MCPP {
 					decltype(std::declval<T>()()),
 					void
 				>::value
-			>::type write (T && callback) noexcept(noexcept(callback())) {
+			>::type write (T && callback) const noexcept(noexcept(callback())) {
 			
 				bool locked;
 				if (
@@ -306,7 +310,7 @@ namespace MCPP {
 					void
 				>::value,
 				decltype(std::declval<T>()())
-			>::type write (T && callback) noexcept(
+			>::type write (T && callback) const noexcept(
 				std::is_nothrow_move_constructible<decltype(callback())>::value &&
 				noexcept(callback())
 			) {
@@ -349,6 +353,13 @@ namespace MCPP {
 			
 			
 		public:
+		
+		
+			/**
+			 *	The client's latency in milliseconds
+			 *	as last reported.
+			 */
+			std::atomic<Word> Ping;
 		
 			
 			/**
@@ -1056,6 +1067,36 @@ namespace MCPP {
 			 *		The number of bytes in the buffer.
 			 */
 			Word Count () const noexcept;
+			
+			
+			/**
+			 *	Determines how long the client has been
+			 *	connected.
+			 *
+			 *	\return
+			 *		The number of milliseconds the client
+			 *		has been connected.
+			 */
+			Word Connected () const;
+			
+			
+			/**
+			 *	Retrieves the number of bytes received on
+			 *	this connection.
+			 *
+			 *	\return
+			 *		The number of bytes received on this
+			 *		connection.
+			 */
+			UInt64 Received () const noexcept;
+			/**
+			 *	Retrieves the number of bytes sent on this
+			 *	connection.
+			 *
+			 *	\return
+			 *		The number of bytes sent on this connection.
+			 */
+			UInt64 Sent () const noexcept;
 			
 	
 	

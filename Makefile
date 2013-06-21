@@ -194,6 +194,9 @@ obj/data_provider.o: src/data_provider.cpp
 
 #	THREAD POOL
 
+.PHONY: thread_pool
+thread_pool: obj/thread_pool.o obj/thread_pool_handle.o
+
 obj/thread_pool.o: src/thread_pool.cpp
 	$(GPP) $? -c -o $@
 	
@@ -210,7 +213,14 @@ bin/mods/auth.dll \
 bin/mods/keep_alive.dll \
 bin/mods/chat.dll \
 bin/chat_mods/basic_chat.dll \
-bin/mods/disconnect.dll
+bin/mods/disconnect.dll \
+bin/chat_mods/whisper.dll \
+bin/chat_mods/chat_login.dll \
+bin/chat_mods/info.dll \
+bin/mods/player_list.dll \
+bin/mods/op.dll \
+bin/mods/ban.dll \
+bin/chat_mods/ban_info.dll
 
 
 #	PING SUPPORT
@@ -242,11 +252,52 @@ bin/mods/disconnect.dll: src/disconnect/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
 	$(GPP) -shared -o $@ src/chat/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll
 	
+	
+#	PLAYER LIST SUPPORT
+
+bin/mods/player_list.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/player_list/main.cpp
+	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/player_list/main.cpp
+	
+	
+#	OPERATOR SUPPORT
+
+bin/mods/op.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/op/main.cpp obj/new_delete.o
+	$(GPP) -shared -o $@ bin/mcpp.dll bin/data_provider.dll bin/rleahy_lib.dll obj/new_delete.o src/op/main.cpp
+	
+	
+#	BAN SUPPORT
+
+bin/mods/ban.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/ban/main.cpp obj/new_delete.o
+	$(GPP) -shared -o $@ bin/mcpp.dll bin/data_provider.dll bin/rleahy_lib.dll obj/new_delete.o src/ban/main.cpp
+	
 
 #	CHAT SUB-MODULES
 
-bin/chat_mods/basic_chat.dll: bin/mods/chat.dll src/basic_chat/main.cpp obj/new_delete.o
+
+#	GLOBAL CHAT
+
+bin/chat_mods/basic_chat.dll: bin/mods/chat.dll src/basic_chat/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
 	$(GPP) -shared -o $@ src/basic_chat/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll
+	
+#	WHISPERS
+
+bin/chat_mods/whisper.dll: bin/mods/chat.dll src/whisper/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
+	$(GPP) -shared -o $@ src/whisper/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll
+	
+#	LOGIN/LOGOUT BROADCASTS
+
+bin/chat_mods/chat_login.dll: bin/mods/chat.dll src/chat_login/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
+	$(GPP) -shared -o $@ src/chat_login/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll
+	
+#	INFORMATION THROUGH CHAT
+
+bin/chat_mods/info.dll: bin/mods/chat.dll src/info/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll bin/mods/op.dll
+	$(GPP) -shared -o $@ src/info/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll bin/mods/op.dll
+	
+#	INFORMATION ABOUT BANS THROUGH CHAT
+
+bin/chat_mods/ban_info.dll: bin/mods/chat.dll bin/mods/op.dll bin/mods/ban.dll src/ban_info/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
+	$(GPP) -shared -o $@ bin/mods/chat.dll bin/mods/op.dll bin/mods/ban.dll src/ban_info/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
 	
 	
 #	SERVER FRONT-END

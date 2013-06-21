@@ -389,6 +389,9 @@ namespace MCPP {
 												purge.EmplaceBack(conn);
 											
 											}
+											
+											//	Update count in connection
+											conn->received+=count;
 										
 										} catch (const SocketException &) {
 										

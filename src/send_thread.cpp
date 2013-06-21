@@ -242,6 +242,8 @@ namespace MCPP {
 									
 									//	Update sent count in handle
 									handle->sent+=bytes_sent;
+									//	Update sent count in connection
+									conn->sent+=bytes_sent;
 									
 									if (bytes_sent==num_bytes) {
 									

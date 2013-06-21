@@ -223,3 +223,4 @@ build_make_error.txt
 *.exe
 log_*.txt
 server.txt
+old_*/

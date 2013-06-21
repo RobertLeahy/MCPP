@@ -8,7 +8,8 @@ namespace MCPP {
 
 	static const String name("Basic Chat Support");
 	static const Word priority=1;
-	static const String chat_template("<{0}> {1}");
+	static const String chat_template("§l{0}:§r {1}");
+	static const String chat_log_template("[{0}] says: {1}");
 	
 	
 	class BasicChat : public Module {
@@ -32,33 +33,31 @@ namespace MCPP {
 			
 			
 			virtual void Install () override {
-			
-				//	Extract previous chat handler
-				ChatHandler prev(
-					std::move(
-						Chat->Chat
-					)
-				);
 				
 				//	Install our chat handler
-				Chat->Chat=[=] (SmartPointer<Client> client, const String & message) {
+				Chat->Chat=[] (SmartPointer<Client> client, const String & message) {
 				
+					//	Grab the user's username
+					String username(client->GetUsername());
+					
+					//	Log the message
 					RunningServer->WriteLog(
-						message,
+						String::Format(
+							chat_log_template,
+							username,
+							message
+						),
 						Service::LogType::Information
 					);
-				
-					String outbound(
-						String::Format(
-							chat_template,
-							client->GetUsername(),
-							message
-						)
-					);
 					
+					//	Send the message
 					Chat->Broadcast(
 						ChatModule::Sanitize(
-							std::move(outbound),
+							String::Format(
+								chat_template,
+								std::move(username),
+								message
+							),
 							false
 						)
 					);

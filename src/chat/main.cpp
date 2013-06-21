@@ -14,6 +14,9 @@ namespace MCPP {
 	static const String protocol_error("Protocol error");
 	
 	
+	static Nullable<ModuleLoader> mods;
+	
+	
 	String ChatModule::Sanitize (String subject, bool escape) {
 	
 		//	Determine the longest the string
@@ -70,25 +73,37 @@ namespace MCPP {
 	}
 	
 	
-	ChatModule::ChatModule () : mods(
-		Path::Combine(
-			Path::GetPath(
-				File::GetCurrentExecutableFileName()
+	ChatModule::ChatModule () {
+	
+		//	Fire up mod loader
+		mods.Construct(
+			Path::Combine(
+				Path::GetPath(
+					File::GetCurrentExecutableFileName()
+				),
+				mods_dir
 			),
-			mods_dir
-		),
-		[&] (const String & message, Service::LogType type) {
-		
-			String log(log_prepend);
-			log << message;
+			[&] (const String & message, Service::LogType type) {
 			
-			RunningServer->WriteLog(
-				log,
-				type
-			);
-		
-		}
-	) {	}
+				String log(log_prepend);
+				log << message;
+				
+				RunningServer->WriteLog(
+					log,
+					type
+				);
+			
+			}
+		);
+	
+	}
+	
+	
+	ChatModule::~ChatModule () noexcept {
+	
+		mods->Unload();
+	
+	}
 
 
 	const String & ChatModule::Name () const noexcept {
@@ -108,7 +123,7 @@ namespace MCPP {
 	void ChatModule::Install () {
 	
 		//	Get mods
-		mods.Load();
+		mods->Load();
 	
 		//	Install ourself into the server
 		//	first, so that mods we load
@@ -160,7 +175,7 @@ namespace MCPP {
 		};
 	
 		//	Install mods
-		mods.Install();
+		mods->Install();
 	
 	}
 	
@@ -183,6 +198,41 @@ namespace MCPP {
 			}
 		
 		});
+	
+	}
+	
+	
+	bool ChatModule::Send (String username, String message) const {
+	
+		typedef PacketTypeMap<0x03> pt;
+		
+		Packet packet;
+		packet.SetType<pt>();
+		packet.Retrieve<pt,0>()=std::move(message);
+		
+		//	Process the target username
+		username.ToLower();
+		
+		//	Scan connected users
+		bool found=false;
+		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+		
+			if (
+				(client->GetState()==ClientState::Authenticated) &&
+				(client->GetUsername().ToLower()==username)
+			) {
+			
+				//	Send
+				
+				client->Send(packet);
+				
+				found=true;
+			
+			}
+		
+		});
+		
+		return found;
 	
 	}
 	
@@ -214,7 +264,7 @@ namespace MCPP {
 				//	been requested to send to
 				if (
 					(client->GetState()==ClientState::Authenticated) &&
-					(client->GetUsername()==s)
+					(client->GetUsername().ToLower()==s.ToLower())
 				) {
 				
 					//	Send
@@ -235,6 +285,22 @@ namespace MCPP {
 		return dne;
 	
 	}
+	
+	
+	void ChatModule::Send (SmartPointer<Client> client, String message) const {
+	
+		typedef PacketTypeMap<0x03> pt;
+	
+		//	Prepare a packet
+		Packet packet;
+		packet.SetType<pt>();
+		
+		packet.Retrieve<pt,0>()=std::move(message);
+		
+		//	Send it
+		client->Send(packet);
+	
+	}
 
 
 	Nullable<ChatModule> Chat;
@@ -248,9 +314,18 @@ extern "C" {
 
 	Module * Load () {
 	
-		if (Chat.IsNull()) try {
+		try {
 		
-			Chat.Construct();
+			if (Chat.IsNull()) {
+			
+				//	Make sure the mod loader
+				//	is uninitialized
+				mods.Destroy();
+				
+				//	Create chat module
+				Chat.Construct();
+			
+			}
 			
 			return &(*Chat);
 		

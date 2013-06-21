@@ -4,62 +4,116 @@
 namespace MCPP {
 
 
-	ThreadPoolHandle::ThreadPoolHandle () noexcept : done(false), success(false), ptr(nullptr) {	}
+	ThreadPoolHandle::ThreadPoolHandle () noexcept {
+	
+		result=nullptr;
+		queued=0;
+		running=0;
+		status=static_cast<Word>(ThreadPoolStatus::Queued);
+	
+	}
 	
 	
 	ThreadPoolHandle::~ThreadPoolHandle () noexcept {
 	
-		if (
-			static_cast<bool>(cleanup) &&
-			(ptr!=nullptr)
-		) {
-		
-			try {
-		
-				cleanup(ptr);
-				
-			} catch (...) {	}
-			
-		}
+		if (cleanup) cleanup(result);
 	
 	}
 	
 	
-	bool ThreadPoolHandle::Completed () noexcept {
+	ThreadPoolStatus ThreadPoolHandle::Status () const noexcept {
 	
-		lock.Acquire();
-		
-		bool returnthis=done;
-		
-		lock.Release();
-		
-		return returnthis;
+		return static_cast<ThreadPoolStatus>(
+			static_cast<Word>(status)
+		);
 	
 	}
 	
 	
-	bool ThreadPoolHandle::Success () noexcept {
+	bool ThreadPoolHandle::Completed () const noexcept {
 	
-		lock.Acquire();
+		auto status=Status();
 		
-		bool returnthis=success;
-		
-		lock.Release();
-		
-		return returnthis;
+		return (status==ThreadPoolStatus::Success) || (status==ThreadPoolStatus::Error);
 	
 	}
 	
 	
-	void ThreadPoolHandle::Wait () noexcept {
+	bool ThreadPoolHandle::Success () const noexcept {
+	
+		return Status()==ThreadPoolStatus::Success;
+	
+	}
+	
+	
+	UInt64 ThreadPoolHandle::Queued () const noexcept {
+	
+		UInt64 returnthis;
 	
 		lock.Acquire();
 		
 		try {
 		
-			while (!done) wait.Sleep(lock);
+			if (Status()==ThreadPoolStatus::Queued) returnthis=timer.ElapsedNanoseconds();
+			else returnthis=queued;
 		
-		} catch (...) {	}
+		} catch (...) {
+		
+			lock.Release();
+			
+			throw;
+		
+		}
+		
+		lock.Release();
+	
+		return returnthis;
+	
+	}
+	
+	
+	UInt64 ThreadPoolHandle::Running () const noexcept {
+	
+		UInt64 returnthis;
+		
+		lock.Acquire();
+		
+		try {
+		
+			if (Status()==ThreadPoolStatus::Running) returnthis=timer.ElapsedNanoseconds();
+			else returnthis=running;
+		
+		} catch (...) {
+		
+			lock.Release();
+			
+			throw;
+		
+		}
+		
+		lock.Release();
+		
+		return returnthis;
+	
+	}
+	
+	
+	void ThreadPoolHandle::Wait () const noexcept {
+	
+		lock.Acquire();
+		
+		for (;;) {
+		
+			auto status=Status();
+			
+			if (
+				(status==ThreadPoolStatus::Success) ||
+				(status==ThreadPoolStatus::Error)
+			) break;
+			
+			wait.Sleep(lock);
+		
+		}
 		
 		lock.Release();
 	

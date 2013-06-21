@@ -68,8 +68,13 @@ namespace MCPP {
 			packet_in_progress(false),
 			packet_encrypted(false),
 			state(ClientState::Connected),
-			inactive(Timer::CreateAndStart())
-	{	}
+			inactive(Timer::CreateAndStart()),
+			connected(Timer::CreateAndStart())
+	{
+	
+		Ping=0;
+	
+	}
 	
 	
 	void Client::enable_encryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
@@ -335,14 +340,14 @@ namespace MCPP {
 	
 	void Client::SetState (ClientState state) noexcept {
 	
-		comm_lock.Write([&] () {	this->state=state;	});
+		write([&] () {	this->state=state;	});
 	
 	}
 	
 	
 	ClientState Client::GetState () const noexcept {
 	
-		return comm_lock.Read([&] () {	return state;	});
+		return read([&] () {	return state;	});
 	
 	}
 	
@@ -391,7 +396,7 @@ namespace MCPP {
 	
 	Word Client::Inactive () const {
 	
-		return inactive_lock.Execute([&] () {	return inactive.ElapsedMilliseconds();	});
+		return inactive_lock.Execute([&] () {	return static_cast<Word>(inactive.ElapsedMilliseconds());	});
 	
 	}
 	
@@ -399,6 +404,27 @@ namespace MCPP {
 	Word Client::Count () const noexcept {
 	
 		return encryption_buffer.Count();
+	
+	}
+	
+	
+	Word Client::Connected () const {
+	
+		return connected_lock.Execute([&] () {	return static_cast<Word>(connected.ElapsedMilliseconds());	});
+	
+	}
+	
+	
+	UInt64 Client::Sent () const noexcept {
+	
+		return conn->Sent();
+	
+	}
+	
+	
+	UInt64 Client::Received () const noexcept {
+	
+		return conn->Received();
 	
 	}
 

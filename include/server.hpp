@@ -250,7 +250,7 @@ namespace MCPP {
 			 *	and which can be used to send data over
 			 *	it.
 			 */
-			Event<void (SmartPointer<Connection>)> OnConnect;
+			Event<void (SmartPointer<Client>)> OnConnect;
 			/**
 			 *	Invoked whenever a connection is ended,
 			 *	passed the Connection object which
@@ -258,7 +258,7 @@ namespace MCPP {
 			 *	to be terminated as well as the reason
 			 *	the connection was ended.
 			 */
-			Event<void (SmartPointer<Connection>, const String &)> OnDisconnect;
+			Event<void (SmartPointer<Client>, const String &)> OnDisconnect;
 			/**
 			 *	Invoked whenever the server's log is
 			 *	written.

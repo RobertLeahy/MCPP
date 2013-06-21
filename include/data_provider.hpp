@@ -202,14 +202,41 @@ namespace MCPP {
 			 *	key/value pair store.
 			 *
 			 *	\param [in] key
-			 *		The key whose values to retrieve.
+			 *		The key whose values are to be
+			 *		retrieved.
 			 *
 			 *	\return
-			 *		A vector of nullable strings containing
+			 *		A vecter of nullable strings containing
 			 *		the values associated with \em key in
 			 *		an unspecified order.
 			 */
-			//virtual Vector<Nullable<String>> GetValues (const String & key) = 0;
+			virtual Vector<Nullable<String>> GetValues (const String & key) = 0;
+			/**
+			 *	Deletes all key/value pairs with the given
+			 *	key and the given value.
+			 *
+			 *	\param [in] key
+			 *		The key that a pair must have to qualify
+			 *		for deletion.
+			 *	\param [in] value
+			 *		The value that a pair must have to qualify
+			 *		for deletion.
+			 */
+			virtual void DeleteValues (const String & key, const String & value) = 0;
+			/**
+			 *	Creates a new key/value pair in the backing store
+			 *	with the given key and value.
+			 *
+			 *	\param [in] key
+			 *		The key associated with the key/value pair
+			 *		to be created.
+			 *	\param [in] value
+			 *		The value associated with the key/value pair
+			 *		to be created.
+			 */
+			virtual void InsertValue (const String & key, const String & value) = 0;
+			
+			
 			/**
 			 *	Deletes all key/value pairs with the given
 			 *	key and the given value.

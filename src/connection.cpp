@@ -22,7 +22,12 @@ namespace MCPP {
 			send_msg_signal(nullptr),
 			saturated(false),
 			disconnect_flag(false)
-	{	}
+	{
+	
+		sent=0;
+		received=0;
+	
+	}
 	
 	
 	Connection::~Connection () noexcept {
@@ -204,6 +209,20 @@ namespace MCPP {
 		
 		}
 		connected_lock.Release();
+	
+	}
+	
+	
+	UInt64 Connection::Sent () const noexcept {
+	
+		return sent;
+	
+	}
+	
+	
+	UInt64 Connection::Received () const noexcept {
+	
+		return received;
 	
 	}
 	
