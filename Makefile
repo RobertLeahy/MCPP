@@ -212,15 +212,17 @@ bin/mods/ping.dll \
 bin/mods/auth.dll \
 bin/mods/keep_alive.dll \
 bin/mods/chat.dll \
-bin/chat_mods/basic_chat.dll \
 bin/mods/disconnect.dll \
-bin/chat_mods/whisper.dll \
-bin/chat_mods/chat_login.dll \
-bin/chat_mods/info.dll \
 bin/mods/player_list.dll \
 bin/mods/op.dll \
 bin/mods/ban.dll \
-bin/chat_mods/ban_info.dll
+bin/chat_mods/basic_chat.dll \
+bin/chat_mods/whisper.dll \
+bin/chat_mods/chat_login.dll \
+bin/chat_mods/ban_info.dll \
+bin/chat_mods/info.dll \
+bin/chat_mods/chat_op.dll \
+bin/chat_mods/kick.dll
 
 
 #	PING SUPPORT
@@ -249,8 +251,8 @@ bin/mods/disconnect.dll: src/disconnect/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 	
 #	CHAT SUPPORT
 
-bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
-	$(GPP) -shared -o $@ src/chat/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll
+bin/mods/chat.dll: src/chat/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/chat/chat_misc.cpp src/chat/chat_parser.cpp
+	$(GPP) -shared -o $@ src/chat/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll src/chat/chat_misc.cpp src/chat/chat_parser.cpp
 	
 	
 #	PLAYER LIST SUPPORT
@@ -298,6 +300,16 @@ bin/chat_mods/info.dll: bin/mods/chat.dll src/info/main.cpp obj/new_delete.o bin
 
 bin/chat_mods/ban_info.dll: bin/mods/chat.dll bin/mods/op.dll bin/mods/ban.dll src/ban_info/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
 	$(GPP) -shared -o $@ bin/mods/chat.dll bin/mods/op.dll bin/mods/ban.dll src/ban_info/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
+	
+#	OP/DEOP THROUGH CHAT
+
+bin/chat_mods/chat_op.dll: bin/mods/chat.dll bin/mods/op.dll src/chat_op/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
+	$(GPP) -shared -o $@ bin/mods/chat.dll bin/mods/op.dll src/chat_op/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
+	
+#	KICKING THROUGH CHAT
+
+bin/chat_mods/kick.dll: bin/mods/chat.dll bin/mods/op.dll src/kick/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
+	$(GPP) -shared -o $@ bin/mods/chat.dll bin/mods/op.dll src/kick/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
 	
 	
 #	SERVER FRONT-END

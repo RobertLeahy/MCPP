@@ -216,6 +216,24 @@ namespace MCPP {
 			 *		The type of message to log.
 			 */
 			void WriteLog (const String & message, Service::LogType type) noexcept;
+			/**
+			 *	Writes to the server's chat log.
+			 *
+			 *	\param [in] from
+			 *		The sender of the message to
+			 *		log.
+			 *	\param [in] to
+			 *		A list of recipients to whom
+			 *		the message was sent.  If
+			 *		empty a broadcast is assumed.
+			 *	\param [in] message
+			 *		The message-in-question.
+			 *	\param [in] notes
+			 *		Any notes associated with the
+			 *		message, null if there are no
+			 *		such notes.
+			 */
+			void WriteChatLog (const String & from, const Vector<String> & to, const String & message, const Nullable<String> & notes) noexcept;
 			
 			
 			/**
@@ -264,6 +282,11 @@ namespace MCPP {
 			 *	written.
 			 */
 			Event<void (const String &, Service::LogType)> OnLog;
+			/**
+			 *	Invoked whenever the server's chat log
+			 *	is written.
+			 */
+			Event<void (const String &, const Vector<String> &, const String &, const Nullable<String> &)> OnChatLog;
 			/**
 			 *	Invoked before and after the server installs
 			 *	modules.

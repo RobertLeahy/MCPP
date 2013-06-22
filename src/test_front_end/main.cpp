@@ -118,7 +118,9 @@ void thread_func () {
 
 int Main (const Vector<const String> & args) {
 
+	#ifdef DEBUG
 	Memory::NetAlloc=0;
+	#endif
 
 	#ifdef DEBUG
 	if (test()) return EXIT_SUCCESS;

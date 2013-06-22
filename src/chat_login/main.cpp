@@ -9,23 +9,10 @@ namespace MCPP {
 
 	static const String name("Chat Login/Logout Broadcast Support");
 	static const Word priority=1;
-	static const String login_template("§a§l{0}§r§a has come online");
-	static const String logout_template(
-		"§c§l"	//	Bold and red
-		"{0}"	//	Player's username
-		"§r§c"	//	Not-bold and red
-		" has gone offline"
-	);
-	static const String logout_reason_template(
-		"§c§l"	//	Bold and red
-		"{{0}}"	//	Player's username (but not during first substitution)
-		"§r§c"	//	Not-bold and red
-		" has gone offline ("
-		"§c§l"	//	Bold and red
-		"{0}"	//	reason
-		"§r§c"	//	Not-bold and red
-		")"
-	);
+	static const String online(" has come online");
+	static const String offline(" has gone offline");
+	static const String start_reason(" (");
+	static const String end_reason(")");
 	
 	
 	class LoginLogout : public Module {
@@ -61,16 +48,14 @@ namespace MCPP {
 				//	event within the server
 				RunningServer->OnLogin.Add([] (SmartPointer<Client> client) {
 				
-					//	Broadcast
-					Chat->Broadcast(
-						ChatModule::Sanitize(
-							String::Format(
-								login_template,
-								client->GetUsername()
-							),
-							false
-						)
-					);
+					ChatMessage message;
+					message.Message.EmplaceBack(ChatStyle::Bold);
+					message.Message.EmplaceBack(ChatColour::BrightGreen);
+					message.Message.EmplaceBack(client->GetUsername());
+					message.Message.EmplaceBack(ChatFormat::PopStyle);
+					message.Message.EmplaceBack(online);
+					
+					Chat->Send(message);
 				
 				});
 				
@@ -82,36 +67,27 @@ namespace MCPP {
 					//	authenticated
 					if (client->GetState()==ClientState::Authenticated) {
 					
-						//	Generate message
-						String broadcast;
-						if (reason.Size()==0) {
+						ChatMessage message;
+						message.Message.EmplaceBack(ChatStyle::Bold);
+						message.Message.EmplaceBack(ChatColour::Red);
+						message.Message.EmplaceBack(client->GetUsername());
+						message.Message.EmplaceBack(ChatFormat::PopStyle);
+						message.Message.EmplaceBack(offline);
 						
-							//	No reason
-							broadcast=String::Format(
-								logout_template,
-								client->GetUsername()
-							);
+						//	Add reason if there was
+						//	a reason associated with
+						//	the disconnect
+						if (reason.Size()!=0) {
 						
-						} else {
-						
-							//	Reason
-							broadcast=String::Format(
-								String::Format(
-									logout_reason_template,
-									reason
-								),
-								client->GetUsername()
-							);
+							message.Message.EmplaceBack(start_reason);
+							message.Message.EmplaceBack(ChatStyle::Bold);
+							message.Message.EmplaceBack(reason);
+							message.Message.EmplaceBack(ChatFormat::PopStyle);
+							message.Message.EmplaceBack(end_reason);
 						
 						}
 						
-						//	Broadcast
-						Chat->Broadcast(
-							ChatModule::Sanitize(
-								std::move(broadcast),
-								false
-							)
-						);
+						Chat->Send(message);
 					
 					}
 				
@@ -126,7 +102,7 @@ namespace MCPP {
 }
 
 
-static Module * mod_ptr=nullptr;
+static Nullable<LoginLogout> login_logout;
 
 
 extern "C" {
@@ -134,26 +110,22 @@ extern "C" {
 
 	Module * Load () {
 	
-		if (mod_ptr==nullptr) try {
+		try {
 		
-			mod_ptr=new LoginLogout();
+			if (login_logout.IsNull()) login_logout.Construct();
+			
+			return &(*login_logout);
 		
 		} catch (...) {	}
 		
-		return mod_ptr;
+		return nullptr;
 	
 	}
 	
 	
 	void Unload () {
 	
-		if (mod_ptr!=nullptr) {
-		
-			delete mod_ptr;
-			
-			mod_ptr=nullptr;
-		
-		}
+		login_logout.Destroy();
 	
 	}
 

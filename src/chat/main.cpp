@@ -2,6 +2,7 @@
 #include <chat/chat.hpp>
 #include <utility>
 #include <limits>
+#include <algorithm>
 
 
 namespace MCPP {
@@ -15,62 +16,6 @@ namespace MCPP {
 	
 	
 	static Nullable<ModuleLoader> mods;
-	
-	
-	String ChatModule::Sanitize (String subject, bool escape) {
-	
-		//	Determine the longest the string
-		//	can be in a safe manner
-		Word max_len;
-		try {
-
-			max_len=Word(
-				SafeInt<Int16>(
-					std::numeric_limits<Int16>::max()
-				)
-			);
-		
-		} catch (...) {
-		
-			max_len=std::numeric_limits<Word>::max();
-		
-		}
-		
-		//	Normalize to reduce number
-		//	of code points (allows us
-		//	to send more)
-		subject.Normalize(NormalizationForm::NFC);
-	
-		Vector<CodePoint> sanitized;
-		Word i=0;
-		for (CodePoint cp : subject.CodePoints()) {
-		
-			//	Do not copy further
-			//	code points if we've
-			//	reached the maximum length
-			if (i==max_len) break;
-		
-			if (
-				//	Check for section sign
-				(
-					escape &&
-					(cp==0xA7)
-				) ||
-				//	Check for code points outside
-				//	the BMP
-				(cp>0xFFFF)
-			) continue;
-			
-			sanitized.Add(cp);
-			
-			++i;
-		
-		}
-		
-		//	Return newly-formed string
-		return String(std::move(sanitized));
-	
-	}
 	
 	
 	ChatModule::ChatModule () {
@@ -180,125 +125,104 @@ namespace MCPP {
 	}
 	
 	
-	void ChatModule::Broadcast (String message) const {
-
-		typedef PacketTypeMap<0x03> pt;
+	Vector<String> ChatModule::Send (const ChatMessage & message) {
 	
+		//	Build the packet
 		Packet packet;
 		packet.SetType<pt>();
+		packet.Retrieve<pt,0>()=Format(message);
 		
-		packet.Retrieve<pt,0>()=std::move(message);
+		//	Return to sender if applicable
+		if (message.Echo && !message.From.IsNull()) {
 		
-		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
-		
-			if (client->GetState()==ClientState::Authenticated) {
+			const_cast<ChatMessage &>(message).From->Send(packet);
 			
-				client->Send(packet);
-			
-			}
-		
-		});
-	
-	}
-	
-	
-	bool ChatModule::Send (String username, String message) const {
-	
-		typedef PacketTypeMap<0x03> pt;
-		
-		Packet packet;
-		packet.SetType<pt>();
-		packet.Retrieve<pt,0>()=std::move(message);
-		
-		//	Process the target username
-		username.ToLower();
-		
-		//	Scan connected users
-		bool found=false;
-		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
-		
-			if (
-				(client->GetState()==ClientState::Authenticated) &&
-				(client->GetUsername().ToLower()==username)
-			) {
-			
-				//	Send
-				
-				client->Send(packet);
-				
-				found=true;
-			
-			}
-		
-		});
-		
-		return found;
-	
-	}
-	
-	
-	Vector<String> ChatModule::Send (const Vector<String> & usernames, String message) const {
-	
-		//	A list of users that couldn't
-		//	be found
-		Vector<String> dne;
-		
-		//	Packet to send
-		typedef PacketTypeMap<0x03> pt;
-		
-		Packet packet;
-		packet.SetType<pt>();
-		
-		packet.Retrieve<pt,0>()=std::move(message);
-		
-		//	Scan the list of recipients
-		for (const auto & s : usernames) {
-		
-			//	Did we find this recipient?
-			bool found=false;
-		
-			//	Scan connected users
-			RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
-			
-				//	This is a user we can and have
-				//	been requested to send to
-				if (
-					(client->GetState()==ClientState::Authenticated) &&
-					(client->GetUsername().ToLower()==s.ToLower())
-				) {
-				
-					//	Send
-					
-					client->Send(packet);
-					
-					found=true;
-				
-				}
-			
-			});
-		
-			//	Add to DNE list if applicable
-			if (!found) dne.Add(s);
+			return Vector<String>();
 		
 		}
 		
+		//	Normalize the list of
+		//	recipients and create
+		//	a boolean flag for each
+		//	one so that we can track
+		//	whether or not we've delivered
+		//	to them
+		Vector<
+			Tuple<
+				String,
+				bool
+			>
+		> recipients;
+		for (const auto & s : message.To) {
+		
+			recipients.EmplaceBack(
+				s.ToLower(),
+				false
+			);
+		
+		}
+		
+		//	Scan the list of connected
+		//	users and send the message
+		//	as appropriate
+		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+		
+			//	Only interested in authenticated
+			//	clients
+			if (client->GetState()==ClientState::Authenticated) {
+			
+				//	If this is a broadcast, send
+				//	unconditionally
+				if (recipients.Count()==0) {
+				
+					client->Send(packet);
+				
+				//	See if this is an intended
+				//	recipient
+				} else {
+			
+					//	Normalize username to lowercase
+					String username(client->GetUsername().ToLower());
+				
+					//	Scan the list of recipients,
+					//	is this client in there?
+					for (auto & t : recipients) {
+					
+						if (username==t.Item<0>()) {
+						
+							//	Send
+							client->Send(packet);
+						
+							//	Flag as found
+							t.Item<1>()=true;
+						
+							//	Found -- we're done
+							break;
+						
+						}
+					
+					}
+					
+				}
+			
+			}
+		
+		});
+		
+		//	Build a list of clients to whom
+		//	delivery failed
+		Vector<String> dne;
+		for (auto & t : recipients) {
+		
+			if (!t.Item<1>()) dne.Add(std::move(t.Item<0>()));
+		
+		}
+		
+		//	Log
+		Log(message,dne);
+		
+		//	Return
 		return dne;
-	
-	}
-	
-	
-	void ChatModule::Send (SmartPointer<Client> client, String message) const {
-	
-		typedef PacketTypeMap<0x03> pt;
-	
-		//	Prepare a packet
-		Packet packet;
-		packet.SetType<pt>();
-		
-		packet.Retrieve<pt,0>()=std::move(message);
-		
-		//	Send it
-		client->Send(packet);
 	
 	}
 

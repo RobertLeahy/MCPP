@@ -526,7 +526,7 @@ namespace MCPP {
 				std::function<void ()>
 			>::type {
 			
-				//	GCC segfaults if a typedef this, and GCC
+				//	GCC segfaults if I typedef this, and GCC
 				//	doesn't allow parameter packs to be captured
 				//	in a lambda, so here's a workaround...
 				return wrap_impl<

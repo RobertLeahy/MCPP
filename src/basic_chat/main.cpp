@@ -8,8 +8,6 @@ namespace MCPP {
 
 	static const String name("Basic Chat Support");
 	static const Word priority=1;
-	static const String chat_template("§l{0}:§r {1}");
-	static const String chat_log_template("[{0}] says: {1}");
 	
 	
 	class BasicChat : public Module {
@@ -37,28 +35,11 @@ namespace MCPP {
 				//	Install our chat handler
 				Chat->Chat=[] (SmartPointer<Client> client, const String & message) {
 				
-					//	Grab the user's username
-					String username(client->GetUsername());
-					
-					//	Log the message
-					RunningServer->WriteLog(
-						String::Format(
-							chat_log_template,
-							username,
+					//	Send
+					Chat->Send(
+						ChatMessage(
+							std::move(client),
 							message
-						),
-						Service::LogType::Information
-					);
-					
-					//	Send the message
-					Chat->Broadcast(
-						ChatModule::Sanitize(
-							String::Format(
-								chat_template,
-								std::move(username),
-								message
-							),
-							false
 						)
 					);
 				
@@ -73,7 +54,7 @@ namespace MCPP {
 }
 
 
-static Module * mod_ptr=nullptr;
+static Nullable<BasicChat> basic_chat;
 
 
 extern "C" {
@@ -81,26 +62,22 @@ extern "C" {
 
 	Module * Load () {
 	
-		if (mod_ptr==nullptr) try {
+		try {
 		
-			mod_ptr=new BasicChat();
+			if (basic_chat.IsNull()) basic_chat.Construct();
+			
+			return &(*basic_chat);
 		
 		} catch (...) {	}
 		
-		return mod_ptr;
+		return nullptr;
 	
 	}
 	
 	
 	void Unload () {
 	
-		if (mod_ptr!=nullptr) {
-		
-			delete mod_ptr;
-			
-			mod_ptr=nullptr;
-		
-		}
+		basic_chat.Destroy();
 	
 	}
 

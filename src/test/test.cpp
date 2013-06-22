@@ -4,6 +4,8 @@
 
 int Main (const Vector<const String> & args) {
 
+	#ifdef DEBUG
+
 	Memory::NetAlloc=0;
 
 	for (;;) {
@@ -15,6 +17,8 @@ int Main (const Vector<const String> & args) {
 		StdOut << net_alloc << Newline;
 	
 	}
+	
+	#endif
 	
 	return EXIT_SUCCESS;
 

@@ -18,10 +18,13 @@ namespace MCPP {
 	
 	
 		private:
+		
+		
+			typedef Tuple<String,Vector<Tuple<String,String>>> InfoType;
 			
 			
 			//	Connection
-			MYSQL conn;
+			mutable MYSQL conn;
 			//	Connection info for
 			//	reconnections
 			//
@@ -40,6 +43,7 @@ namespace MCPP {
 			MYSQL_STMT * kvp_stmt;
 			MYSQL_STMT * kvp_delete_pair_stmt;
 			MYSQL_STMT * kvp_insert_stmt;
+			MYSQL_STMT * chat_log_stmt;
 			
 			
 			//	Thread pool for worker
@@ -57,7 +61,17 @@ namespace MCPP {
 			//	password, database, host, and
 			//	port will be available/populated
 			//	when it starts its worker.
-			ThreadPool pool;
+			mutable ThreadPool pool;
+			
+			
+			//	Statistics
+			//
+			//	Number of requests handled
+			UInt64 requests;
+			//	Number of times the provider has
+			//	had to reconnect to the SQL
+			//	server
+			UInt64 reconnects;
 			
 			
 			//	Private methods
@@ -85,6 +99,8 @@ namespace MCPP {
 			virtual Vector<Nullable<String>> GetValues (const String & key) override;
 			virtual void DeleteValues (const String & key, const String & value) override;
 			virtual void InsertValue (const String & key, const String & value) override;
+			void WriteChatLog (const String & from, const Vector<String> & to, const String & message, const Nullable<String> & notes) override;
+			virtual InfoType GetInfo () const override;
 	
 	
 	};

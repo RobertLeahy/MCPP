@@ -13,18 +13,13 @@ static const Regex info_regex(
 	RegexOptions().SetIgnoreCase()
 );
 static const String bans_arg("bans");
-static const String info_banner("§e§l====INFORMATION====§r");
-static const String not_an_op_error(
-	"§c§l"	//	Bold and red
-	"SERVER:"	//	Server error message
-	"§r§c"	//	Not-bold and red
-	" You must be an operator to issue that command"
-);
-static const String bans_banner("§lBANS:§r");
-static const String users_banner("§lBanned Users:§r");
-static const String ips_banner("§lBanned IPs:§r");
-static const String ranges_banner("§lBanned IP Ranges:§r");
+static const String info_banner("====INFORMATION====");
+static const String bans_banner("BANS:");
+static const String users_banner("Banned Users:");
+static const String ips_banner("Banned IPs:");
+static const String ranges_banner("Banned IP Ranges:");
 static const String mask_template("{0} mask {1}");
+static const String not_an_op_error(" You must be an operator to issue that command");
 
 
 class BanInfo : public Module {
@@ -67,10 +62,14 @@ class BanInfo : public Module {
 					//	request info on the banlist
 					if (!Ops->IsOp(client->GetUsername())) {
 					
-						Chat->Send(
-							client,
-							not_an_op_error
-						);
+						ChatMessage message;
+						message.To.Add(client->GetUsername());
+						message	<<	ChatColour::Red
+								<<	ChatFormat::Label
+								<<	ChatFormat::LabelSeparator
+								<<	not_an_op_error;
+					
+						Chat->Send(message);
 						
 						return;
 					
@@ -136,32 +135,39 @@ class BanInfo : public Module {
 						});
 						
 						//	Create output
-						String output(info_banner);
-						output << Newline << bans_banner;
+						ChatMessage message;
+						message.To.Add(client->GetUsername());
+						message	<<	ChatStyle::Bold
+								<<	ChatColour::Yellow
+								<<	info_banner
+								<<	ChatFormat::PopColour
+								<<	Newline
+								<<	bans_banner
+								<<	ChatFormat::PopStyle;
 						
 						if (banlist.Users.Count()!=0) {
 						
-							output << Newline << users_banner;
+							message << ChatStyle::Bold << Newline << users_banner << ChatFormat::PopStyle;
 							
-							for (auto & s : banlist.Users) output << Newline << s;
+							for (auto & s : banlist.Users) message << Newline << s;
 						
 						}
 						
 						if (banlist.IPs.Count()!=0) {
 						
-							output << Newline << ips_banner;
+							message << ChatStyle::Bold << Newline << ips_banner << ChatFormat::PopStyle;
 							
-							for (auto & ip : banlist.IPs) output << Newline << String(ip);
+							for (auto & ip : banlist.IPs) message << Newline << String(ip);
 						
 						}
 						
 						if (banlist.Ranges.Count()!=0) {
 						
-							output << Newline << ranges_banner;
+							message << ChatStyle::Bold << Newline << ranges_banner << ChatFormat::PopStyle;
 							
 							for (auto & t : banlist.Ranges) {
 							
-								output << Newline << String::Format(
+								message << Newline << String::Format(
 									mask_template,
 									t.Item<0>(),
 									t.Item<0>().IsV6() ? IPAddress(t.Item<1>().IPv6) : IPAddress(t.Item<1>().IPv4)
@@ -172,13 +178,7 @@ class BanInfo : public Module {
 						}
 						
 						//	Send
-						Chat->Send(
-							client,
-							ChatModule::Sanitize(
-								output,
-								false
-							)
-						);
+						Chat->Send(message);
 						
 						//	Stop processing this chat message
 						return;

@@ -36,6 +36,26 @@ namespace MCPP {
 	static const char * kvp_query="SELECT `value` FROM `keyvaluepairs` WHERE `key`=?";
 	static const char * kvp_delete_pair_query="DELETE FROM `keyvaluepairs` WHERE `key`=? AND `value`=?";
 	static const char * kvp_insert_query="INSERT INTO `keyvaluepairs` (`key`,`value`) VALUES (?,?)";
+	static const char * chat_log_query="INSERT INTO `chat_log` (`from`,`to`,`message`,`notes`) VALUES (?,?,?,?)";
+	
+	
+	//	String constants
+	static const String requests_label("Requests");
+	static const String elapsed_label("Running");
+	static const String reconnects_label("Reconnects");
+	static const String avg_running_label("Average Time Per Query");
+	static const String ns_template("{0}ns");
+	static const String queued_label("Queued Requests");
+	static const String server_v("Server Version");
+	static const String server_info_template("MySQL Server Version {0}");
+	static const String client_v("Client Version");
+	static const String client_info_template("libmysql Version {0}, Threadsafe: {1}");
+	static const String yes("Yes");
+	static const String no("No");
+	static const String thread_label("Server Thread ID");
+	static const String name("MySQL Data Provider");
+	static const String host_label("Host");
+	static const String proto_label("Protocol Version");
 	
 	
 	//	Encodes a Unicode string such that
@@ -137,6 +157,7 @@ namespace MCPP {
 		destroy_stmt(setting_stmt);
 		destroy_stmt(kvp_stmt);
 		destroy_stmt(kvp_delete_pair_stmt);
+		destroy_stmt(chat_log_stmt);
 	
 	}
 	
@@ -195,6 +216,8 @@ namespace MCPP {
 		//	connection
 		mysql_close(&conn);
 		
+		++reconnects;
+		
 		//	Reconnect
 		connect();
 	
@@ -234,6 +257,7 @@ namespace MCPP {
 			kvp_stmt(nullptr),
 			kvp_delete_pair_stmt(nullptr),
 			kvp_insert_stmt(nullptr),
+			chat_log_stmt(nullptr),
 			pool(
 				//	Single worker thread
 				1,
@@ -271,7 +295,9 @@ namespace MCPP {
 				//	Clean up all resources
 				//	when the thread ends
 				[this] () {	destroy();	}
-			)
+			),
+			requests(0),
+			reconnects(0)
 	{	}
 	
 	
@@ -315,6 +341,8 @@ namespace MCPP {
 				(mysql_stmt_bind_param(log_stmt,param)!=0) ||
 				(mysql_stmt_execute(log_stmt)!=0)
 			) throw std::runtime_error(mysql_stmt_error(log_stmt));
+			
+			++requests;
 			
 		});
 	
@@ -436,6 +464,8 @@ namespace MCPP {
 				if (success==1) throw std::runtime_error(mysql_stmt_error(setting_stmt));
 			
 			}
+			
+			++requests;
 			
 			//	Return
 			return value;
@@ -583,6 +613,8 @@ namespace MCPP {
 				
 			}
 			
+			++requests;
+			
 			//	All values extracted, return
 			return buffer;
 		
@@ -637,6 +669,8 @@ namespace MCPP {
 				(mysql_stmt_bind_param(kvp_delete_pair_stmt,param)!=0) ||
 				(mysql_stmt_execute(kvp_delete_pair_stmt)!=0)
 			) throw std::runtime_error(mysql_stmt_error(kvp_delete_pair_stmt));
+			
+			++requests;
 		
 		});
 		
@@ -683,6 +717,8 @@ namespace MCPP {
 				(mysql_stmt_bind_param(kvp_insert_stmt,param)!=0) ||
 				(mysql_stmt_execute(kvp_insert_stmt)!=0)
 			) throw std::runtime_error(mysql_stmt_error(kvp_insert_stmt));
+			
+			++requests;
 		
 		});
 			
@@ -691,6 +727,185 @@ namespace MCPP {
 		
 		//	Throw on error
 		if (!handle->Success()) throw std::runtime_error(mysql_failed);
+	
+	}
+	
+	
+	void MySQLDataProvider::WriteChatLog (const String & from, const Vector<String> & to, const String & message, const Nullable<String> & notes) {
+	
+		//	We tell the worker thread to
+		//	log and then we proceed
+		pool.Enqueue([&] () {
+		
+			//	Setup parameters
+			MYSQL_BIND param [4];
+			memset(param,0,sizeof(MYSQL_BIND)*4);
+			
+			//	Parameter #1 - Sender
+			param[0].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> from_encoded(db_encode(from));
+			param[0].buffer=to_char(from_encoded);
+			param[0].buffer_length=from_encoded.Length();
+			
+			//	Parameter #2 - Recipients
+			param[1].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> to_encoded;
+			my_bool to_is_null=to.Count()==0;
+			if (to_is_null) {
+			
+				param[1].is_null=&to_is_null;
+			
+			} else {
+			
+				String to_str;
+				for (Word i=0;i<to.Count();++i) {
+				
+					if (i!=0) to_str << ", ";
+					
+					to_str << to[i];
+				
+				}
+				
+				to_encoded=db_encode(to_str);
+				
+				param[1].buffer=to_char(to_encoded);
+				param[1].buffer_length=to_encoded.Length();
+			
+			}
+			
+			//	Parameter #3 - Message
+			param[2].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> message_encoded(db_encode(message));
+			param[2].buffer=to_char(message_encoded);
+			param[2].buffer_length=message_encoded.Length();
+			
+			//	Parameter #4 - Notes (can be null)
+			param[3].buffer_type=MYSQL_TYPE_STRING;
+			Vector<Byte> notes_encoded;
+			my_bool notes_is_null=notes.IsNull();
+			if (notes_is_null) {
+			
+				param[3].is_null=&notes_is_null;
+			
+			} else {
+			
+				notes_encoded=db_encode(*notes);
+				param[3].buffer=to_char(notes_encoded);
+				param[3].buffer_length=notes_encoded.Length();
+			
+			}
+			
+			//	Is the server still there?
+			keep_alive();
+			
+			//	Regenerate prepared statement if necessary
+			prepare_stmt(chat_log_stmt,chat_log_query);
+			
+			//	Bind and execute
+			if (
+				(mysql_stmt_bind_param(chat_log_stmt,param)!=0) ||
+				(mysql_stmt_execute(chat_log_stmt)!=0)
+			) throw std::runtime_error(mysql_stmt_error(chat_log_stmt));
+			
+			++requests;
+		
+		});
+	
+	}
+	
+	
+	auto MySQLDataProvider::GetInfo () const -> InfoType {
+	
+		InfoType info;
+		
+		//	Dispatch worker
+		auto handle=pool.Enqueue([&] () {
+		
+			auto & kvps=info.Item<1>();
+			
+			//	Number of requests executed
+			kvps.EmplaceBack(
+				requests_label,
+				requests
+			);
+			//	Number of reconnects
+			kvps.EmplaceBack(
+				reconnects_label,
+				reconnects
+			);
+			
+			//	Get information from the pool
+			auto pool_info=pool.GetInfo();
+			
+			//	Number of nanoseconds spent
+			//	executing queries
+			kvps.EmplaceBack(
+				elapsed_label,
+				String::Format(
+					ns_template,
+					pool_info.WorkerInfo[0].Running
+				)
+			);
+			//	Average time per query
+			kvps.EmplaceBack(
+				avg_running_label,
+				String::Format(
+					ns_template,
+					pool_info.WorkerInfo[0].Running/requests
+				)
+			);
+			//	Queued tasks
+			kvps.EmplaceBack(
+				queued_label,
+				pool_info.Queued
+			);
+			
+			//	About client
+			kvps.EmplaceBack(
+				client_v,
+				String::Format(
+					client_info_template,
+					mysql_get_client_info(),
+					(mysql_thread_safe()==1) ? yes : no
+				)
+			);
+			
+			//	About server
+			kvps.EmplaceBack(
+				server_v,
+				String::Format(
+					server_info_template,
+					mysql_get_server_info(&conn)
+				)
+			);
+			
+			//	Host
+			kvps.EmplaceBack(
+				host_label,
+				mysql_get_host_info(&conn)
+			);
+			
+			//	Protocol
+			kvps.EmplaceBack(
+				proto_label,
+				mysql_get_proto_info(&conn)
+			);
+			
+			//	Thread ID
+			kvps.EmplaceBack(
+				thread_label,
+				mysql_thread_id(&conn)
+			);
+		
+		});
+		
+		handle->Wait();
+		
+		if (!handle->Success()) throw std::runtime_error(mysql_failed);
+		
+		info.Item<0>()=name;
+		
+		return info;
 	
 	}
 

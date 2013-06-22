@@ -148,6 +148,23 @@ namespace MCPP {
 			 *	data provider compilation.
 			 */
 			virtual ~DataProvider () noexcept;
+			
+			
+			/**
+			 *	When implemented in a base class, retrieves
+			 *	information about this data provider.
+			 *
+			 *	\return
+			 *		A tuple with two members:
+			 *
+			 *		1.	The name of the data provider.
+			 *		2.	A list of tuples which act as
+			 *			key/value pairs which map the
+			 *			name of a piece of information
+			 *			about the provider to the value
+			 *			associated with it.
+			 */
+			virtual Tuple<String,Vector<Tuple<String,String>>> GetInfo () const = 0;
 		
 		
 			/**
@@ -368,7 +385,21 @@ namespace MCPP {
 			 *		The type of event to log.
 			 */
 			virtual void WriteLog (const String & log, Service::LogType type) = 0;
-			
+			/**
+			 *	Writes to the chat log.
+			 *
+			 *	\param [in] from
+			 *		The sender of the message.
+			 *	\param [in] to
+			 *		A list of the username's of
+			 *		the recipients of the message.
+			 *	\param [in] message
+			 *		The text of the message.
+			 *	\param [in] notes
+			 *		Optional notes to associate with
+			 *		the message.
+			 */
+			virtual void WriteChatLog (const String & from, const Vector<String> & to, const String & message, const Nullable<String> & notes) = 0;
 	
 	
 	};

@@ -145,6 +145,45 @@ namespace MCPP {
 	}
 	
 	
+	void Server::WriteChatLog (const String & from, const Vector<String> & to, const String & message, const Nullable<String> & notes) noexcept {
+	
+		//	Don't throw errors, eat them
+		try {
+		
+			auto callback=[=] () {
+			
+				try {
+				
+					try {
+					
+						OnChatLog(from,to,message,notes);
+					
+					} catch (...) {	}
+					
+					if (data!=nullptr) data->WriteChatLog(from,to,message,notes);
+				
+				} catch (...) {	}
+			
+			};
+			
+			//	Is there a thread pool?
+			if (pool.IsNull()) {
+			
+				//	Log synchronously
+				callback();
+			
+			} else {
+			
+				//	Log asynchronously
+				pool->Enqueue(callback);
+			
+			}
+		
+		} catch (...) {	}
+	
+	}
+	
+	
 	void Server::OnStart (const Vector<const String> & args) {
 	
 		//	Hold the state lock while

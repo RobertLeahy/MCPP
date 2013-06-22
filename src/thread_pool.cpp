@@ -78,7 +78,7 @@ namespace MCPP {
 				
 				try {
 				
-					UInt64 time;
+					UInt64 time=timer.ElapsedNanoseconds();
 					for (;;) {
 					
 						//	Break out immediately if
@@ -92,8 +92,6 @@ namespace MCPP {
 						//	Time 'till next scheduled task
 						UInt64 next;
 						if (scheduled.Count()!=0) {
-						
-							time=timer.ElapsedNanoseconds();
 							
 							next=(
 								//	Next scheduled task is in the future

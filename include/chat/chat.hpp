@@ -8,9 +8,278 @@
 
 #include <common.hpp>
 #include <functional>
+#include <utility>
 
 
 namespace MCPP {
+
+
+	/**
+	 *	The different colours that a
+	 *	sequence in a chat message
+	 *	may be.
+	 */
+	enum class ChatColour : ASCIIChar {
+	
+		Black='0',
+		DarkBlue='1',
+		DarkGreen='2',
+		DarkCyan='3',
+		DarkRed='4',
+		Purple='5',
+		Gold='6',
+		Grey='7',
+		DarkGrey='8',
+		Blue='9',
+		BrightGreen='a',
+		Cyan='b',
+		Red='c',
+		Pink='d',
+		Yellow='e',
+		White='f',
+		None='\0'
+	
+	};
+	
+	
+	/**
+	 *	The different styles that a
+	 *	sequence in a chat message may
+	 *	have.
+	 */
+	enum class ChatStyle : ASCIIChar {
+	
+		Random='k',
+		Bold='l',
+		Strikethrough='m',
+		Underlined='n',
+		Italic='o',
+		Default='r'
+	
+	};
+	
+	
+	/**
+	 *	Different commands that can be given
+	 *	to the chat formatter.
+	 */
+	enum class ChatFormat {
+	
+		PushStyle,		/**<	Pushes a style onto the stack.	*/
+		PopStyle,		/**<	Pops a style off the stack.	*/
+		PushColour,		/**<	Pushes a colour onto the stack.	*/
+		PopColour,		/**<	Pops a colour off the stack.	*/
+		Label,			/**<	Inserts an automatically generated label for this message.	*/
+		Sender,			/**<	Inserts the sender's username.	*/
+		Recipients,		/**<	Inserts a comma-separated list of recipients.	*/
+		Segment,		/**<	Inserts a message segment.	*/
+		LabelSeparator,	/**<	Inserts the label separator.	*/
+		DefaultStyle,	/**<	Pushes the default style for this message type onto the stack.	*/
+		DefaultColour,	/**<	Pushes the default colour for this message type onto the stack.	*/
+		LabelStyle,		/**<	Pushes the default label style onto the stack.	*/
+		LabelColour		/**<	Pushes the default label colour onte the stack.	*/
+	
+	};
+	
+	
+	/**
+	 *	A token that gives the chat formatter
+	 *	a certain command.
+	 */
+	class ChatToken {
+	
+	
+		private:
+		
+		
+			inline void copy (const ChatToken &);
+			inline void move (ChatToken &&) noexcept;
+			inline void destroy () noexcept;
+	
+		
+		public:
+		
+		
+			ChatToken () = delete;
+			ChatToken (const ChatToken & other);
+			ChatToken (ChatToken && other) noexcept;
+			ChatToken & operator = (const ChatToken & other);
+			ChatToken & operator = (ChatToken && other) noexcept;
+		
+		
+			/**
+			 *	Creates a new ChatToken which pushes
+			 *	a colour onto the stack.
+			 *
+			 *	\param [in] colour
+			 *		The colour to be pushed onto the
+			 *		stack.
+			 */
+			ChatToken (ChatColour colour) noexcept;
+			/**
+			 *	Creates a new ChatToken which pushes
+			 *	a style onto the stack.
+			 *
+			 *	\param [in] style
+			 *		The style to be pushed onto the
+			 *		stack.
+			 */
+			ChatToken (ChatStyle style) noexcept;
+			/**
+			 *	Creates a new ChatToken which encapsulates
+			 *	a segment of text.
+			 *
+			 *	\param [in] segment
+			 *		The segment of text.
+			 */
+			ChatToken (String segment) noexcept;
+			/**
+			 *	Creates a new ChatToken which executes a
+			 *	command.
+			 *
+			 *	\param [in] type
+			 *		One of the ChatFormat commands.
+			 */
+			ChatToken (ChatFormat type) noexcept;
+		
+		
+			/**
+			 *	Cleans up this ChatToken.
+			 */
+			~ChatToken () noexcept;
+		
+		
+			/**
+			 *	The type of command this is.
+			 */
+			ChatFormat Type;
+			
+			
+			union {
+			
+				/**
+				 *	The segment associated with this
+				 *	command, if it has one.
+				 */
+				String Segment;
+				/**
+				 *	The colour associated with this
+				 *	command, if it has one.
+				 */
+				ChatColour Colour;
+				/**
+				 *	The style associated with this
+				 *	command, if it has one.
+				 */
+				ChatStyle Style;
+			
+			};
+		
+	
+	};
+	
+	
+	/**
+	 *	Encapsulates a chat message.
+	 */
+	class ChatMessage {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The sender of the message.
+			 *
+			 *	If null, it will be assumed
+			 *	that the message is from
+			 *	\"SERVER\".
+			 */
+			SmartPointer<Client> From;
+			/**
+			 *	A list of recipients of the message.
+			 *
+			 *	If empty, it will be assumed that
+			 *	the message is a broadcast.
+			 */
+			Vector<String> To;
+			/**
+			 *	A list of ChatToken objects which
+			 *	describe the message.
+			 */
+			Vector<ChatToken> Message;
+			/**
+			 *	\em true if the message is being sent
+			 *	back to the original sender (as in the
+			 *	case of whispers, which have to be sent
+			 *	back to the sender to confirm they were
+			 *	delivered), \em false otherwise.
+			 */
+			bool Echo;
+		
+		
+			/**
+			 *	Creates a new, empty chat message with
+			 *	no recipients or sender.
+			 */
+			ChatMessage () noexcept = default;
+			/**
+			 *	Creates a default message which encapsulates
+			 *	a given textual message.
+			 *
+			 *	\param [in] message
+			 *		The text to wrap.
+			 */
+			ChatMessage (String message);
+			/**
+			 *	Creates a default message which encapsulates
+			 *	a given textual message and is from a given
+			 *	sender.
+			 *
+			 *	\param [in] from
+			 *		The sender.
+			 *	\param [in] message
+			 *		The text to wrap.
+			 */
+			ChatMessage (SmartPointer<Client> from, String message);
+			/**
+			 *	Creates a default message which encapsulates
+			 *	a given textual message, is from a given sender,
+			 *	and sent to a specific recipient.
+			 */
+			ChatMessage (SmartPointer<Client> from, String to, String message);
+			
+			
+			/**
+			 *	Adds a new token to the message.
+			 *
+			 *	\tparam T
+			 *		The type of the object that
+			 *		shall be passed to the ChatToken
+			 *		constructor to create a token
+			 *		in place at the back of the
+			 *		message.
+			 *
+			 *	\param [in] obj
+			 *		The object that shall be passed
+			 *		to the constructor to create a
+			 *		token in place at the back of
+			 *		the message.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
+			template <typename T>
+			ChatMessage & operator << (T && obj) {
+			
+				Message.EmplaceBack(std::forward<T>(obj));
+				
+				return *this;
+			
+			}
+	
+	
+	};
 
 
 	/**
@@ -28,55 +297,57 @@ namespace MCPP {
 	class ChatModule : public Module {
 	
 	
+		private:
+		
+		
+			typedef PacketTypeMap<0x03> pt;
+	
+	
 		public:
 		
 		
 			/**
-			 *	Sanitizes \em subject, ensuring that
-			 *	it is safe for transmission.
+			 *	Writes a message to the chat log.
 			 *
-			 *	As a result of Notch's enlightened
-			 *	protocol design, the section sign
-			 *	("§" or U+00A7) is impossible to
-			 *	represent as a literal in the protocol
-			 *	and will therefore simply be removed
-			 *	if \em escape is set to \em true.
+			 *	\param [in] message
+			 *		The message to log.
+			 */
+			static void Log (const ChatMessage & message);
+			/**
+			 *	Writes a message to the chat log.
 			 *
-			 *	Due to the fact that the Minecraft
-			 *	protocol prepends strings with a
-			 *	16-bit signed integer representing
-			 *	their length (in Unicode code points)
-			 *	strings longer than 32267 characters
-			 *	will be sliced to 32267 characters
-			 *	in length.  Note that this slicing
-			 *	process is based solely on code
-			 *	paints, and may very well divide
-			 *	a grapheme.
+			 *	\param [in] message
+			 *		The message to log.
+			 *	\param [in] notes
+			 *		Any notes about the chat message
+			 *		that should be logged alongside
+			 *		the message itself.
+			 */
+			static void Log (const ChatMessage & message, String notes);
+			/**
+			 *	Writes a message to the chat log.
 			 *
-			 *	Due to the fact that the Minecraft
-			 *	protocol supports only UCS-2, all
-			 *	code points outside the BMP will
-			 *	be removed.
+			 *	\param [in] message
+			 *		The message to log.
+			 *	\param [in] dne
+			 *		A list of recipients to whom
+			 *		delivery failed.
+			 */
+			static void Log (const ChatMessage & message, const Vector<String> & dne);
+			/**
+			 *	Creates a string representation of
+			 *	\em message which may be sent to a
+			 *	vanilla Minecraft client via a
+			 *	0x03 packet.
 			 *
-			 *	The string will additionally be
-			 *	placed in Normal Form Canonical
-			 *	Composition (i.e.\ NFC) which will
-			 *	decrease the number of bytes that
-			 *	will be required to transmit it.
-			 *
-			 *	\param [in] subject
-			 *		The string to sanitize.
-			 *	\param [in] escape
-			 *		If \em true the function will
-			 *		remove the section sign from
-			 *		the string.  Defaults to
-			 *		\em true.
+			 *	\param [in] message
+			 *		A chat message to format.
 			 *
 			 *	\return
-			 *		A string fit for transmission
-			 *		over the Minecraft protocol.
+			 *		\em message formatted as a
+			 *		string.
 			 */
-			static String Sanitize (String subject, bool escape=true);
+			static String Format (const ChatMessage & message);
 		
 		
 			/**
@@ -106,58 +377,16 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Sends a message to all authenticated clients.
+			 *	Formats and sends a chat message.
 			 *
 			 *	\param [in] message
-			 *		The message to send.  This message
-			 *		is sent verbatim, no further
-			 *		processing is applied.
-			 */
-			void Broadcast (String message) const;
-			/**
-			 *	Sends a message to connected and
-			 *	authenticated users with a certain username.
-			 *
-			 *	\param [in] usernames
-			 *		A vector of usernames to send
-			 *		the message to.
-			 *	\param [in] message
-			 *		The message to send to those
-			 *		specified by \em usernames.  This
-			 *		message is sent verbatim, no
-			 *		further processing is
-			 *		applied.
+			 *		The message to format and send.
 			 *
 			 *	\return
-			 *		A vector of strings representing the
-			 *		usernames in \em usernames which
-			 *		were not found.
+			 *		A list of recipients to whom the
+			 *		message could not be delivered.
 			 */
-			Vector<String> Send (const Vector<String> & usernames, String message) const;
-			/**
-			 *	Sends a message to a client.
-			 *
-			 *	\param [in] client
-			 *		The client to send the message to.
-			 *	\param [in] message
-			 *		The message to send.
-			 */
-			void Send (SmartPointer<Client> client, String message) const;
-			/**
-			 *	Sends a message to a client.
-			 *
-			 *	\param [in] username
-			 *		The username to send the message to.
-			 *	\param [in] message
-			 *		The message to send.
-			 *
-			 *	\return
-			 *		\em true if \em username represents
-			 *		a user connected to this server and
-			 *		\em message was sent, \em false
-			 *		otherwise.
-			 */
-			bool Send (String username, String message) const;
+			Vector<String> Send (const ChatMessage & message);
 	
 	
 	};

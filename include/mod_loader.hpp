@@ -48,7 +48,7 @@ namespace MCPP {
 	 *
 	 *	When the module loader is instructed to unload
 	 *	the loaded modules, or when its destructor
-	 *	is called, it shall again enumerate the laoded
+	 *	is called, it shall again enumerate the loaded
 	 *	modules, find the address of the function
 	 *	in each matching the signature
 	 *	<B>void Unload ()</B> and invoke this, which
