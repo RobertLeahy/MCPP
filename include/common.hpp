@@ -43,8 +43,7 @@ namespace MCPP {	}
 #include <event.hpp>
 #include <data_provider.hpp>
 #include <thread_pool.hpp>
-#include <listen_handler.hpp>
-#include <connection_manager.hpp>
+#include <network.hpp>
 #include <mod_loader.hpp>
 #include <server.hpp>
 

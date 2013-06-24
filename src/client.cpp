@@ -373,7 +373,7 @@ namespace MCPP {
 	}
 	
 	
-	const IPAddress & Client::IP () const noexcept {
+	IPAddress Client::IP () const noexcept {
 	
 		return conn->IP();
 	

@@ -29,8 +29,7 @@ namespace MCPP {
 #include <functional>
 #include <utility>
 #include <thread_pool.hpp>
-#include <listen_handler.hpp>
-#include <connection_manager.hpp>
+#include <network.hpp>
 #include <data_provider.hpp>
 #include <event.hpp>
 #include <typedefs.hpp>
@@ -61,9 +60,8 @@ namespace MCPP {
 		
 		
 			//	Components
-			Nullable<ConnectionManager> connections;
+			Nullable<ConnectionHandler> connections;
 			Nullable<ThreadPool> pool;
-			Nullable<ListenHandler> socket_server;
 			Nullable<ModuleLoader> mods;
 			
 			

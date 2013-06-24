@@ -55,11 +55,7 @@ bin/mcpp.dll: \
 obj/server.o \
 obj/mod.o \
 obj/nbt.o \
-obj/listen_handler.o \
-obj/connection.o \
-obj/connection_handler.o \
-obj/connection_manager.o \
-obj/send_handle.o \
+obj/network.o \
 obj/packet.o \
 obj/packet_factory.o \
 obj/packet_router.o \
@@ -80,7 +76,7 @@ obj/thread_pool_handle.o \
 obj/sha1.o \
 obj/new_delete.o \
 bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ obj/server.o obj/new_delete.o obj/mod.o obj/nbt.o obj/listen_handler.o obj/connection.o obj/connection_handler.o obj/connection_manager.o obj/send_handle.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
+	$(GPP) -shared -o $@ obj/server.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
 
 obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp
 	$(GPP) src/server.cpp -c -o $@
@@ -117,21 +113,12 @@ obj/metadata.o: src/metadata.cpp
 	
 	
 #	NETWORK STACK
-	
-obj/listen_handler.o: src/listen_handler.cpp
-	$(GPP) $? -c -o $@
-	
-obj/connection.o: src/connection.cpp
-	$(GPP) $? -c -o $@
-	
-obj/connection_handler.o: src/connection_handler.cpp src/send_thread.cpp src/receive_thread.cpp
-	$(GPP) src/connection_handler.cpp -c -o $@
-	
-obj/connection_manager.o: src/connection_manager.cpp
-	$(GPP) $? -c -o $@
-	
-obj/send_handle.o: src/send_handle.cpp
-	$(GPP) $? -c -o $@
+
+.PHONY: network_stack
+network_stack: obj/network.o bin/test.exe
+
+obj/network.o: src/network.cpp include/network.hpp
+	$(GPP) src/network.cpp -c -o $@
 	
 
 #	MINECRAFT COMMUNICATIONS
@@ -330,5 +317,5 @@ bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 .PHONY: test
 test: bin/test.exe
 
-bin/test.exe: bin/rleahy_lib.dll src/test/test.cpp
-	$(GPP) -o $@ bin/rleahy_lib.dll src/test/test.cpp
+bin/test.exe: bin/rleahy_lib.dll src/test/test.cpp obj/thread_pool.o obj/network.o obj/thread_pool_handle.o
+	$(GPP) -o $@ bin/rleahy_lib.dll obj/thread_pool.o obj/network.o src/test/test.cpp -lws2_32 obj/thread_pool_handle.o

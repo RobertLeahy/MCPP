@@ -218,7 +218,6 @@ namespace MCPP {
 						
 					}
 					
-					socket_server.Destroy();
 					connections.Destroy();
 					pool.Destroy();
 					
@@ -291,13 +290,8 @@ namespace MCPP {
 			
 			//	STOP
 			
-			//	First we stop the flow of
-			//	new connections by killing
-			//	the listening handler
-			socket_server.Destroy();
-			
-			//	Next we disconnect all
-			//	connected clients
+			//	Disconnect all connected clients
+			//	and stop the flow of new connections
 			connections.Destroy();
 			
 			//	Now we wait on all pending

@@ -7,7 +7,7 @@
 
 
 #include <rleahylib/rleahylib.hpp>
-#include <connection_manager.hpp>
+#include <network.hpp>
 #include <unordered_map>
 #include <utility>
 #include <packet.hpp>
@@ -1018,7 +1018,7 @@ namespace MCPP {
 			 *		The IP from which the client
 			 *		is connected.
 			 */
-			const IPAddress & IP () const noexcept;
+			IPAddress IP () const noexcept;
 			/**
 			 *	Retrieves the client's port.
 			 *
