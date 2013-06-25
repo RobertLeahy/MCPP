@@ -7,7 +7,7 @@
 
 
 #include <rleahylib/rleahylib.hpp>
-#include <curl.h>
+#include <curl/curl.h>
 #include <functional>
 #include <unordered_map>
 

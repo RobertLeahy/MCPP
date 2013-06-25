@@ -1,5 +1,5 @@
 #include <sha1.hpp>
-#include <err.h>
+#include <openssl/err.h>
 #include <stdexcept>
 #include <limits>
 

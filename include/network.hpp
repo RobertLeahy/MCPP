@@ -353,7 +353,7 @@ namespace MCPP {
 			
 			//	Synchronization for all connection
 			//	methods
-			Mutex lock;
+			mutable Mutex lock;
 			
 			
 			//	The connection
@@ -532,6 +532,14 @@ namespace MCPP {
 			 *		The number of bytes received.
 			 */
 			UInt64 Received () const noexcept;
+			/**
+			 *	Retrieves the number of send operations
+			 *	pending on this connection.
+			 *
+			 *	\return
+			 *		The number of pending sends.
+			 */
+			Word Pending () const noexcept;
 	
 	
 	};

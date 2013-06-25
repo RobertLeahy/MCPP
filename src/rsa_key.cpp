@@ -1,8 +1,8 @@
 #include <rsa_key.hpp>
 #include <stdexcept>
-#include <rand.h>
-#include <ssl.h>
-#include <err.h>
+#include <openssl/rand.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 
 namespace MCPP {

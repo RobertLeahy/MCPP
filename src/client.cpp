@@ -427,6 +427,13 @@ namespace MCPP {
 		return conn->Received();
 	
 	}
+	
+	
+	Word Client::Pending () const noexcept {
+	
+		return conn->Pending();
+	
+	}
 
 
 }

@@ -1,7 +1,7 @@
 #include <aes_128_cfb_8.hpp>
 #include <stdexcept>
-#include <aes.h>
-#include <err.h>
+#include <openssl/aes.h>
+#include <openssl/err.h>
 
 
 namespace MCPP {

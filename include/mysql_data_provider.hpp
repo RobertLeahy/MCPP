@@ -8,7 +8,11 @@
 
 #include <data_provider.hpp>
 #include <thread_pool.hpp>
+#ifdef ENVIRONMENT_WINDOWS
 #include <mysql.h>
+#else
+#include <mysql/mysql.h>
+#endif
 
 
 namespace MCPP {

@@ -1097,6 +1097,15 @@ namespace MCPP {
 			 *		The number of bytes sent on this connection.
 			 */
 			UInt64 Sent () const noexcept;
+			/**
+			 *	Retrieves the number of send operations to this
+			 *	client which are pending.
+			 *
+			 *	\return
+			 *		The number of send operations waiting to
+			 *		complete to this client.
+			 */
+			Word Pending () const noexcept;
 			
 	
 	

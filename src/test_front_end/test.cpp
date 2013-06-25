@@ -1,4 +1,3 @@
-#include <curl.h>
 #include <system_error>
 #include <type_traits>
 

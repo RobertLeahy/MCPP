@@ -1,6 +1,6 @@
 #include <random.hpp>
-#include <rand.h>
-#include <err.h>
+#include <openssl/rand.h>
+#include <openssl/err.h>
 
 
 namespace MCPP {

@@ -1,7 +1,11 @@
 #include <mysql_data_provider.hpp>
 #include <cstring>
 #include <type_traits>
+#ifdef ENVIRONMENT_WINDOWS
 #include <errmsg.h>
+#else
+#include <mysql/errmsg.h>
+#endif
 #include <utility>
 
 

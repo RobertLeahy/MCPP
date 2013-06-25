@@ -127,7 +127,7 @@ namespace MCPP {
 				
 					struct epoll_event event;
 					event.data.ptr=this;
-					event.events=EPOLLIN|EPOLLOUT;
+					event.events=EPOLLIN|EPOLLOUT|EPOLLET;
 					
 					if (epoll_ctl(
 						fd,
@@ -165,6 +165,17 @@ namespace MCPP {
 		lock.Release();
 		
 		return handle;
+	
+	}
+	
+	
+	Word Connection::Pending () const noexcept {
+	
+		lock.Acquire();
+		auto pending=sends.Count();
+		lock.Release();
+		
+		return pending;
 	
 	}
 
@@ -318,7 +329,7 @@ namespace MCPP {
 				//	pair with the epoll fd
 				struct epoll_event event;
 				event.data.ptr=nullptr;	//	Null identifies own socket pair
-				event.events=EPOLLIN;	//	We want to read commands
+				event.events=EPOLLIN|EPOLLET;	//	We want to read commands
 				
 				//	Add to the epoll fd
 				if (epoll_ctl(
@@ -684,7 +695,7 @@ namespace MCPP {
 												//	this socket to the epoll fd
 												struct epoll_event event;
 												event.data.ptr=static_cast<Connection *>(conn);
-												event.events=EPOLLIN;
+												event.events=EPOLLIN|EPOLLET;
 												
 												//	If there are pending writes, also
 												//	subscribe initially for writes
@@ -1099,7 +1110,7 @@ namespace MCPP {
 									//	EPOLLOUT
 									struct epoll_event event;
 									event.data.ptr=&conn;
-									event.events=EPOLLIN;
+									event.events=EPOLLIN|EPOLLET;
 									
 									if (epoll_ctl(
 										fd,

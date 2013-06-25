@@ -270,6 +270,7 @@ namespace MCPP {
 			((multi=curl_multi_init())==nullptr)
 		) throw std::runtime_error(curl_error);
 		
+		#ifdef CURLMOPT_PIPELINING
 		CURLMcode result;
 		if (
 			((result=curl_multi_setopt(
@@ -287,6 +288,7 @@ namespace MCPP {
 				result
 			)
 		);
+		#endif
 		
 		try {
 		

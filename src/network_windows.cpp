@@ -217,6 +217,17 @@ namespace MCPP {
 	}
 	
 	
+	Word Connection::Pending () const noexcept {
+	
+		lock.Acquire();
+		auto pending=sends.size();
+		lock.Release();
+		
+		return pending;
+	
+	}
+	
+	
 	//
 	//	CONNECTION HANDLER
 	//
@@ -312,15 +323,6 @@ namespace MCPP {
 				//
 				//	That's a request for us to end
 				if (data==nullptr) break;
-				
-				connections_lock.Acquire();
-				
-				//	Make sure this connection
-				//	can't be deleted while we're
-				//	working on it
-				auto conn_handle=connections[conn];
-				
-				connections_lock.Release();
 				
 				//	What instruction have we been given?
 				switch (data->Command) {
@@ -423,6 +425,10 @@ namespace MCPP {
 						
 						conn->recv.SetCount(recv_count);
 						
+						connections_lock.Acquire();
+						auto conn_handle=connections[conn];
+						connections_lock.Release();
+						
 						//	Dispatch an asynchronous event
 						//	to handle this.
 						++running_async;
@@ -521,7 +527,7 @@ namespace MCPP {
 									end_async();
 									
 								},
-								conn_handle
+								std::move(conn_handle)
 							);
 							
 						} catch (...) {
@@ -613,7 +619,15 @@ namespace MCPP {
 						conn->is_shutdown &&
 						//	All sends have completed
 						(conn->sends.size()==0)
-					) remove(std::move(conn_handle));
+					) {
+					
+						connections_lock.Acquire();
+						auto conn_handle=std::move(connections[conn]);
+						connections_lock.Release();
+					
+						remove(std::move(conn_handle));
+						
+					}
 					
 				} catch (...) {
 				
