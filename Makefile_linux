@@ -1,14 +1,7 @@
-DEL=del /S /Q
-
-
-INC_CURL=-I "G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/include/curl"
-INC_OPENSSL=-I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include/openssl" -I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include"
-INC_ZLIB=-I "G:/Downloads/zlib128-dll/include/"
-INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
 OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
 #OPTIMIZATION=-O3
-OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
-GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
+OPTS_SHARED=-static-libgcc -static-libstdc++ -Wall -Wpedantic -fno-rtti -std=gnu++11 -I include -Dlinux
+GPP=/opt/gcc-4.8.0/bin/g++ $(OPTS_SHARED) $(OPTIMIZATION)
 
 
 #	DEFAULT
@@ -23,35 +16,14 @@ clean:
 .PHONY: cleanall
 cleanall: clean
 	$(DEL) bin\*
-
-
-#	LIBRARIES
-
-bin/libmysql.dll:
-	mysql.bat
-	
-bin/rleahy_lib.dll:
-	rleahy_lib.bat
-	
-bin/ssleay32.dll:
-	ssleay.bat
-	
-bin/libeay32.dll:
-	libeay.bat
-	
-bin/libcurl.dll:
-	curl.bat
-	
-bin/zlib1.dll:
-	zlib.bat
 	
 	
 #	MCPP MAIN LIBRARY
 
 .PHONY: mcpp
-mcpp: bin/mcpp.dll
+mcpp: bin/mcpp.so
 
-bin/mcpp.dll: \
+bin/mcpp.so: \
 obj/server.o \
 obj/mod.o \
 obj/nbt.o \
@@ -117,7 +89,7 @@ obj/metadata.o: src/metadata.cpp
 .PHONY: network_stack
 network_stack: obj/network.o bin/test.exe
 
-obj/network.o: src/network_windows.cpp include/network.hpp include/thread_pool.hpp src/network.cpp
+obj/network.o: src/network_linux.cpp include/network.hpp include/thread_pool.hpp src/network.cpp
 	$(GPP) src/network.cpp -c -o $@
 	
 

@@ -10,7 +10,11 @@
 #include <thread_pool.hpp>
 #include <atomic>
 #include <unordered_map>
+
+
+#ifdef ENVIRONMENT_WINDOWS
 #include <winsock2.h>
+#endif
 
 
 namespace MCPP {
@@ -190,11 +194,11 @@ namespace MCPP {
 	 */
 	 
 	 
+	#ifdef ENVIRONMENT_WINDOWS
+	 
+	 
 	enum class NetworkCommand {
 	
-		//	Sent by a thread enqueuing
-		//	a send
-		BeginSend,
 		//	Set by the worker thread when
 		//	it begins the send, so it can
 		//	differentiate the I/O completion
@@ -207,10 +211,7 @@ namespace MCPP {
 		//	Set in a worker-initiated receive,
 		//	tells the worker that this is data
 		//	received on the associated socket.
-		CompleteReceive,
-		//	Socket should be closed, connection
-		//	should be destroyed.
-		Disconnect
+		CompleteReceive
 	
 	};
 	 
@@ -232,6 +233,9 @@ namespace MCPP {
 	
 	
 	};
+	
+	
+	#endif
 	 
 	 
 	/**
@@ -253,13 +257,21 @@ namespace MCPP {
 		private:
 		
 		
+			#ifdef ENVIRONMENT_WINDOWS
 			//	Overlapped structure
 			OverlappedData overlapped;
+			#endif
 			//	The bytes this send handle
 			//	represents
 			Vector<Byte> send;
+			#ifdef ENVIRONMENT_WINDOWS
 			//	WSABUF structure for I/O
 			WSABUF buf;
+			#else
+			//	The number of bytes that we've
+			//	progressed into the buffer
+			Word sent;
+			#endif
 			//	The result of this send
 			//	operation
 			SendState state;
@@ -328,7 +340,7 @@ namespace MCPP {
 	
 	
 	};
-
+	
 	
 	class Connection {
 	
@@ -337,19 +349,6 @@ namespace MCPP {
 	
 	
 		private:
-		
-		
-			//	The disconnect request (if any)
-			//	that was sent to the connection
-			//	handler
-			//
-			//	Keeps the memory alive.
-			SmartPointer<OverlappedData> disconnect_request;
-		
-		
-			//	Shall be invoked only once when
-			//	the connection is disconnected
-			DisconnectCallback disconnect_callback;
 			
 			
 			//	Synchronization for all connection
@@ -358,17 +357,18 @@ namespace MCPP {
 			
 			
 			//	The connection
-			SOCKET socket;
+			#ifdef ENVIRONMENT_WINDOWS
+			SOCKET
+			#else
+			int
+			#endif
+			socket;
 			Endpoint endpoint;
 			
 			
-			//	The connection handler handling
-			//	this connection
-			ConnectionHandler & handler;
-			
-			
-			//	I/O completion port
-			HANDLE iocp;
+			#ifdef ENVIRONMENT_POSIX
+			int fd;
+			#endif
 			
 			
 			//	Sent and received
@@ -376,18 +376,15 @@ namespace MCPP {
 			std::atomic<UInt64> received;
 			
 			
+			#ifdef ENVIRONMENT_WINDOWS
 			//	Pending send operations
 			std::unordered_map<
 				const SendHandle *,
 				SmartPointer<SendHandle>
 			> sends;
-			
-			
-			//	Receive buffer
-			Vector<Byte> recv;
-			WSABUF recv_buf;
-			OverlappedData overlapped;
-			DWORD recv_flags;
+			#else
+			Vector<SmartPointer<SendHandle>> sends;
+			#endif
 			
 			
 			//	Whether this connection has an
@@ -395,14 +392,32 @@ namespace MCPP {
 			bool pending_recv;
 			
 			
+			//	Receive buffer
+			Vector<Byte> recv;
+			#ifdef ENVIRONMENT_WINDOWS
+			WSABUF recv_buf;
+			OverlappedData overlapped;
+			DWORD recv_flags;
+			#else
+			Vector<Byte> recv_alt;
+			#endif
+			
+			
 			//	Whether this connection has been
 			//	shutdown
 			bool is_shutdown;
 			
 			
-			//	Thread pool to use to dispatch the
-			//	disconnect callback
-			ThreadPool & pool;
+			#ifdef ENVIRONMENT_POSIX
+			//	Whether this socket has
+			//	been registered with the
+			//	epoll fd
+			bool is_registered;
+			#endif
+			
+			
+			//	Disconnect reason
+			String reason;
 			
 			
 			//
@@ -411,7 +426,7 @@ namespace MCPP {
 			
 			
 			//	Drives the disconnect process
-			SmartPointer<Connection> disconnect ();
+			bool disconnect () noexcept;
 			
 			
 		public:
@@ -423,10 +438,18 @@ namespace MCPP {
 		
 		
 			Connection (
-				SOCKET socket,
+				#ifdef ENVIRONMENT_WINDOWS
+				SOCKET
+				#else
+				int
+				#endif
+				socket,
 				Endpoint endpoint,
-				HANDLE iocp,
-				ConnectionHandler & handler
+				#ifdef ENVIRONMENT_WINDOWS
+				HANDLE iocp
+				#else
+				int fd
+				#endif
 			);
 			
 			
@@ -446,7 +469,7 @@ namespace MCPP {
 			/**
 			 *	Disconnects this connection.
 			 */
-			void Disconnect ();
+			void Disconnect () noexcept;
 			/**
 			 *	Disconnects this connection for a specified
 			 *	reason.
@@ -455,7 +478,16 @@ namespace MCPP {
 			 *		The reason this client is being
 			 *		disconnected.
 			 */
-			void Disconnect (String reason);
+			void Disconnect (const String & reason) noexcept;
+			/**
+			 *	Disconnects this connection for a specified
+			 *	reason.
+			 *
+			 *	\param [in] reason
+			 *		The reason this client is being
+			 *		disconnected.
+			 */
+			void Disconnect (String && reason) noexcept;
 			/**
 			 *	Sends a buffer of bytes over the connection.
 			 *
@@ -548,16 +580,13 @@ namespace MCPP {
 			Mutex connections_lock;
 			
 			
-			//	List of overlapped structures
-			//	we've had to create
-			std::unordered_map<
-				const OverlappedData *,
-				SmartPointer<OverlappedData>
-			> overlapped;
-			
-			
+			#ifdef ENVIRONMENT_WINDOWS
 			//	Completion port
 			HANDLE iocp;
+			#else
+			//	epoll fd
+			int fd;
+			#endif
 			
 			
 			//	Used during shutdown to
@@ -569,18 +598,31 @@ namespace MCPP {
 			
 			
 			//	Bound sockets
-			Vector<SOCKET> bound;
+			Vector<
+				#ifdef ENVIRONMENT_WINDOWS
+				SOCKET
+				#else
+				int
+				#endif
+			> bound;
 			
 			
+			#ifdef ENVIRONMENT_WINDOWS
 			//	Barrier to synchronize
 			//	startup
 			Barrier barrier;
+			#endif
 			
 			
 			//	Threads
 			
 			//	Worker thread
 			Thread worker;
+			
+			
+			#ifdef ENVIRONMENT_WINDOWS
+			
+			
 			//	Accept/listen thread
 			Thread accept;
 			
@@ -595,16 +637,32 @@ namespace MCPP {
 			WSAEVENT stop;
 			
 			
+			#else
+			
+			
+			//	Socket pair to use to stop
+			//	epoll worker
+			int pair [2];
+			
+			
+			#endif
+			
+			
 			//
 			//	PRIVATE METHODS
 			//
 			
 			
-			inline void kill (Connection *);
+			inline void kill (Connection *) noexcept;
 			inline void end_async () noexcept;
 			void worker_func () noexcept;
+			#ifdef ENVIRONMENT_WINDOWS
+			inline void remove (SmartPointer<Connection>);
 			void accept_func () noexcept;
 			static int accept_filter (LPWSABUF,LPWSABUF,LPQOS,LPQOS,LPWSABUF,LPWSABUF,GROUP FAR *,DWORD_PTR) noexcept;
+			#else
+			inline void remove (Connection *);
+			#endif
 			
 			
 		public:
