@@ -84,7 +84,7 @@ class Kick : public Module {
 					if (!found) {
 					
 						ChatMessage message;
-						message.To.Add(std::move(username));
+						message.AddRecipients(client);
 						message	<<	ChatColour::Red
 								<<	ChatStyle::Bold
 								<<	ChatFormat::Label

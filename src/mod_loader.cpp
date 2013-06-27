@@ -2,6 +2,16 @@
 #include <utility>
 
 
+#ifdef ENVIRONMENT_POSIX
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#include <dlfcn.h>
+#include <cstring>
+#include <stdexcept>
+#endif
+
+
 static const String could_not_open_dir="Could not open modules directory";
 static const String attempt_to_load="Attempting to load {0}";
 static const String failed_to_load="Failed to load {0}";
@@ -17,9 +27,131 @@ namespace MCPP {
 	ModuleLoader::ModuleLoader (String dir, LogType log) : dir(std::move(dir)), log(std::move(log)) {	}
 	
 	
+	//	There's an issue with the module
+	//	loading/management scheme vis-a-vis
+	//	dlsym on Linux.
+	//
+	//	On Windows GetAddress only returns an
+	//	address inside the target module,
+	//	whereas on Linux dlsym will do a
+	//	tree-like search through that module
+	//	and all its dependencies.
+	//
+	//	This is an issue because modules can
+	//	have sub-modules, which depend on that
+	//	module.
+	//
+	//	Example:
+	//
+	//	We load foo.so, whidh loads bar.so.
+	//
+	//	bar.so depends on foo.so.
+	//
+	//	foo.so tries to lookup "Cleanup" in
+	//	bar.so, but bar.so does not have a
+	//	cleanup action, and therefore does
+	//	not contain that symbol.
+	//
+	//	On Windows -- using GetAddress --
+	//	this would throw, indicating the
+	//	desired symbol was not present.
+	//
+	//	On Linux however, this will branch
+	//	into foo.so, find "Cleanup" there,
+	//	and return the address of that.
+	//
+	//	This is disastrous as this will lead
+	//	to infinite recursion.
+	//
+	//	Therefore we have implement a workaround
+	//	on Linux to check to make sure the
+	//	address of the target symbol actually
+	//	comes from the correct module file.
+	//
+	//	Credit goes to greymerk for finding/thinking
+	//	of this workaround.
+	template <typename T>
+	T ModuleLoader::load (const String & symbol, const Library & lib, const String &
+		#ifdef ENVIRONMENT_POSIX
+		filename
+		#endif
+	) {
+	
+		#ifdef ENVIRONMENT_WINDOWS
+		
+		return lib.GetAddress<T>(symbol);
+		
+		#else
+		
+		union {
+			T addr;
+			void * addr_ptr;
+		};
+		
+		//	Get the address, if that throws
+		//	then we're free and clear
+		addr=lib.GetAddress<T>(symbol);
+		
+		//	Otherwise we need to do a sanity
+		//	check to enforce the Windows behaviour
+		
+		//	Get the raw OS handle from the
+		//	wrapper
+		void * handle;
+		memcpy(&handle,&lib,sizeof(Library));
+		
+		//	Get information about the module
+		//	containing addr
+		Dl_info info;
+		if (dladdr(
+			addr_ptr,
+			&info
+		)==0) throw std::runtime_error(
+			dlerror()
+		);
+		
+		//	Check to see if that's this module
+		if (
+			UTF8().Decode(
+				reinterpret_cast<const Byte *>(
+					info.dli_fname
+				),
+				reinterpret_cast<const Byte *>(
+					info.dli_fname+strlen(info.dli_fname)
+				)
+			)!=Path::Combine(
+				dir,
+				filename
+			)
+		) throw std::runtime_error(nullptr);	//	Dummy exception
+		
+		//	Okay we're good
+		return addr;
+		
+		#endif
+	
+	}
+	
+	
 	inline void ModuleLoader::destroy () noexcept {
 	
 		unload();
+		
+		//	Attempt to call the "Cleanup" method
+		//	in each mod
+		for (auto & mod : mods) {
+		
+			try {
+			
+				load<void (*) ()>(
+					"Cleanup",
+					mod.Item<2>(),
+					mod.Item<0>()
+				)();
+			
+			} catch (...) {	}
+		
+		}
 		
 		mods.Clear();
 	
@@ -36,7 +168,11 @@ namespace MCPP {
 			//	and call it
 			try {
 			
-				mod.Item<2>().GetAddress<void (*) ()>("Unload")();
+				load<void (*) ()>(
+					"Unload",
+					mod.Item<2>(),
+					mod.Item<0>()
+				)();
 			
 			} catch (...) {	}
 		
@@ -162,7 +298,11 @@ namespace MCPP {
 				Module * ptr;
 				try {
 				
-					ptr=lib.GetAddress<Module * (*) ()>("Load")();
+					ptr=load<Module * (*) ()>(
+						"Load",
+						lib,
+						filename
+					)();
 				
 				} catch (...) {
 				
@@ -208,13 +348,26 @@ namespace MCPP {
 				//	function in case we lose the library
 				//	due to moving it (notably into the
 				//	vector emplace insert).
+				void (*unload) ()=nullptr;
 				void (*cleanup) ()=nullptr;
 				try {
+					
+					unload=load<void (*) ()>(
+						"Unload",
+						lib,
+						filename
+					);
+					
+				} catch (...) {	}
 				
-					cleanup=lib.GetAddress<void (*) ()>("Unload");
+				try {
 				
-				//	If we can't get it, that's fine, modules
-				//	don't necessarily need cleanup code
+					cleanup=load<void (*) ()>(
+						"Cleanup",
+						lib,
+						filename
+					);
+				
 				} catch (...) {	}
 				
 				try {
@@ -268,6 +421,12 @@ namespace MCPP {
 				} catch (...) {
 				
 					//	Try and dispose of the pointer
+					try {
+					
+						if (unload!=nullptr) unload();
+					
+					} catch (...) {	}
+					
 					try {
 					
 						if (cleanup!=nullptr) cleanup();

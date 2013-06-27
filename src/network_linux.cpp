@@ -291,17 +291,17 @@ namespace MCPP {
 						ep.Port()
 					);
 					
-					if (!(
+					if (
 						(bind(
 							socket,
 							reinterpret_cast<struct sockaddr *>(&addr),
 							sizeof(struct sockaddr_storage)
-						)==0) &&
+						)==-1) ||
 						(listen(
 							socket,
 							SOMAXCONN
-						)==0)
-					)) SocketException::Raise(errno);
+						)==-1)
+					) SocketException::Raise(errno);
 					
 					bound.Add(socket);
 				
@@ -527,12 +527,19 @@ namespace MCPP {
 				);
 				
 				//	Error checking
-				if (num==-1) throw std::system_error(
-					std::error_code(
-						errno,
-						std::system_category()
-					)
-				);
+				if (num==-1) {
+				
+					//	Ignore interrupts
+					if (errno==EINTR) continue;
+				
+					throw std::system_error(
+						std::error_code(
+							errno,
+							std::system_category()
+						)
+					);
+					
+				}
 				
 				//	Loop for all available connections
 				for (Word i=0;i<static_cast<Word>(num);++i) {
@@ -735,6 +742,9 @@ namespace MCPP {
 												
 												}
 												
+												//	Registered to epoll fd now
+												conn->is_registered=true;
+												
 												conn->lock.Release();
 												
 												end_async();
@@ -789,6 +799,9 @@ namespace MCPP {
 						//	Socket is readable
 						if ((event.events&EPOLLIN)!=0) {
 						
+							//	Did we kill the connection?
+							bool killed=false;
+						
 							//	Lock the connection so we
 							//	can access its receive
 							//	buffers
@@ -802,9 +815,6 @@ namespace MCPP {
 								//	for use in deciding whether to
 								//	dispatch a handler or not
 								SafeWord num_read;
-								//	Receives are where connections
-								//	die
-								bool killed=false;
 							
 								//	Loop until we encounter an error
 								//	or read all data
@@ -941,7 +951,7 @@ namespace MCPP {
 																conn->recv_alt.end()
 															);
 															
-															conn->recv.SetCount(0);
+															conn->recv_alt.SetCount(0);
 															
 															//	Release lock and dispatch
 															//	receive callback again
@@ -989,17 +999,6 @@ namespace MCPP {
 									}
 								
 								}
-								
-								//	Did we kill the connection?
-								if (killed) {
-								
-									//	YES
-								
-									kill(&conn);
-								
-									remove(&conn);
-								
-								}
 							
 							} catch (...) {
 							
@@ -1010,6 +1009,20 @@ namespace MCPP {
 							}
 							
 							conn.lock.Release();
+							
+							//	Did we kill the connection?
+							if (killed) {
+							
+								//	YES
+							
+								kill(&conn);
+							
+								remove(&conn);
+								
+								//	Don't try to send
+								continue;
+							
+							}	
 						
 						}
 						

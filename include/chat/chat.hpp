@@ -185,6 +185,32 @@ namespace MCPP {
 	class ChatMessage {
 	
 	
+		private:
+		
+		
+			inline void add_recipients () const noexcept {	}
+		
+		
+			template <typename... Args>
+			void add_recipients (SmartPointer<Client> client, Args &&... args) {
+			
+				Recipients.Add(std::move(client));
+				
+				add_recipients(std::forward<Args>(args)...);
+			
+			}
+		
+		
+			template <typename... Args>
+			void add_recipients (String str, Args &&... args) {
+			
+				To.Add(std::move(str));
+				
+				add_recipients(std::forward<Args>(args)...);
+			
+			}
+	
+	
 		public:
 		
 		
@@ -199,10 +225,19 @@ namespace MCPP {
 			/**
 			 *	A list of recipients of the message.
 			 *
-			 *	If empty, it will be assumed that
-			 *	the message is a broadcast.
+			 *	If empty, along with Recipients,
+			 *	it will be assumed that the message
+			 *	is a broadcast.
 			 */
 			Vector<String> To;
+			/**
+			 *	A list of recipients of the message.
+			 *
+			 *	If empty, along with To, it will be
+			 *	assumed that the message is a
+			 *	broadcast.
+			 */
+			Vector<SmartPointer<Client>> Recipients;
 			/**
 			 *	A list of ChatToken objects which
 			 *	describe the message.
@@ -246,10 +281,36 @@ namespace MCPP {
 			 *	Creates a default message which encapsulates
 			 *	a given textual message, is from a given sender,
 			 *	and sent to a specific recipient.
+			 *
+			 *	\param [in] from
+			 *		The sender.
+			 *	\param [in] to
+			 *		The recipient.
+			 *	\param [in] message
+			 *		The text to wrap.
 			 */
 			ChatMessage (SmartPointer<Client> from, String to, String message);
 			
 			
+			/**
+			 *	Adds an arbitrary number of recipients
+			 *	to the message.
+			 *
+			 *	\tparam Args
+			 *		The types of the objects to add
+			 *		as recipients.  SmartPointers to
+			 *		Clients and Strings are acceptable.
+			 *
+			 *	\param [in] args
+			 *		Arguments of type \em Args which shall
+			 *		be added as recipients.
+			 */
+			template <typename... Args>
+			void AddRecipients (Args &&... args) {
+			
+				add_recipients(std::forward<Args>(args)...);
+			
+			}
 			/**
 			 *	Adds a new token to the message.
 			 *

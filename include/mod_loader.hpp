@@ -84,6 +84,8 @@ namespace MCPP {
 			
 			inline void unload () noexcept;
 			inline void destroy () noexcept;
+			template <typename T>
+			inline T load (const String &, const Library &, const String &);
 			
 			
 		public:

@@ -71,7 +71,7 @@ class Whisper : public Module {
 						//	Recipient does not exist
 						
 						ChatMessage error;
-						error.To.Add(client->GetUsername());
+						error.AddRecipients(client);
 						error.Message.EmplaceBack(ChatColour::Red);
 						error.Message.EmplaceBack(ChatFormat::Label);
 						error.Message.EmplaceBack(ChatFormat::LabelSeparator);

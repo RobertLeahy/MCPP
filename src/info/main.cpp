@@ -350,7 +350,7 @@ class Info : public Module {
 					if (!Ops->IsOp(username)) {
 					
 						ChatMessage message;
-						message.To.Add(username);
+						message.AddRecipients(client);
 						message	<<	ChatColour::Red
 								<<	ChatFormat::Label
 								<<	ChatFormat::LabelSeparator
@@ -390,7 +390,7 @@ class Info : public Module {
 					
 					if (!message.IsNull()) {
 					
-						message->To.Add(username);
+						message->AddRecipients(client);
 						
 						Chat->Send(*message);
 						

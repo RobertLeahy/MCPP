@@ -16,12 +16,63 @@ namespace MCPP {
 	static const String could_not_be_delivered("Delivery failed to the following: ");
 	
 	
+	static inline void insert_sorted (Vector<String> & list, String insert) {
+	
+		String insert_to_lower(insert.ToLower());
+	
+		for (Word i=0;i<list.Count();++i) {
+		
+			String curr_to_lower(list[i].ToLower());
+			
+			if (insert_to_lower==curr_to_lower) return;
+			
+			if (curr_to_lower>insert_to_lower) {
+			
+				list.Insert(
+					std::move(insert),
+					i
+				);
+				
+				return;
+			
+			}
+		
+		}
+		
+		list.Add(std::move(insert));
+	
+	}
+	
+	
+	static inline Vector<String> sorted_list (const Vector<String> & to, const Vector<SmartPointer<Client>> & recipients) {
+	
+		Vector<String> sorted;
+	
+		for (auto & s : to) insert_sorted(
+			sorted,
+			s
+		);
+		
+		for (auto & c : recipients) insert_sorted(
+			sorted,
+			c->GetUsername()
+		);
+		
+		return sorted;
+	
+	}
+	
+	
 	static inline Tuple<String,Vector<String>,String> log_prep (const ChatMessage & message) {
 	
 		String from=message.From.IsNull() ? from_server : message.From->GetUsername().ToLower();
 		
-		Vector<String> to;
-		for (const auto & s : message.To) to.Add(s.ToLower());
+		Vector<String> to(
+			sorted_list(
+				message.To,
+				message.Recipients
+			)
+		);
 		
 		String output;
 		for (const auto & token : message.Message) {
@@ -102,15 +153,20 @@ namespace MCPP {
 	}
 	
 	
-	static inline String recipient_list (const Vector<String> & to) {
+	static inline String recipient_list (const Vector<String> & to, const Vector<SmartPointer<Client>> & recipients) {
 	
+		Vector<String> sorted=sorted_list(
+			to,
+			recipients
+		);
+		
 		String output;
-	
-		for (Word i=0;i<to.Count();++i) {
+		
+		for (Word i=0;i<sorted.Count();++i) {
 		
 			if (i!=0) output << recipient_separator;
 			
-			output << to[i];
+			output << sorted[i];
 		
 		}
 		
@@ -288,7 +344,10 @@ namespace MCPP {
 							//	sender?
 							if (message.Echo) {
 							
-								label << you << " " << whisper << " " << recipient_list(message.To);
+								label << you << " " << whisper << " " << recipient_list(
+									message.To,
+									message.Recipients
+								);
 							
 							} else {
 							
@@ -327,7 +386,12 @@ namespace MCPP {
 					
 				case ChatFormat::Recipients:
 				
-					generate(recipient_list(message.To));
+					generate(
+						recipient_list(
+							message.To,
+							message.Recipients
+						)
+					);
 					break;
 					
 				default:break;

@@ -125,6 +125,64 @@ namespace MCPP {
 	}
 	
 	
+	static inline void insert_sorted (Vector<Tuple<String,bool>> & list, String username) {
+	
+		for (Word i=0;i<list.Count();++i) {
+		
+			if (list[i].Item<0>()==username) return;
+			
+			if (list[i].Item<0>()>username) {
+			
+				list.Emplace(
+					i,
+					std::move(username),
+					false
+				);
+				
+				return;
+			
+			}
+		
+		}
+		
+		list.EmplaceBack(
+			std::move(username),
+			false
+		);
+	
+	}
+	
+	
+	static inline void flag_found (Vector<Tuple<String,bool>> & list, const String & username) {
+	
+		for (auto & t : list) {
+		
+			if (t.Item<0>()==username) {
+			
+				t.Item<1>()=true;
+				
+				return;
+			
+			}
+		
+		}
+	
+	}
+	
+	
+	static inline bool is_recipient (const Vector<Tuple<String,bool>> & list, const String & username) {
+	
+		for (const auto & t : list) {
+		
+			if (t.Item<0>()==username) return true;
+		
+		}
+		
+		return false;
+	
+	}
+	
+	
 	Vector<String> ChatModule::Send (const ChatMessage & message) {
 	
 		//	Build the packet
@@ -153,61 +211,80 @@ namespace MCPP {
 				bool
 			>
 		> recipients;
-		for (const auto & s : message.To) {
-		
-			recipients.EmplaceBack(
-				s.ToLower(),
-				false
-			);
-		
-		}
+		//	Insert recipients sorted to decrease
+		//	lookup time
+		for (const auto & s : message.To) insert_sorted(
+			recipients,
+			s.ToLower()
+		);
+		for (const auto & c : message.Recipients) insert_sorted(
+			recipients,
+			c->GetUsername().ToLower()
+		);
 		
 		//	Scan the list of connected
 		//	users and send the message
 		//	as appropriate
-		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+		if (
+			(message.To.Count()!=0) ||
+			(message.Recipients.Count()==0)
+		) RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
 		
-			//	Only interested in authenticated
+			//	Skip all clients we have the handle
+			//	for
+			for (const auto & handle : message.Recipients) {
+			
+				if (static_cast<const Client *>(handle)==static_cast<Client *>(client)) return;
+			
+			}
+			
+			//	We're only interested in authenticated
 			//	clients
 			if (client->GetState()==ClientState::Authenticated) {
 			
-				//	If this is a broadcast, send
-				//	unconditionally
+				//	If this is a broadcast, send unconditionally
 				if (recipients.Count()==0) {
 				
 					client->Send(packet);
 				
-				//	See if this is an intended
-				//	recipient
+				//	See if this recipients is among
+				//	the intended recipients
 				} else {
-			
-					//	Normalize username to lowercase
-					String username(client->GetUsername().ToLower());
 				
-					//	Scan the list of recipients,
-					//	is this client in there?
-					for (auto & t : recipients) {
+					String username(client->GetUsername().ToLower());
 					
-						if (username==t.Item<0>()) {
+					if (is_recipient(
+						recipients,
+						username
+					)) {
+					
+						client->Send(packet);
 						
-							//	Send
-							client->Send(packet);
-						
-							//	Flag as found
-							t.Item<1>()=true;
-						
-							//	Found -- we're done
-							break;
-						
-						}
+						flag_found(
+							recipients,
+							username
+						);
 					
 					}
-					
+				
 				}
 			
 			}
 		
 		});
+		
+		//	Send to all the people we have the handle
+		//	for
+		for (auto & handle : message.Recipients) {
+		
+			const_cast<SmartPointer<Client> &>(handle)->Send(packet);
+			
+			flag_found(
+				recipients,
+				handle->GetUsername().ToLower()
+			);
+		
+		}
 		
 		//	Build a list of clients to whom
 		//	delivery failed
@@ -263,6 +340,15 @@ extern "C" {
 	void Unload () {
 	
 		Chat.Destroy();
+		
+		if (!mods.IsNull()) mods->Unload();
+	
+	}
+	
+	
+	void Cleanup () {
+	
+		mods.Destroy();
 	
 	}
 

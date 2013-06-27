@@ -63,7 +63,7 @@ class BanInfo : public Module {
 					if (!Ops->IsOp(client->GetUsername())) {
 					
 						ChatMessage message;
-						message.To.Add(client->GetUsername());
+						message.AddRecipients(client);
 						message	<<	ChatColour::Red
 								<<	ChatFormat::Label
 								<<	ChatFormat::LabelSeparator
@@ -136,7 +136,7 @@ class BanInfo : public Module {
 						
 						//	Create output
 						ChatMessage message;
-						message.To.Add(client->GetUsername());
+						message.AddRecipients(client);
 						message	<<	ChatStyle::Bold
 								<<	ChatColour::Yellow
 								<<	info_banner

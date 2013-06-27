@@ -137,6 +137,8 @@ extern "C" {
 	
 	void Unload () {
 	
+		chat_op.Destroy();
+	
 	}
 
 

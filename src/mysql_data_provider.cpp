@@ -182,7 +182,11 @@ namespace MCPP {
 		mysql_options(
 			&conn,
 			MYSQL_SET_CHARSET_NAME,
+			#ifdef ENVIRONMENT_WINDOWS
 			"utf8mb4"
+			#else
+			"utf8"
+			#endif
 		);
 		
 		//	Connect
