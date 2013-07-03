@@ -48,6 +48,12 @@ namespace MCPP {
 			MYSQL_STMT * kvp_delete_pair_stmt;
 			MYSQL_STMT * kvp_insert_stmt;
 			MYSQL_STMT * chat_log_stmt;
+			/*MYSQL_STMT * chunk_stmt;
+			MYSQL_STMT * chunk_insert_stmt;
+			MYSQL_STMT * chunk_update_stmt;*/
+			MYSQL_STMT * column_stmt;
+			MYSQL_STMT * column_insert_stmt;
+			MYSQL_STMT * column_update_stmt;
 			
 			
 			//	Thread pool for worker
@@ -105,6 +111,10 @@ namespace MCPP {
 			virtual void InsertValue (const String & key, const String & value) override;
 			void WriteChatLog (const String & from, const Vector<String> & to, const String & message, const Nullable<String> & notes) override;
 			virtual InfoType GetInfo () const override;
+			/*virtual void LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, ChunkLoad callback) override;
+			virtual void SaveChunk (Int32 x, Int32 y, Int32 z, SByte dimension, const Byte * begin, const Byte * end, bool populated, ChunkSaveBegin callback_begin, ChunkSaveEnd callback_end) override;*/
+			virtual void LoadColumn (Int32 x, Int32 z, SByte dimension, ColumnLoad callback) override;
+			virtual void SaveColumn (Int32 x, Int32 z, SByte dimension, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) override;
 	
 	
 	};

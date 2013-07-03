@@ -415,7 +415,7 @@ namespace MCPP {
 			
 			try {
 			
-				remove(static_cast<Connection *>(pair.second));
+				disconnect(std::move(pair.second));
 			
 			} catch (...) {	}
 			
@@ -472,36 +472,7 @@ namespace MCPP {
 		connections.erase(iter);
 		connections_lock.Release();
 		
-		++running_async;
-		try {
-		
-			pool.Enqueue(
-				[this] (SmartPointer<Connection> conn) {
-				
-					try {
-					
-						auto & reason=conn->reason;
-					
-						disconnect_callback(
-							std::move(conn),
-							reason
-						);
-					
-					} catch (...) {	}
-					
-					end_async();
-				
-				},
-				std::move(conn_handle)
-			);
-		
-		} catch (...) {
-		
-			--running_async;
-			
-			throw;
-		
-		}
+		disconnect(std::move(conn_handle));
 	
 	}
 	

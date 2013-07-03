@@ -2,121 +2,179 @@
 #include <thread_pool.hpp>
 #include <rleahylib/main.hpp>
 #include <unordered_map>
+#include <world/world.hpp>
+#include <atomic>
 
 
 using namespace MCPP;
 
 
-Nullable<ThreadPool> pool;
-Nullable<ConnectionHandler> connections;
-Mutex console_lock;
-std::unordered_map<const Connection *,SmartPointer<Connection>> map;
-Mutex map_lock;
-
-
-void write_console (const String & str) {
-
-	console_lock.Execute([&] () {	StdOut << str << Newline;	});
-
-}
-
-
 
 int Main (const Vector<const String> & args) {
 
-	pool.Construct(1);
+	std::atomic<bool> stop;
+	std::atomic<Word> count;
+	stop=false;
+	count=0;
+
+	ThreadPool pool(10);
 	
-	Vector<Endpoint> eps;
-	eps.EmplaceBack(
-		IPAddress("0.0.0.0"),
-		25565
-	);
+	WorldLock lock(pool);
 	
-	connections.Construct(
-		eps,
-		[] (IPAddress ip, UInt16 port) {
-		
-			write_console(String::Format(
-				"Approving {0}:{1}",
-				ip,
-				port
-			));
-		
-			return true;
-			
-		},
-		[] (SmartPointer<Connection> conn) {
-		
-			write_console(String::Format(
-				"{0}:{1} connected",
-				conn->IP(),
-				conn->Port()
-			));
-			
-			map_lock.Execute([&] () {	map.emplace(static_cast<Connection *>(conn),conn);	});
-		
-		},
-		[] (SmartPointer<Connection> conn, const String &) {
-		
-			write_console(String::Format(
-				"{0}:{1} disconnected",
-				conn->IP(),
-				conn->Port()
-			));
-			
-			map_lock.Execute([&] () {	map.erase(static_cast<Connection *>(conn));	});
-		
-		},
-		[] (SmartPointer<Connection> conn, Vector<Byte> & buffer) {
-		
-			String output;
-			output << String(conn->IP()) << ":" << String(conn->Port()) << " sends:";
-			
-			for (Byte b : buffer) {
-			
-				output << " 0x";
-			
-				String byte(b,16);
-				
-				if (byte.Count()==1) output << "0";
-				
-				output << byte;
-			
-			}
-			
-			write_console(output);
-			
-			conn->Send(buffer);
-			
-			buffer.Clear();
-		
-		},
-		LogCallback(),
-		[] () {	write_console("PANIC");	},
-		*pool
-	);
+	Mutex console_lock;
+
+	Thread t([&] () {
 	
-	StdIn.ReadLine();
+		while (!stop) {
 	
-	connections.Destroy();
-	pool.Destroy();
-	
-	StdIn.ReadLine();
-	/*for (;;) {
-	
-		map_lock.Execute([&] () {
-		
-			for (auto & pair : map) {
+			auto id=lock.Acquire(ColumnID{0,0,0});
 			
-				pair.second->Send(UTF8().Encode("hello world"));
+			++count;
 			
-			}
-		
-		});
-		
-		Thread::Sleep(25);
+			//console_lock.Execute([] () {	StdOut << "Column lock acquired" << Newline;	});
+			
+			//Thread::Sleep(1000);
+			
+			//console_lock.Execute([] () {	StdOut << "Column lock released" << Newline;	});
+			
+			lock.Release(id);
+			
+		}
 	
-	}*/
+	});
+	
+	Thread t1([&] () {
+	
+		while (!stop) {
+		
+			auto id=lock.Acquire(BlockID{0,0,0,0});
+			
+			++count;
+			
+			//console_lock.Execute([] () {	StdOut << "Acquired!" << Newline;	});
+			
+			//Thread::Sleep(1000);
+			
+			//console_lock.Execute([] () {	StdOut << "Released!" << Newline;	});
+			
+			lock.Release(id);
+		
+		}
+	
+	});
+	
+	Thread t2([&] () {
+	
+		while (!stop) {
+		
+			auto id=lock.Acquire(BlockID{1,0,0,0});
+			
+			++count;
+			
+			//console_lock.Execute([] () {	StdOut << "Acquired!" << Newline;	});
+			
+			//Thread::Sleep(1000);
+			
+			//console_lock.Execute([] () {	StdOut << "Released!" << Newline;	});
+			
+			lock.Release(id);
+		
+		}
+	
+	});
+	
+	Thread t3([&] () {
+	
+		while (!stop) {
+		
+			auto id=lock.Acquire();
+			
+			++count;
+			
+			//StdOut << "Exclusive lock acquired!" << Newline;
+			
+			//Thread::Sleep(1000);
+			
+			//StdOut << "Exclusive lock released!" << Newline;
+			
+			lock.Release(id);
+		
+		}
+	
+	});
+	
+	Thread t4([&] () {
+	
+		while (!stop) {
+		
+			auto id=lock.Acquire(BlockID{16,0,0,0});
+			
+			++count;
+			
+			//console_lock.Execute([] () {	StdOut << "Unrelated acquired!" << Newline;	});
+			
+			//Thread::Sleep(1000);
+			
+			//console_lock.Execute([] () {	StdOut << "Unrelated released!" << Newline;	});
+			
+			lock.Release(id);
+		
+		}
+	
+	});
+	
+	//for (;;) Thread::Sleep(1000);
+	//StdIn.ReadLine();
+	Thread::Sleep(1000);
+	
+	stop=true;
+	
+	t.Join();
+	t1.Join();
+	t2.Join();
+	t4.Join();
+	
+	StdOut << Word(count) << Newline;
+
+	/*auto lambda=[&] () {
+		
+		while (!stop) {
+		
+			lock.Release(lock.Acquire({0,0,0,0}));
+			
+			++count;
+		
+		}
+		
+	};
+	
+	auto lambda_2=[&] () {
+	
+		while (!stop) {
+		
+			lock.Release(lock.Acquire({1,0,0,0}));
+			
+			++count;
+		
+		}
+	
+	};
+	
+	Thread t(lambda);
+	Thread t2(lambda);
+	Thread t3(lambda);
+	Thread t4(lambda_2);
+	
+	Thread::Sleep(1000);
+	
+	stop=true;
+	
+	t.Join();
+	t2.Join();
+	t3.Join();
+	t4.Join();
+	
+	StdOut << Word(count) << Newline;*/
 
 	return EXIT_SUCCESS;
 

@@ -56,7 +56,7 @@ namespace MCPP {
 			 *		Whether the buffer has skylight
 			 *		info.
 			 *	\param [in] add
-			 *		Whether the uffer has the extra
+			 *		Whether the buffer has the extra
 			 *		4 bits for extra block types.
 			 */
 			Chunk (Vector<Byte> data, bool skylight, bool add) noexcept;

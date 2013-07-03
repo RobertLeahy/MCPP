@@ -194,11 +194,11 @@ inline void Server::server_startup () {
 		OnAccept,
 		[=] (SmartPointer<Connection> conn) {
 		
-			try {
+			//	Save IP and port number
+			IPAddress ip=conn->IP();
+			UInt16 port=conn->Port();
 		
-				//	Save IP and port number
-				IPAddress ip=conn->IP();
-				UInt16 port=conn->Port();
+			try {
 				
 				//	Create client object
 				auto client=SmartPointer<Client>::Make(
@@ -209,6 +209,20 @@ inline void Server::server_startup () {
 				
 				//	Add to the client list
 				Clients.Add(client);
+				
+				//	Fire event handler
+				OnConnect(std::move(client));
+				
+			} catch (...) {
+			
+				//	Panic on error
+				Panic();
+				
+				throw;
+			
+			}
+			
+			try {
 				
 				//	Log
 				auto clients=Clients.Count();
@@ -224,17 +238,7 @@ inline void Server::server_startup () {
 					Service::LogType::Information
 				);
 				
-				//	Fire event handler
-				OnConnect(std::move(client));
-				
-			} catch (...) {
-			
-				//	Panic on error
-				Panic();
-				
-				throw;
-			
-			}
+			} catch (...) {	}
 		
 		},
 		[=] (SmartPointer<Connection> conn, const String & reason) {
@@ -250,6 +254,17 @@ inline void Server::server_startup () {
 				
 				//	Fire event handler
 				OnDisconnect(client,reason);
+				
+			} catch (...) {
+			
+				//	Panic on error
+				Panic();
+				
+				throw;
+			
+			}
+			
+			try {
 				
 				//	Log
 				String disconnect_template;
@@ -282,15 +297,8 @@ inline void Server::server_startup () {
 					),
 					Service::LogType::Information
 				);
-			
-			} catch (...) {
-			
-				//	Panic on error
-				Panic();
 				
-				throw;
-			
-			}
+			} catch (...) {	}
 		
 		},
 		OnReceive,

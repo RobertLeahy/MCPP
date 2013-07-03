@@ -664,6 +664,7 @@ namespace MCPP {
 			inline void kill (Connection *) noexcept;
 			inline void end_async () noexcept;
 			void worker_func () noexcept;
+			inline void disconnect (SmartPointer<Connection>);
 			#ifdef ENVIRONMENT_WINDOWS
 			inline void remove (SmartPointer<Connection>);
 			void accept_func () noexcept;

@@ -209,7 +209,8 @@ bin/chat_mods/chat_login.dll \
 bin/chat_mods/ban_info.dll \
 bin/chat_mods/info.dll \
 bin/chat_mods/chat_op.dll \
-bin/chat_mods/kick.dll
+bin/chat_mods/kick.dll \
+bin/mods/world.dll
 
 
 #	PING SUPPORT
@@ -258,6 +259,12 @@ bin/mods/op.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/op/ma
 
 bin/mods/ban.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/ban/main.cpp obj/new_delete.o
 	$(GPP) -shared -o $@ bin/mcpp.dll bin/data_provider.dll bin/rleahy_lib.dll obj/new_delete.o src/ban/main.cpp
+	
+
+#	WORLD
+
+bin/mods/world.dll: bin/mcpp.dll bin/rleahy_lib.dll src/world/world_lock.cpp obj/new_delete.o src/world/block_id.cpp src/world/world_lock_info.cpp src/world/column_id.cpp include/world/world.hpp
+	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/world_lock.cpp src/world/column_id.cpp src/world/block_id.cpp src/world/world_lock_info.cpp
 	
 
 #	CHAT SUB-MODULES
@@ -317,5 +324,5 @@ bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 .PHONY: test
 test: bin/test.exe
 
-bin/test.exe: bin/rleahy_lib.dll src/test/test.cpp obj/thread_pool.o obj/network.o obj/thread_pool_handle.o
-	$(GPP) -o $@ bin/rleahy_lib.dll obj/thread_pool.o obj/network.o src/test/test.cpp -lws2_32 obj/thread_pool_handle.o
+bin/test.exe: bin/rleahy_lib.dll src/test/test.cpp obj/thread_pool.o obj/network.o obj/thread_pool_handle.o src/world/world_lock.cpp include/world/world.hpp src/world/column_id.cpp src/world/block_id.cpp src/world/world_lock_info.cpp
+	$(GPP) -o $@ bin/rleahy_lib.dll obj/thread_pool.o obj/network.o src/test/test.cpp -lws2_32 obj/thread_pool_handle.o src/world/world_lock.cpp src/world/column_id.cpp src/world/block_id.cpp src/world/world_lock_info.cpp

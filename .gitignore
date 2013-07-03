@@ -224,3 +224,5 @@ build_make_error.txt
 log_*.txt
 server.txt
 old_*/
+json_chat/
+dl/

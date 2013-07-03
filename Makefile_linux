@@ -147,11 +147,11 @@ data_providers: bin/data_provider.so
 bin/data_provider.so: bin/data_providers/mysql_data_provider.so
 	cp bin/data_providers/mysql_data_provider.so bin/data_provider.so
 	
-bin/data_providers/mysql_data_provider.so: obj/mysql_data_provider.o obj/data_provider.o obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o include/data_provider.hpp include/mysql_data_provider.hpp
+bin/data_providers/mysql_data_provider.so: obj/mysql_data_provider.o obj/data_provider.o obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o
 	$(GPP) -shared -o bin/data_providers/data_provider.so obj/mysql_data_provider.o obj/data_provider.o -L /usr/lib64/mysql -lmysqlclient -lrleahy obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o $(LINK) -Wl,-soname,data_provider.so
 	mv bin/data_providers/data_provider.so bin/data_providers/mysql_data_provider.so
 
-obj/mysql_data_provider.o: src/mysql_data_provider.cpp src/login_info.cpp include/data_provider.hpp include/mysql_data_provider.hpp
+obj/mysql_data_provider.o: src/mysql_data_provider.cpp src/login_info.cpp include/data_provider.hpp include/mysql_data_provider.hpp include/column.hpp include/thread_pool.hpp
 	$(GPP) src/mysql_data_provider.cpp -c -o $@
 	
 obj/data_provider.o: src/data_provider.cpp include/data_provider.hpp

@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <rleahylib/rleahylib.hpp>
+#include <column.hpp>
 
 
 namespace MCPP {
@@ -30,8 +31,11 @@ namespace MCPP {
 	 *		\em false otherwise.
 	 *	5.	A buffer of bytes representing the
 	 *		chunk (if it exists).
+	 *	6.	A boolean value indicating whether
+	 *		the chunk has been populated or
+	 *		not.
 	 */
-	typedef std::function<void (Int32, Int32, Int32, SByte, bool, Nullable<Vector<Byte>> &&)> ChunkLoad;
+	typedef std::function<void (Int32, Int32, Int32, SByte, bool, Nullable<Vector<Byte>>, Nullable<bool>)> ChunkLoad;
 	/**
 	 *	The type of callback that shall be invoked
 	 *	when the chunk saving process begins.
@@ -88,6 +92,63 @@ namespace MCPP {
 	 *		otherwise.
 	 */
 	typedef std::function<void (Int32, Int32, Int32, SByte, bool)> ChunkSaveEnd;
+	
+	
+	/**
+	 *	The type of callback that shall be invoked
+	 *	when the column loading process is complete.
+	 *
+	 *	<B>Parameters:</B>
+	 *
+	 *	1.	X-coordinate of the column.
+	 *	2.	Z-coordinate of the column.
+	 *	3.	Dimension of the column.
+	 *	4.	\em true if the chunk was loaded
+	 *		successfully, \em false otherwise.
+	 *		If \em false the value of all
+	 *		following arguments is unspecified.
+	 *	5.	\em true if the chunk exists and
+	 *		was loaded, \em false otherwise.
+	 *	6.	The column.  If parameter #5 is \em false
+	 *		this shall be a smart pointer to an
+	 *		uninitialized chunk.
+	 *	7.	\em true if the column is flagged as
+	 *		populated, \em false otherwise.
+	 */
+	typedef std::function<void (Int32, Int32, SByte, bool, bool, SmartPointer<Column>, bool)> ColumnLoad;
+	/**
+	 *	The type of callback that shall be invoked when
+	 *	the column saving process is about to begin.
+	 *
+	 *	When this callback is invoked it means that the
+	 *	data provider is about to save the column to the
+	 *	backing store.  Therefore whatever locks are
+	 *	required should be acquired, and then the relevant
+	 *	data should be returned.
+	 *
+	 *	<B>Parameters:</B>
+	 *
+	 *	1.	X-coordinate of the column.
+	 *	2.	Y-coordinate of the column.
+	 *	3.	Dimension of the column.
+	 *	4.	A pointer to a boolean value that determines
+	 *		whether or not the column will be saved flagged
+	 *		as populated.
+	 */
+	typedef std::function<SmartPointer<Column> (Int32, Int32, SByte, bool *)> ColumnSaveBegin;
+	/**
+	 *	The type of callback that shall be invoked when the
+	 *	column saving process completes.
+	 *
+	 *	<B>Parameters:</B>
+	 *
+	 *	1.	X-coordinate of the column.
+	 *	2.	Y-coordinate of the column.
+	 *	3.	Dimension of the column.
+	 *	4.	\em true if the save succeeded, \em false
+	 *		otherwise.
+	 */
+	typedef std::function<void (Int32, Int32, SByte, bool)> ColumnSaveEnd;
 
 
 	/**
@@ -318,7 +379,7 @@ namespace MCPP {
 			 *		A function to be invoked once the
 			 *		chunk has been loaded.
 			 */
-			//virtual void LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, const ChunkLoad & callback) = 0;
+			//virtual void LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, ChunkLoad callback) = 0;
 			/**
 			 *	Starts the process of saving a chunk to
 			 *	the backing store.
@@ -355,6 +416,9 @@ namespace MCPP {
 			 *		An end iterator to the contiguous
 			 *		buffer of bytes which represent the
 			 *		chunk.
+			 *	\param [in] populated
+			 *		\em true if the chunk-in-question is
+			 *		populated, \em false otherwise.
 			 *	\param [in] callback_begin
 			 *		A callback which shall be invoked
 			 *		as the chunk saving process is about
@@ -371,9 +435,14 @@ namespace MCPP {
 				SByte dimension,
 				const Byte * begin,
 				const Byte * end,
-				const ChunkSaveBegin & callback_begin,
-				const ChunkSaveEnd & callback_end
+				bool populated,
+				ChunkSaveBegin callback_begin,
+				ChunkSaveEnd callback_end
 			) = 0;*/
+			
+			
+			virtual void LoadColumn (Int32 x, Int32 z, SByte dimension, ColumnLoad callback) = 0;
+			virtual void SaveColumn (Int32 x, Int32 z, SByte dimension, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) = 0;
 			
 			
 			/**

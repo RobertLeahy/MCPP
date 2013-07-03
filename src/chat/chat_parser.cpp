@@ -400,16 +400,24 @@ namespace MCPP {
 		
 		}
 		
-		//	Is the output too long?
-		if (output.Size()>static_cast<Word>(std::numeric_limits<Int16>::max())) {
+		//	JSON chat hack since JSON
+		//	chat doesn't work properly
+		String json_begin("{\"text\":\"");
 		
-			Vector<CodePoint> trimmed(static_cast<Word>(std::numeric_limits<Int16>::max()));
+		Word max_len=static_cast<Word>(
+			std::numeric_limits<Int16>::max()
+		)-json_begin.Size()-2;	//	Minus 2 for "} to end JSON
+		
+		//	Is the output too long?
+		if (output.Size()>max_len) {
+		
+			Vector<CodePoint> trimmed(max_len);
 			Word i=0;
 			for (CodePoint cp : output.CodePoints()) {
 			
 				trimmed.Add(cp);
 				
-				if (++i==static_cast<Word>(std::numeric_limits<Int16>::max())) break;
+				if (++i==max_len) break;
 			
 			}
 			
@@ -422,7 +430,7 @@ namespace MCPP {
 		}
 		
 		//	Done
-		return output;
+		return json_begin+output+"\"}";
 	
 	}
 	

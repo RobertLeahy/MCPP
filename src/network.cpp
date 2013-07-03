@@ -177,6 +177,43 @@ namespace MCPP {
 	//
 	
 	
+	inline void ConnectionHandler::disconnect (SmartPointer<Connection> conn) {
+	
+		//	Deploy async callback
+		++running_async;
+		try {
+		
+			pool.Enqueue(
+				[this] (SmartPointer<Connection> conn) {
+			
+					try {
+					
+						auto & reason=conn->reason;
+					
+						disconnect_callback(
+							std::move(conn),
+							reason
+						);
+					
+					} catch (...) {	}
+			
+					end_async();
+			
+				},
+				std::move(conn)
+			);
+		
+		} catch (...) {
+		
+			--running_async;
+			
+			throw;
+		
+		}
+	
+	}
+	
+	
 	inline void ConnectionHandler::kill (Connection * conn) noexcept {
 	
 		conn->Disconnect();
