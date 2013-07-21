@@ -550,6 +550,8 @@ namespace MCPP {
 			//	be populated before this function returns.
 			SmartPointer<ColumnContainer> load (ColumnID, bool);
 			inline bool set_block (BlockID, Block, SmartPointer<ColumnContainer>);
+			inline void client_load (SmartPointer<Client>, ColumnID, const Column *);
+			inline void client_unload (SmartPointer<Client>, ColumnID);
 			
 			
 		public:
@@ -589,6 +591,67 @@ namespace MCPP {
 			 *	allow it.
 			 */
 			Event<bool (BlockID, Block)> OnSet;
+			/**
+			 *	An event invoked whenever a column is loaded.
+			 *
+			 *	For the purposes of this event, "loaded" means
+			 *	that the chunk is either:
+			 *
+			 *	1.	Loaded from the backing store in a populated-
+			 *		state.
+			 *	2.	Populated.
+			 *
+			 *	Do not attempt to set blocks or otherwise interact
+			 *	with the world in response to this event.  Doing
+			 *	so will cause a deadlock.
+			 *
+			 *	<B>Parameters:</B>
+			 *
+			 *	1.	The ID of the column which is being loaded.
+			 */
+			Event<void (ColumnID)> OnLoad;
+			/**
+			 *	An event invoked whenever a column is unloaded.
+			 *
+			 *	For the purposes of this event, "unloaded" means
+			 *	that the chunk is populated and removed from the
+			 *	world and saved.
+			 *
+			 *	Do not attempt to set blocks or otherwise interact
+			 *	with the world in response to this event.  Doing so
+			 *	will cause a deadlock.
+			 *
+			 *	<B>Parameters:</B>
+			 *
+			 *	1.	The ID of the column which is being unloaded.
+			 */
+			Event<void (ColumnID)> OnUnload;
+			/**
+			 *	An event invoked whenever a column is added to
+			 *	a client.
+			 *
+			 *	This event shall be invoked after the appropriate
+			 *	packet has been sent to the client.
+			 *
+			 *	<B>Parameters:</B>
+			 *
+			 *	1.	The ID of the column being added.
+			 *	2.	The client the column is being added to.
+			 */
+			Event<void (ColumnID, SmartPointer<Client>)> OnAdd;
+			/**
+			 *	An event invoked whenever a column is removed from
+			 *	a client.
+			 *
+			 *	This event shall be invoked before the appropriate
+			 *	packet is sent to the client.
+			 *
+			 *	<B>Parameters:</B>
+			 *
+			 *	1.	The ID of the column being removed.
+			 *	2.	The client the column is being removed from.
+			 */
+			Event<void (ColumnID, SmartPointer<Client>)> OnRemove;
 		
 		
 			/**

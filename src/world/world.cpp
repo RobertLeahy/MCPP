@@ -66,7 +66,7 @@ namespace MCPP {
 	}
 	
 	
-	static inline void client_load (SmartPointer<Client> client, ColumnID id, const Column * column) {
+	inline void WorldContainer::client_load (SmartPointer<Client> client, ColumnID id, const Column * column) {
 	
 		typedef PacketTypeMap<0x33> pt;
 		
@@ -78,11 +78,15 @@ namespace MCPP {
 		packet.Retrieve<pt,2>()=column;
 		
 		client->Send(packet);
+		
+		OnAdd(id,client);
 	
 	}
 	
 	
-	static inline void client_unload (SmartPointer<Client> client, ColumnID id) {
+	inline void WorldContainer::client_unload (SmartPointer<Client> client, ColumnID id) {
+	
+		OnRemove(id,client);
 	
 		typedef PacketTypeMap<0x33> pt;
 		
@@ -448,6 +452,8 @@ namespace MCPP {
 				&column->Storage
 			);
 			
+			if (loaded && column->Storage.Populated) OnLoad(id);
+			
 			timer.Stop();
 			
 			if (loaded) {
@@ -587,6 +593,20 @@ namespace MCPP {
 				
 				//	Wake all waiting threads
 				column->Wait.WakeAll();
+				
+				//	Fire event
+				try {
+				
+					OnLoad(id);
+					
+				} catch (...) {
+				
+					column->Lock.Release();
+					
+					throw;
+				
+				}
+				
 				column->Lock.Release();
 			
 			}
@@ -1054,6 +1074,20 @@ namespace MCPP {
 							(pair.second->Interested==0) &&
 							!pair.second->Dirty
 						) world.erase(pair.first);
+						
+						//	Fire event
+						if (pair.second->Storage.Populated) try {
+						
+							OnUnload(pair.first);
+							
+						} catch (...) {
+						
+							pair.second->Lock.Release();
+							world_lock.Release();
+							
+							throw;
+						
+						}
 						
 						pair.second->Lock.Release();
 						world_lock.Release();
