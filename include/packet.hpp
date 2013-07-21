@@ -458,6 +458,10 @@ namespace MCPP {
 		
 		
 			Vector<TItem> Payload;
+		
+		
+			PacketArray () = default;
+			PacketArray (Vector<TItem> vec) noexcept : Payload(std::move(vec)) {	}
 	
 	
 	};
@@ -738,7 +742,7 @@ namespace MCPP {
 				//	representing the number of
 				//	characters in the string
 				PacketHelper<Int16>::ToBytes(
-					Int16(SafeWord(obj.Count())),
+					Int16(SafeWord(obj.Size())),
 					buffer
 				);
 				
@@ -1202,13 +1206,7 @@ namespace MCPP {
 	
 	
 	template <>
-	class PacketHelper<Vector<SmartPointer<Chunk>>> {
-	
-	
-		private:
-		
-		
-			static const Word max_chunks=16;
+	class PacketHelper<const Column *> {
 	
 	
 		public:
@@ -1217,331 +1215,7 @@ namespace MCPP {
 			static const bool Trivial=false;
 			
 			
-			static Word Size (const Vector<SmartPointer<Chunk>> & obj) {
-			
-				//	Iterate over the chunks and sum up their
-				//	sizes
-				SafeWord size=0;
-				for (
-					Word i=0;
-					(i<obj.Count()) &&
-					(i<max_chunks);
-					++i
-				) {
-				
-					const auto & chunk=obj[i];
-					
-					//	Check for an empty
-					//	chunk
-					if (!(
-						(chunk==nullptr) ||
-						(chunk->Count()==0)
-					)) {
-					
-						//	Add size of this chunk
-						size+=SafeWord(DeflateBound(chunk->Count()));
-					
-					}
-				
-				}
-				
-				//	Add size of elements always sent
-				size+=SafeWord(
-					sizeof(bool)+	//	Ground-up continuous
-					sizeof(UInt16)+	//	Primary bit map
-					sizeof(UInt16)+	//	"Add" bit map
-					sizeof(Int32)	//	Compressed chunk data size
-				);
-				
-				//	Return
-				return Word(size);
-			
-			}
-			
-			
-			static void ToBytes (const Vector<SmartPointer<Chunk>> & obj, Vector<Byte> & buffer) {
-			
-				//	The bitmaps and compressed size
-				//	have to be added to the buffer
-				//	after the compressed data, which
-				//	means that ordinarily we'd have
-				//	to buffer and copy the compressed
-				//	data in memory -- not good.
-				//
-				//	Instead we'll do some magic with
-				//	the underlying buffer, don't
-				//	try this at home.
-				
-				//	Record the buffer's initial count
-				Word initial_count=buffer.Count();
-				
-				//	Now push the buffer's imagined
-				//	end past where those values would
-				//	go -- the buffer is initialized to
-				//	be big enough to hold this data
-				//	maximally, so this is SAFE
-				buffer.SetCount(
-					buffer.Count()+
-					sizeof(bool)+	//	Ground-up continuous
-					sizeof(UInt16)+	//	Primary bit map
-					sizeof(UInt16)+	//	"Add" bit map
-					sizeof(Int32)	//	Compressed chunk data size
-				);
-			
-				//	Bitmaps
-				UInt16 bitmap=0;
-				UInt16 add_bitmap=0;
-				//	Chunk data size
-				SafeInt<Int32> size=0;
-				
-				//	Iterate over chunks
-				for (
-					Word i=0;
-					(i<obj.Count()) &&
-					(i<max_chunks);
-					++i
-				) {
-				
-					const auto & chunk=obj[i];
-				
-					//	Check to see if the chunk is
-					//	present
-					if (!(
-						(chunk==nullptr) ||
-						(chunk->Count()==0)
-					)) {
-					
-						//	Update bit maps
-						if (chunk->Add()) add_bitmap|=1<<i;
-						bitmap|=1<<i;
-					
-						//	Save count of buffer before
-						//	so we know how much
-						//	data was generated
-						Word initial_count=buffer.Count();
-						
-						//	Compress and add at the
-						//	same time
-						Deflate(chunk->begin(),chunk->end(),&buffer);
-						
-						//	How much data did we add?
-						//	Add to the running total
-						size+=SafeInt<Int32>(
-							Int32(
-								SafeWord(
-									buffer.Count()-initial_count
-								)
-							)
-						);
-					
-					}
-				
-				}
-				
-				//	All chunk data is now compressed and
-				//	in the buffer without time-consuming
-				//	copying.
-				
-				//	Save the current length
-				Word final_count=buffer.Count();
-				
-				//	Now roll back to the count
-				//	we saved
-				buffer.SetCount(initial_count);
-				
-				//	The buffer's end iterator will
-				//	now point at the space where
-				//	the bitmaps and compressed
-				//	data size must go.
-				
-				//	Place the bitmaps, size, and
-				//	ground-up continuous flag in
-				//	the buffer
-				PacketHelper<bool>::ToBytes(
-					(
-						//	If all chunks are present,
-						//	this is true
-						(bitmap==std::numeric_limits<UInt16>::max())
-							?	true
-							//	Otherwise it's true only
-							//	if there are no chunks
-							//	(which means the client
-							//	should unload).
-							:	bitmap==0
-					),
-					buffer
-				);
-				PacketHelper<UInt16>::ToBytes(bitmap,buffer);
-				PacketHelper<UInt16>::ToBytes(add_bitmap,buffer);
-				Int32 unsafe_size=Int32(size);
-				PacketHelper<Int32>::ToBytes(unsafe_size,buffer);
-				
-				//	Now we've filled the area we
-				//	bypassed before, zip back to
-				//	after the compressed data
-				buffer.SetCount(final_count);
-			
-			}
-			
-			
-			static bool FromBytes (const Byte ** begin, const Byte * end, Vector<SmartPointer<Chunk>> * ptr) {
-			
-				//	Decode the leading scalars
-				bool continuous;
-				UInt16 bitmap;
-				UInt16 add_bitmap;
-				Int32 size;
-				if (!(
-					PacketHelper<bool>::FromBytes(begin,end,&continuous) &&
-					PacketHelper<UInt16>::FromBytes(begin,end,&bitmap) &&
-					PacketHelper<UInt16>::FromBytes(begin,end,&add_bitmap) &&
-					PacketHelper<Int32>::FromBytes(begin,end,&size)
-				)) return false;
-				
-				//	Sanity check on the length made
-				//	necessary by the utter stupidity
-				//	of Notch in choosing a signed
-				//	type
-				if (size<0) throw std::runtime_error("Protocol error");
-				
-				//	Do we have enough bytes to
-				//	decompress?
-				if ((end-*begin)<size) return false;
-				
-				//	Decompress
-				Vector<Byte> chunks(Inflate(*begin,*begin+size));
-				
-				//	Advance past chunk
-				*begin+=size;
-				
-				//	We now have all the chunks in
-				//	memory, but how many are there?
-				//
-				//	And how big are they?
-				Word num_chunks=0;
-				Word max_index=0;
-				Word num_add=0;
-				for (Word i=0;i<max_chunks;++i) {
-				
-					//	Does this chunk exist?
-					if ((bitmap&(1<<i))!=0) {
-					
-						//	YES
-						
-						++num_chunks;
-						max_index=i;
-						
-						//	Is there an add array?
-						if ((add_bitmap&(1<<i))!=0) ++num_add;
-					
-					}
-				
-				}
-				
-				//	Now we know how many chunks there are
-				//	and we can determine what the size of
-				//	each chunk is
-				
-				//	We remove the add arrays since each
-				//	chunk is not guaranteed to have one,
-				//	therefore it would cloud the arithmetic
-				Word normalized_count=chunks.Count()-(num_add*16*16*8);
-				
-				//	Check that this in modulo the number
-				//	of blocks per chunk is zero, otherwise
-				//	that's bad data, throw
-				if ((normalized_count%(16*16*16))!=0) throw std::runtime_error("Protocol error");
-				
-				//	Calculate the size of each chunk minus
-				//	the add arrays
-				Word size_of_chunk=normalized_count/(16*16*16);
-				
-				//	There are two possible values for the
-				//	size of a chunk, check for them
-				bool skylight;
-				if (size_of_chunk==16*16*16*2) skylight=false;
-				else if (size_of_chunk==16*16*24*2) skylight=true;
-				else throw std::runtime_error("Protocol error");
-				
-				//	Allocate enough space to hold
-				//	all the chunks
-				new (ptr) Vector<SmartPointer<Chunk>> (max_index+1);
-				
-				try {
-				
-					//	Copy out the whole buffer, dividing it up
-					//	as necessary
-					
-					const Byte * iter=chunks.begin();
-				
-					//	Loop for all chunks
-					for (Word i=0;i<=max_index;++i) {
-					
-						//	Is this chunk present?
-						if ((bitmap&(1<<i))==0) {
-						
-							//	NO
-							
-							//	Create an empty chunk
-							ptr->EmplaceBack();
-						
-						} else {
-						
-							//	YES
-							
-							//	Does it have an add array?
-							bool add_array=(add_bitmap&(1<<i))!=0;
-							
-							Word copy_count=size_of_chunk;
-							
-							if (add_array) copy_count+=16*16*8;
-							
-							Vector<Byte> buffer(copy_count);
-							
-							//	Copy
-							buffer.Add(iter,iter+copy_count);
-							
-							iter+=copy_count;
-							
-							//	Create chunk
-							ptr->EmplaceBack(SmartPointer<Chunk>::Make(
-								std::move(buffer),
-								skylight,
-								add_array
-							));
-						
-						}
-					
-					}
-				
-				} catch (...) {
-				
-					//	Make sure we clean up
-					ptr->~Vector<SmartPointer<Chunk>>();
-					
-					throw;
-				
-				}
-				
-				return true;
-			
-			}
-	
-	
-	};
-	
-	
-	template <>
-	class PacketHelper<SmartPointer<Column>> {
-	
-	
-		public:
-		
-		
-			static const bool Trivial=false;
-			
-			
-			static Word Size (const SmartPointer<Column> & obj) {
+			static Word Size (const Column * obj) {
 			
 				//	Deduce the number of bytes in
 				//	the column
@@ -1552,7 +1226,7 @@ namespace MCPP {
 				//	telling the client to unload,
 				//	so there's actually no compressed
 				//	chunk data
-				if (obj.IsNull()) {
+				if (obj!=nullptr) {
 				
 					//	This is the baseline, 16 chunks
 					//	which are 16x16x16, with 1 byte
@@ -1587,10 +1261,10 @@ namespace MCPP {
 			}
 			
 			
-			static void ToBytes (const SmartPointer<Column> & obj, Vector<Byte> & buffer) {
+			static void ToBytes (const Column * obj, Vector<Byte> & buffer) {
 			
 				//	If there's no chunk, send that
-				if (obj.IsNull()) {
+				if (obj==nullptr) {
 				
 					PacketHelper<bool>::ToBytes(false,buffer);
 					PacketHelper<UInt16>::ToBytes(0,buffer);
@@ -1651,7 +1325,7 @@ namespace MCPP {
 					Deflate(
 						obj->Data,
 						&(obj->Data[len]),
-						buffer
+						&buffer
 					);
 					
 					Word end=buffer.Count();
@@ -1672,12 +1346,148 @@ namespace MCPP {
 			}
 			
 			
-			static bool FromBytes (const Byte **, const Byte *, SmartPointer<Column> *) {
+			static bool FromBytes (const Byte **, const Byte *, const Column **) {
 			
 				//	Should never have to do this,
 				//	this data structure is server=>client
 				//	only.
 				throw std::runtime_error("Protocol error");
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename... Args>
+	class PacketHelper<Tuple<Args...>> {
+	
+	
+		private:
+		
+		
+			template <Word i>
+			constexpr static inline typename std::enable_if<
+				i>=sizeof...(Args),
+				Word
+			>::type size (const Tuple<Args...> &) {
+			
+				return 0;
+			
+			}
+			
+			
+			template <Word i>
+			static inline typename std::enable_if<
+				i<sizeof...(Args),
+				Word
+			>::type size (const Tuple<Args...> & obj) {
+			
+				SafeWord recurse(
+					size<i+1>(obj)
+				);
+				
+				SafeWord curr(
+					PacketHelper<
+						typename std::decay<
+							decltype(
+								obj.template Item<i>()
+							)
+						>::type
+					>::Size(
+						obj.template Item<i>()
+					)
+				);
+				
+				return Word(recurse+curr);
+			
+			}
+			
+			
+			template <Word i>
+			static inline typename std::enable_if<
+				i>=sizeof...(Args)
+			>::type to_bytes (const Tuple<Args...> &, Vector<Byte> &) noexcept {	}
+			
+			
+			template <Word i>
+			static inline typename std::enable_if<
+				i<sizeof...(Args)
+			>::type to_bytes (const Tuple<Args...> & obj, Vector<Byte> & buffer) {
+			
+				PacketHelper<
+					typename std::decay<
+						decltype(
+							obj.template Item<i>()
+						)
+					>::type
+				>::ToBytes(
+					obj.template Item<i>(),
+					buffer
+				);
+				
+				to_bytes<i+1>(obj,buffer);
+			
+			}
+			
+			
+			template <Word i>
+			constexpr static inline typename std::enable_if<
+				i>=sizeof...(Args),
+				bool
+			>::type from_bytes (const Byte **, const Byte *, Tuple<Args...> *) noexcept {
+			
+				return true;
+			
+			}
+			
+			
+			template <Word i>
+			static inline typename std::enable_if<
+				i<sizeof...(Args),
+				bool
+			>::type from_bytes (const Byte ** begin, const Byte * end, Tuple<Args...> * ptr) {
+			
+				if (!PacketHelper<
+					typename std::decay<
+						decltype(
+							ptr->template Item<i>()
+						)
+					>::type
+				>::FromBytes(
+					begin,
+					end,
+					&(ptr->template Item<i>())
+				)) return false;
+				
+				return from_bytes<i+1>(begin,end,ptr);
+			
+			}
+	
+	
+		public:
+		
+		
+			static const bool Trivial=false;
+			
+			
+			static Word Size (const Tuple<Args...> & obj) {
+			
+				return size<0>(obj);
+			
+			}
+			
+			
+			static void ToBytes (const Tuple<Args...> & obj, Vector<Byte> & buffer) {
+			
+				to_bytes<0>(obj,buffer);
+			
+			}
+			
+			
+			static bool FromBytes (const Byte ** begin, const Byte * end, Tuple<Args...> * ptr) {
+			
+				return from_bytes<0>(begin,end,ptr);
 			
 			}
 	
@@ -2092,14 +1902,21 @@ namespace MCPP {
 	template <> class PacketTypeMap<0x29> : public PacketType<0x29,Int32,SByte,SByte,Int16> { };
 	template <> class PacketTypeMap<0x2A> : public PacketType<0x2A,Int32,SByte> { };
 	template <> class PacketTypeMap<0x2B> : public PacketType<0x2B,Single,Int16,Int16> { };
-	//	0x2C
+	template <> class PacketTypeMap<0x2C> : public PacketType<0x2C,PacketArray<Int32,Tuple<String,Double,PacketArray<Int16,Tuple<UInt128,Double,SByte>>>>> {	};
 	//	0x2D
 	//	0x2F
 	//	0x30
 	//	0x31
 	//	0x32
-	template <> class PacketTypeMap<0x33> : public PacketType<0x33,Int32,Int32,SmartPointer<Column>> { };
-	
+	template <> class PacketTypeMap<0x33> : public PacketType<0x33,Int32,Int32,const Column *> { };
+	//	0x34
+	template <> class PacketTypeMap<0x35> : public PacketType<0x35,Int32,Byte,Int32,Int16,Byte> {	};
+	template <> class PacketTypeMap<0x36> : public PacketType<0x36,Int32,Int16,Int32,Byte,Byte,Int16> {	};
+	template <> class PacketTypeMap<0x37> : public PacketType<0x37,Int32,Int32,Int32,Int32,Byte> {	};
+	//	0x38
+	//	0x39
+	//	0x3A
+	//	0x3B
 	template <> class PacketTypeMap<0x3C> : public PacketType<0x3C,Double,Double,Double,Single,PacketArray<Int32,SByte [3]>,Single,Single,Single> {	};
 	template <> class PacketTypeMap<0x3D> : public PacketType<0x3D,Int32,Int32,SByte,Int32,Int32,bool> {	};
 	template <> class PacketTypeMap<0x3E> : public PacketType<0x3E,String,Int32,Int32,Int32,Single,SByte> {	};
@@ -2187,7 +2004,7 @@ namespace MCPP {
 	//	0xFB
 	template <> class PacketTypeMap<0xFC> : public PacketType<0xFC,PacketArray<Int16,Byte>,PacketArray<Int16,Byte>> {	};
 	template <> class PacketTypeMap<0xFD> : public PacketType<0xFD,String,PacketArray<Int16,Byte>,PacketArray<Int16,Byte>> {	};
-	template <> class PacketTypeMap<0xFE> : public PacketType<0xFE,SByte,Byte,String,PacketArray<Int16,Byte>> {	};
+	template <> class PacketTypeMap<0xFE> : public PacketType<0xFE,SByte,Byte,String,Int16,Byte,String,Int32> {	};
 	template <> class PacketTypeMap<0xFF> : public PacketType<0xFF,String> {	};
 	
 	

@@ -11,8 +11,17 @@ namespace MCPP {
 	HTTPRequest::HTTPRequest (
 		CURL * handle,
 		Word max_bytes,
+		const String & url,
 		HTTPStatusStringDone status_string_done
-	) : status_string_done(std::move(status_string_done)), max_bytes(max_bytes), handle(handle) {	}
+	)	:	status_string_done(std::move(status_string_done)),
+			max_bytes(max_bytes),
+			handle(handle),
+			url(UTF8().Encode(url))
+	{
+	
+		this->url.Add(0);
+	
+	}
 	
 	
 	HTTPRequest::~HTTPRequest () noexcept {
@@ -81,7 +90,7 @@ namespace MCPP {
 				
 					try {
 				
-						if (encoding==nullptr) encoding=SmartPointer<Encoding>::Make<UTF8>();
+						if (encoding.IsNull()) encoding=SmartPointer<Encoding>::Make<UTF8>();
 						
 						String decoded(encoding->Decode(buffer.begin(),buffer.end()));
 						
@@ -131,6 +140,13 @@ namespace MCPP {
 		
 		//	Suceed
 		return true;
+	
+	}
+	
+	
+	const Vector<Byte> & HTTPRequest::URL () const noexcept {
+	
+		return url;
 	
 	}
 

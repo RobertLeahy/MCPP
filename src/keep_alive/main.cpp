@@ -16,6 +16,7 @@ static const Word timeout_milliseconds=10000;
 static const Word keep_alive_milliseconds=5000;
 static const String protocol_error("Protocol error");
 static const String ping_timed_out("Ping timed out ({0}ms)");
+static const String keep_alive_pa_key("keepalive");
 
 
 class KeepAliveInfo {
@@ -113,7 +114,7 @@ class KeepAlive : public Module {
 							client->Ping=data.Latency.ElapsedMilliseconds();
 							
 							//	Protocol analysis
-							if (RunningServer->ProtocolAnalysis) {
+							if (RunningServer->IsVerbose(keep_alive_pa_key)) {
 							
 								String log(pa_banner);
 								log << Newline << String::Format(
@@ -172,7 +173,7 @@ class KeepAlive : public Module {
 					bool timed_out=inactive>timeout_milliseconds;
 					
 					//	Protocol analysis
-					if (RunningServer->ProtocolAnalysis) {
+					if (RunningServer->IsVerbose(keep_alive_pa_key)) {
 					
 						String log(pa_banner);
 						log << Newline << String::Format(

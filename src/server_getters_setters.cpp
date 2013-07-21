@@ -39,3 +39,35 @@ String Server::GetMessageOfTheDay () {
 	return *motd;
 
 }
+
+
+static const Regex date_trim(" {2,}");
+static const RegexReplacement date_trim_r(" ");
+String Server::BuildDate () const {
+
+	return date_trim.Replace(
+		String::Format(
+			"{0} {1}",
+			__DATE__,
+			__TIME__
+		),
+		date_trim_r
+	);
+
+}
+
+
+String Server::CompiledWith () const {
+
+	#ifdef __GNUC__
+	return String::Format(
+		"GNU C++ Compiler (g++) {0}.{1}.{2}",
+		__GNUC__,
+		__GNUC_MINOR__,
+		__GNUC_PATCHLEVEL__
+	);
+	#else
+	return "UNKNOWN";
+	#endif
+
+}

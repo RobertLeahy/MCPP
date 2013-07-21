@@ -43,7 +43,16 @@ namespace MCPP {
 	#include "server_getters_setters.cpp"
 
 
-	Server::Server () : Service(service_name), running(false), data(nullptr), ProtocolAnalysis(false), Router(true) {
+	Server::Server () :
+		Service(service_name),
+		running(false),
+		data(nullptr),
+		ProtocolAnalysis(false),
+		Direction(ProtocolDirection::Both),
+		LogAllPackets(false),
+		VerboseAll(false),
+		Router(true)
+	{
 		
 		OnReceive=[=] (SmartPointer<Connection> conn, Vector<Byte> & buffer) {
 		
@@ -93,6 +102,19 @@ namespace MCPP {
 	
 	}
 	
+	
+	inline void Server::cleanup_events () noexcept {
+	
+		Router.Clear();
+		OnAccept.Clear();
+		OnConnect.Clear();
+		OnDisconnect.Clear();
+		OnLog.Clear();
+		OnLogin.Clear();
+		OnInstall.Clear();
+		OnReceive=ReceiveCallback();
+	
+	}
 	
 	
 	void Server::StartInteractive (const Vector<const String> & args) {
@@ -221,6 +243,8 @@ namespace MCPP {
 					connections.Destroy();
 					pool.Destroy();
 					
+					cleanup_events();
+					
 					throw;
 				
 				}
@@ -305,14 +329,7 @@ namespace MCPP {
 			//	Clear all events et cetera
 			//	that might have module resources
 			//	loaded into them
-			Router.Clear();
-			OnAccept.Clear();
-			OnConnect.Clear();
-			OnDisconnect.Clear();
-			OnLog.Clear();
-			OnLogin.Clear();
-			OnInstall.Clear();
-			OnReceive=ReceiveCallback();
+			cleanup_events();
 			
 			//	Clean up data provider
 			delete data;
@@ -357,6 +374,47 @@ namespace MCPP {
 		
 		//	ABORT
 		std::terminate();
+	
+	}
+	
+	
+	bool Server::LogPacket (Byte type, ProtocolDirection direction) const noexcept {
+	
+		return (
+			//	Protocol analysis has to be on
+			ProtocolAnalysis &&
+			(
+				//	Have to be analyzing traffic in
+				//	the appropriate direction...
+				(Direction==direction) ||
+				//	...or both directions
+				(Direction==ProtocolDirection::Both)
+			) &&
+			(
+				//	We have to either be logging all
+				//	packets...
+				LogAllPackets ||
+				//	...or this packet specifically
+				(LoggedPackets.find(type)!=LoggedPackets.end())
+			)
+		);
+	
+	}
+	
+	
+	bool Server::IsVerbose (const String & key) const noexcept {
+	
+		return (
+			//	Protocol analysis has to be on
+			ProtocolAnalysis &&
+			(
+				//	Either all modules/components are
+				//	verbose...
+				VerboseAll ||
+				//	...or this one specifically is
+				(Verbose.find(key)!=Verbose.end())
+			)
+		);
 	
 	}
 

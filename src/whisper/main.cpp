@@ -72,13 +72,13 @@ class Whisper : public Module {
 						
 						ChatMessage error;
 						error.AddRecipients(client);
-						error.Message.EmplaceBack(ChatColour::Red);
+						error.Message.EmplaceBack(ChatStyle::Red);
 						error.Message.EmplaceBack(ChatFormat::Label);
 						error.Message.EmplaceBack(ChatFormat::LabelSeparator);
 						error.Message.EmplaceBack(" User ");
 						error.Message.EmplaceBack(ChatStyle::Bold);
 						error.Message.EmplaceBack(match[1].Value());
-						error.Message.EmplaceBack(ChatFormat::PopStyle);
+						error.Message.EmplaceBack(ChatFormat::Pop);
 						error.Message.EmplaceBack(" does not exist");
 						
 						//	Send

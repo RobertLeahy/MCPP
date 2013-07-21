@@ -39,6 +39,11 @@ namespace MCPP {
 			 *	otherwise.
 			 */
 			bool Add;
+			/**
+			 *	\em true if this column has been populated,
+			 *	\em false otherwise.
+			 */
+			bool Populated;
 	
 	
 	};

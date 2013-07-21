@@ -64,7 +64,7 @@ class BanInfo : public Module {
 					
 						ChatMessage message;
 						message.AddRecipients(client);
-						message	<<	ChatColour::Red
+						message	<<	ChatStyle::Red
 								<<	ChatFormat::Label
 								<<	ChatFormat::LabelSeparator
 								<<	not_an_op_error;
@@ -138,16 +138,16 @@ class BanInfo : public Module {
 						ChatMessage message;
 						message.AddRecipients(client);
 						message	<<	ChatStyle::Bold
-								<<	ChatColour::Yellow
+								<<	ChatStyle::Yellow
 								<<	info_banner
-								<<	ChatFormat::PopColour
+								<<	ChatFormat::Pop
 								<<	Newline
 								<<	bans_banner
-								<<	ChatFormat::PopStyle;
+								<<	ChatFormat::Pop;
 						
 						if (banlist.Users.Count()!=0) {
 						
-							message << ChatStyle::Bold << Newline << users_banner << ChatFormat::PopStyle;
+							message << ChatStyle::Bold << Newline << users_banner << ChatFormat::Pop;
 							
 							for (auto & s : banlist.Users) message << Newline << s;
 						
@@ -155,7 +155,7 @@ class BanInfo : public Module {
 						
 						if (banlist.IPs.Count()!=0) {
 						
-							message << ChatStyle::Bold << Newline << ips_banner << ChatFormat::PopStyle;
+							message << ChatStyle::Bold << Newline << ips_banner << ChatFormat::Pop;
 							
 							for (auto & ip : banlist.IPs) message << Newline << String(ip);
 						
@@ -163,7 +163,7 @@ class BanInfo : public Module {
 						
 						if (banlist.Ranges.Count()!=0) {
 						
-							message << ChatStyle::Bold << Newline << ranges_banner << ChatFormat::PopStyle;
+							message << ChatStyle::Bold << Newline << ranges_banner << ChatFormat::Pop;
 							
 							for (auto & t : banlist.Ranges) {
 							

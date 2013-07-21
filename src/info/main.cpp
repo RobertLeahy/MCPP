@@ -3,6 +3,15 @@
 #include <op/op.hpp>
 #include <utility>
 #include <algorithm>
+#include <system_error>
+#include <cstring>
+
+
+#ifdef ENVIRONMENT_WINDOWS
+#include "windows.cpp"
+#else
+#include "posix.cpp"
+#endif
 
 
 static const Word priority=2;
@@ -15,6 +24,8 @@ static const String pool_arg("pool");
 static const String client_arg("clients");
 static const String ops_arg("ops");
 static const String dp_arg("dp");
+static const String os_arg("os");
+static const String mcpp_arg("mcpp");
 static const String info_banner("====INFORMATION====");
 static const String info_separator(", ");
 static const String yes("Yes");
@@ -56,6 +67,15 @@ static const String ops_banner("SERVER OPERATORS:");
 static const String dp_banner("DATA PROVIDER:");
 
 
+//	OS INFO
+static const String os_banner("OPERATING SYSTEM:");
+
+
+//	MINECRAFT++ INFO
+static const String mcpp_banner("MINECRAFT++:");
+static const String compiled_by_template("Compiled by {0} on {1}");
+
+
 class Info : public Module {
 
 
@@ -81,15 +101,15 @@ class Info : public Module {
 			);
 			
 			message	<<	ChatStyle::Bold
-					<<	ChatColour::Yellow
+					<<	ChatStyle::Yellow
 					<<	info_banner
-					<<	ChatFormat::PopColour
+					<<	ChatFormat::Pop
 					<<	Newline
 					<<	dp_banner
 					<<	Newline
 					<<	info.Item<0>()
 					<<	":"
-					<<	ChatFormat::PopStyle;
+					<<	ChatFormat::Pop;
 					
 			for (const auto & t : info.Item<1>()) {
 			
@@ -97,7 +117,7 @@ class Info : public Module {
 						<<	ChatStyle::Bold
 						<<	t.Item<0>()
 						<<	": "
-						<<	ChatFormat::PopStyle
+						<<	ChatFormat::Pop
 						<<	t.Item<1>();
 			
 			}
@@ -114,14 +134,14 @@ class Info : public Module {
 			
 			ChatMessage message;
 			message	<<	ChatStyle::Bold
-					<<	ChatColour::Yellow
+					<<	ChatStyle::Yellow
 					<<	info_banner
-					<<	ChatFormat::PopColour
+					<<	ChatFormat::Pop
 					<<	Newline
 					//	THREAD POOL STATISTICS
 					<<	pool_stats
 					<<	": "
-					<<	ChatFormat::PopStyle
+					<<	ChatFormat::Pop
 					//	Running tasks
 					<<	pool_running
 					<<	": "
@@ -149,7 +169,7 @@ class Info : public Module {
 								i
 							)
 						<<	": "
-						<<	ChatFormat::PopStyle
+						<<	ChatFormat::Pop
 						//	Tasks executed
 						<<	worker_executed
 						<<	": "
@@ -178,6 +198,46 @@ class Info : public Module {
 			
 			}
 			
+			return message;
+		
+		}
+		
+		
+		static ChatMessage os_info () {
+		
+			ChatMessage message;
+			message <<	ChatStyle::Bold
+					<<	ChatStyle::Yellow
+					<<	info_banner
+					<<	ChatFormat::Pop
+					<<	Newline
+					<<	os_banner
+					<<	ChatFormat::Pop
+					<<	Newline
+					<<	get_os_string();
+					
+			return message;
+		
+		}
+		
+		
+		static ChatMessage mcpp_info () {
+		
+			ChatMessage message;
+			message <<	ChatStyle::Bold
+					<<	ChatStyle::Yellow
+					<<	info_banner
+					<<	ChatFormat::Pop
+					<<	Newline
+					<<	mcpp_banner
+					<<	ChatFormat::Pop
+					<<	Newline
+					<<	String::Format(
+							compiled_by_template,
+							RunningServer->CompiledWith(),
+							RunningServer->BuildDate()
+						);
+						
 			return message;
 		
 		}
@@ -229,12 +289,12 @@ class Info : public Module {
 		
 			ChatMessage message;
 			message	<<	ChatStyle::Bold
-					<<	ChatColour::Yellow
+					<<	ChatStyle::Yellow
 					<<	info_banner
-					<<	ChatFormat::PopColour
+					<<	ChatFormat::Pop
 					<<	Newline
 					<<	clients_banner
-					<<	ChatFormat::PopStyle;
+					<<	ChatFormat::Pop;
 					
 			RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
 			
@@ -248,7 +308,7 @@ class Info : public Module {
 								client->Port()
 							)
 						<<	": "
-						<<	ChatFormat::PopStyle
+						<<	ChatFormat::Pop
 						//	Authenticated?
 						<<	client_authenticated
 						<<	": "
@@ -295,12 +355,12 @@ class Info : public Module {
 			//	Build it
 			ChatMessage message;
 			message	<<	ChatStyle::Bold
-					<<	ChatColour::Yellow
+					<<	ChatStyle::Yellow
 					<<	info_banner
-					<<	ChatFormat::PopColour
+					<<	ChatFormat::Pop
 					<<	Newline
 					<<	ops_banner
-					<<	ChatFormat::PopStyle;
+					<<	ChatFormat::Pop;
 					
 			for (auto & s : ops) message << Newline << s;
 			
@@ -351,7 +411,7 @@ class Info : public Module {
 					
 						ChatMessage message;
 						message.AddRecipients(client);
-						message	<<	ChatColour::Red
+						message	<<	ChatStyle::Red
 								<<	ChatFormat::Label
 								<<	ChatFormat::LabelSeparator
 								<<	not_an_op_error;
@@ -385,6 +445,14 @@ class Info : public Module {
 					} else if (arg==dp_arg) {
 					
 						message=dp_info();
+					
+					} else if (arg==os_arg) {
+					
+						message=os_info();
+					
+					} else if (arg==mcpp_arg) {
+					
+						message=mcpp_info();
 					
 					}
 					

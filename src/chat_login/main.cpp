@@ -49,10 +49,10 @@ namespace MCPP {
 				RunningServer->OnLogin.Add([] (SmartPointer<Client> client) {
 				
 					ChatMessage message;
+					message.Message.EmplaceBack(ChatStyle::BrightGreen);
 					message.Message.EmplaceBack(ChatStyle::Bold);
-					message.Message.EmplaceBack(ChatColour::BrightGreen);
 					message.Message.EmplaceBack(client->GetUsername());
-					message.Message.EmplaceBack(ChatFormat::PopStyle);
+					message.Message.EmplaceBack(ChatFormat::Pop);
 					message.Message.EmplaceBack(online);
 					
 					Chat->Send(message);
@@ -68,10 +68,10 @@ namespace MCPP {
 					if (client->GetState()==ClientState::Authenticated) {
 					
 						ChatMessage message;
+						message.Message.EmplaceBack(ChatStyle::Red);
 						message.Message.EmplaceBack(ChatStyle::Bold);
-						message.Message.EmplaceBack(ChatColour::Red);
 						message.Message.EmplaceBack(client->GetUsername());
-						message.Message.EmplaceBack(ChatFormat::PopStyle);
+						message.Message.EmplaceBack(ChatFormat::Pop);
 						message.Message.EmplaceBack(offline);
 						
 						//	Add reason if there was
@@ -82,7 +82,7 @@ namespace MCPP {
 							message.Message.EmplaceBack(start_reason);
 							message.Message.EmplaceBack(ChatStyle::Bold);
 							message.Message.EmplaceBack(reason);
-							message.Message.EmplaceBack(ChatFormat::PopStyle);
+							message.Message.EmplaceBack(ChatFormat::Pop);
 							message.Message.EmplaceBack(end_reason);
 						
 						}

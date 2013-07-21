@@ -1,0 +1,163 @@
+DEL=del /S /Q
+
+
+INC_CURL=-I "G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/include"
+INC_OPENSSL=-I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include"
+INC_ZLIB=-I "G:/Downloads/zlib128-dll/include/"
+INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
+OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
+#OPTIMIZATIONS=-O3
+OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_ZLIB) $(INC_OPENSSL) $(INC_MYSQL)
+GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
+
+
+HEADERS=include/aes_128_cfb_8.hpp include/chunk.hpp include/client.hpp include/common.hpp include/compression.hpp include/data_provider.hpp include/event.hpp include/hash.hpp include/metadata.hpp include/mod.hpp include/mod_loader.hpp include/nbt.hpp include/network.hpp include/packet.hpp include/packet_router.hpp include/random.hpp include/rsa_key.hpp include/server.hpp include/sha1.hpp include/thread_pool.hpp include/typedefs.hpp include/column.hpp
+RLEAHYLIB=include/rleahylib/rleahylib.hpp
+
+
+#	DEFAULT
+
+.PHONY: all
+all: mcpp front_end mods
+
+
+.PHONY: clean
+clean:
+	-$(DEL) obj\*
+	
+
+.PHONY: cleanall
+cleanall:
+	-$(DEL) bin\*
+	
+	
+#	LIBRARIES
+
+bin/libmysql.dll:
+	mysql.bat
+	
+bin/rleahy_lib.dll:
+	rleahy_lib.bat
+	
+include/rleahylib/rleahylib.hpp:
+	rleahy_lib.bat
+	
+bin/ssleay32.dll:
+	ssleay.bat
+	
+bin/libcurl.dll:
+	curl.bat
+	
+bin/zlib1.dll:
+	zlib.bat
+	
+	
+#	MCPP MAIN
+
+.PHONY: mcpp
+mcpp: bin/mcpp.dll
+
+bin/mcpp.dll: \
+obj/server.o \
+obj/mod.o \
+obj/nbt.o \
+obj/network.o \
+obj/packet.o \
+obj/packet_factory.o \
+obj/packet_router.o \
+obj/compression.o \
+obj/rsa_key.o \
+obj/aes_128_cfb_8.o \
+obj/chunk.o \
+obj/metadata.o \
+obj/client.o \
+obj/client_list.o \
+obj/url.o \
+obj/http_handler.o \
+obj/http_request.o \
+obj/mod_loader.o \
+obj/random.o \
+obj/thread_pool.o \
+obj/thread_pool_handle.o \
+obj/sha1.o \
+obj/new_delete.o \
+| bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ obj/server.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
+	
+obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp include/server.hpp include/http_handler.hpp include/data_provider.hpp include/thread_pool.hpp $(RLEAHYLIB)
+	$(GPP) src/server.cpp -c -o $@
+
+obj/mod.o: src/mod.cpp include/mod.hpp $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+obj/client.o: src/client.cpp $(HEADERS) $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+obj/client_list.o: src/client_list.cpp $(HEADERS) $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+obj/mod_loader.o: src/mod_loader.cpp include/mod.hpp include/typedefs.hpp $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+obj/new_delete.o: src/new_delete.cpp $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+
+	
+#	MINECRAFT DATA FORMAT INTEROP
+	
+obj/nbt.o: src/nbt.cpp include/nbt.hpp $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+obj/compression.o: src/compression.cpp include/compression.hpp $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+obj/chunk.o: src/chunk.cpp include/chunk.hpp $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+obj/metadata.o: src/metadata.cpp include/metadata.hpp $(RLEAHYLIB)
+	$(GPP) $? -c -o $@
+	
+	
+#	NETWORK STACK
+
+obj/network.o: src/network_windows.cpp include/network.hpp include/thread_pool.hpp src/network.cpp $(RLEAHYLIB)
+	$(GPP) src/network.cpp -c -o $@
+	
+
+#	MINECRAFT COMMUNICATIONS
+	
+obj/packet.o: src/packet.cpp src/protocol_analysis.cpp include/compression.hpp include/metadata.hpp include/chunk.hpp include/column.hpp $(RLEAHYLIB)
+	$(GPP) src/packet.cpp -c -o $@
+	
+obj/packet_factory.o: src/packet_factory.cpp
+	$(GPP) $? -c -o $@
+	
+obj/packet_router.o: src/packet_router.cpp
+	$(GPP) $? -c -o $@
+	
+obj/rsa_key.o: src/rsa_key.cpp
+	$(GPP) $? -c -o $@
+	
+obj/aes_128_cfb_8.o: src/aes_128_cfb_8.cpp
+	$(GPP) $? -c -o $@
+	
+obj/sha1.o: src/sha1.cpp
+	$(GPP) $? -c -o $@
+	
+
+#	HTTP
+
+obj/url.o: src/url.cpp
+	$(GPP) $? -c -o $@
+	
+obj/http_handler.o: src/http_handler.cpp src/http_handler_callbacks.cpp
+	$(GPP) src/http_handler.cpp -c -o $@
+	
+obj/http_request.o: src/http_request.cpp
+	$(GPP) $? -c -o $@
+	
+	
+#	RANDOM NUMBER GENERATION
+
+obj/random.o: src/random.cpp
+	$(GPP) $? -c -o $@

@@ -12,15 +12,20 @@
 
 
 namespace MCPP {
-
-
-	/**
-	 *	The different colours that a
-	 *	sequence in a chat message
-	 *	may be.
-	 */
-	enum class ChatColour : ASCIIChar {
 	
+	
+	/**
+	 *	The different styles that a
+	 *	sequence in a chat message may
+	 *	have.
+	 */
+	enum class ChatStyle : ASCIIChar {
+	
+		Random='k',
+		Bold='l',
+		Strikethrough='m',
+		Underline='n',
+		Italic='o',
 		Black='0',
 		DarkBlue='1',
 		DarkGreen='2',
@@ -36,25 +41,7 @@ namespace MCPP {
 		Red='c',
 		Pink='d',
 		Yellow='e',
-		White='f',
-		None='\0'
-	
-	};
-	
-	
-	/**
-	 *	The different styles that a
-	 *	sequence in a chat message may
-	 *	have.
-	 */
-	enum class ChatStyle : ASCIIChar {
-	
-		Random='k',
-		Bold='l',
-		Strikethrough='m',
-		Underlined='n',
-		Italic='o',
-		Default='r'
+		White='f'
 	
 	};
 	
@@ -65,19 +52,14 @@ namespace MCPP {
 	 */
 	enum class ChatFormat {
 	
-		PushStyle,		/**<	Pushes a style onto the stack.	*/
-		PopStyle,		/**<	Pops a style off the stack.	*/
-		PushColour,		/**<	Pushes a colour onto the stack.	*/
-		PopColour,		/**<	Pops a colour off the stack.	*/
+		Push,			/**<	Pushes a style onto the stack.	*/
+		Pop,			/**<	Pops a style off the stack.	*/
 		Label,			/**<	Inserts an automatically generated label for this message.	*/
 		Sender,			/**<	Inserts the sender's username.	*/
 		Recipients,		/**<	Inserts a comma-separated list of recipients.	*/
 		Segment,		/**<	Inserts a message segment.	*/
 		LabelSeparator,	/**<	Inserts the label separator.	*/
-		DefaultStyle,	/**<	Pushes the default style for this message type onto the stack.	*/
-		DefaultColour,	/**<	Pushes the default colour for this message type onto the stack.	*/
 		LabelStyle,		/**<	Pushes the default label style onto the stack.	*/
-		LabelColour		/**<	Pushes the default label colour onte the stack.	*/
 	
 	};
 	
@@ -107,15 +89,6 @@ namespace MCPP {
 			ChatToken & operator = (ChatToken && other) noexcept;
 		
 		
-			/**
-			 *	Creates a new ChatToken which pushes
-			 *	a colour onto the stack.
-			 *
-			 *	\param [in] colour
-			 *		The colour to be pushed onto the
-			 *		stack.
-			 */
-			ChatToken (ChatColour colour) noexcept;
 			/**
 			 *	Creates a new ChatToken which pushes
 			 *	a style onto the stack.
@@ -162,11 +135,6 @@ namespace MCPP {
 				 *	command, if it has one.
 				 */
 				String Segment;
-				/**
-				 *	The colour associated with this
-				 *	command, if it has one.
-				 */
-				ChatColour Colour;
 				/**
 				 *	The style associated with this
 				 *	command, if it has one.

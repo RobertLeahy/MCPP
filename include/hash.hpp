@@ -140,6 +140,25 @@ namespace std {
 	
 	
 	};
+	
+	
+	template <typename T>
+	struct hash<SmartPointer<T>> {
+	
+	
+		public:
+		
+		
+			size_t operator () (const SmartPointer<T> & sp) const noexcept {
+			
+				hash<const T *> hasher;
+				
+				return hasher(static_cast<const T *>(sp));
+			
+			}
+	
+	
+	};
 
 
 }

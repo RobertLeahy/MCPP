@@ -12,130 +12,26 @@
 
 
 namespace MCPP {
-
-
-	/**
-	 *	The type of callback that shall be invoked
-	 *	when the chunk loading process is complete.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	X co-ordinate of the chunk.
-	 *	1.	Y co-ordinate of the chunk.
-	 *	2.	Z co-ordinate of the chunk.
-	 *	3.	The dimension in which the chunk
-	 *		resides.
-	 *	4.	\em true if the chunk was loaded
-	 *		successfully and the provided
-	 *		buffer should be considered,
-	 *		\em false otherwise.
-	 *	5.	A buffer of bytes representing the
-	 *		chunk (if it exists).
-	 *	6.	A boolean value indicating whether
-	 *		the chunk has been populated or
-	 *		not.
-	 */
-	typedef std::function<void (Int32, Int32, Int32, SByte, bool, Nullable<Vector<Byte>>, Nullable<bool>)> ChunkLoad;
-	/**
-	 *	The type of callback that shall be invoked
-	 *	when the chunk saving process begins.
-	 *
-	 *	Chunk saving will occur immediately after this
-	 *	function returns \em true, invocation of
-	 *	this function means that there is a thread
-	 *	available and with all required locks to
-	 *	write the chunk to the datastore.  This function
-	 *	should ensure the pointers passed to
-	 *	DataProvider::SaveChunk are still valid, and
-	 *	that no other threads will attempt to modify
-	 *	the chunk during the saving process, and then
-	 *	return.
-	 *
-	 *	If this function returns \em false the chunk
-	 *	saving process shall be aborted and the
-	 *	provided pointers are guaranteed to have
-	 *	never been dereferenced.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	X co-ordinate of the chunk.
-	 *	1.	Y co-ordinate of the chunk.
-	 *	2.	Z co-ordinate of the chunk.
-	 *	3.	The dimension in which the
-	 *		chunk resides.
-	 *
-	 *	<B>Return Value:</B>
-	 *
-	 *	\em true if the data provider should save the
-	 *	chunk to the backing store through the begin
-	 *	and end iterators provided to the DataProvider::SaveChunk
-	 *	call, \em false if the data provider should
-	 *	abort at once.
-	 *
-	 *	If the operation is aborted the complete callback
-	 *	is never invoked.
-	 */
-	typedef std::function<bool (Int32, Int32, Int32, SByte)> ChunkSaveBegin;
-	/**
-	 *	The type of callback that shall be invoked
-	 *	when the chunk saving process is complete.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	X co-ordinate of the chunk.
-	 *	1.	Y co-ordinate of the chunk.
-	 *	2.	Z co-ordinate of the chunk.
-	 *	3.	The dimension in which the
-	 *		chunk resides.
-	 *	4.	\em true if the chunk was loaded
-	 *		successfully, \em false
-	 *		otherwise.
-	 */
-	typedef std::function<void (Int32, Int32, Int32, SByte, bool)> ChunkSaveEnd;
 	
 	
-	/**
-	 *	The type of callback that shall be invoked
-	 *	when the column loading process is complete.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	1.	X-coordinate of the column.
-	 *	2.	Z-coordinate of the column.
-	 *	3.	Dimension of the column.
-	 *	4.	\em true if the chunk was loaded
-	 *		successfully, \em false otherwise.
-	 *		If \em false the value of all
-	 *		following arguments is unspecified.
-	 *	5.	\em true if the chunk exists and
-	 *		was loaded, \em false otherwise.
-	 *	6.	The column.  If parameter #5 is \em false
-	 *		this shall be a smart pointer to an
-	 *		uninitialized chunk.
-	 *	7.	\em true if the column is flagged as
-	 *		populated, \em false otherwise.
-	 */
-	typedef std::function<void (Int32, Int32, SByte, bool, bool, SmartPointer<Column>, bool)> ColumnLoad;
 	/**
 	 *	The type of callback that shall be invoked when
 	 *	the column saving process is about to begin.
 	 *
 	 *	When this callback is invoked it means that the
 	 *	data provider is about to save the column to the
-	 *	backing store.  Therefore whatever locks are
-	 *	required should be acquired, and then the relevant
-	 *	data should be returned.
+	 *	backing store.
+	 *
+	 *	If \em false is returned, the chunk saving process
+	 *	shall be immediately aborted.
 	 *
 	 *	<B>Parameters:</B>
 	 *
 	 *	1.	X-coordinate of the column.
 	 *	2.	Y-coordinate of the column.
 	 *	3.	Dimension of the column.
-	 *	4.	A pointer to a boolean value that determines
-	 *		whether or not the column will be saved flagged
-	 *		as populated.
 	 */
-	typedef std::function<SmartPointer<Column> (Int32, Int32, SByte, bool *)> ColumnSaveBegin;
+	typedef std::function<bool (Int32, Int32, SByte)> ColumnSaveBegin;
 	/**
 	 *	The type of callback that shall be invoked when the
 	 *	column saving process completes.
@@ -315,134 +211,8 @@ namespace MCPP {
 			virtual void InsertValue (const String & key, const String & value) = 0;
 			
 			
-			/**
-			 *	Deletes all key/value pairs with the given
-			 *	key and the given value.
-			 *
-			 *	\param [in] key
-			 *		The key to delete.
-			 *	\param [in] value
-			 *		The value to delete.
-			 */
-			//virtual void DeletePairs (const String & key, const String & value) = 0;
-			/**
-			 *	Deletes all values associated with the
-			 *	given key.
-			 *
-			 *	\param [in] key
-			 *		The key to delete.
-			 */
-			//virtual void DeleteKey (const String & key) = 0;
-			/**
-			 *	Sets the value of a certain pair or pairs.
-			 *
-			 *	\param [in] key
-			 *		The key.
-			 *	\param [in] curr
-			 *		The current value of the key/value pair
-			 *		being targeted.
-			 *	\param [in] value
-			 *		The new value to replace \em curr with.
-			 */
-			//virtual void SetValues (const String & key, const String & curr, const String & value) = 0;
-			
-			
-			/**
-			 *	Starts the process of retrieving a chunk
-			 *	from the backing store.
-			 *
-			 *	Whether this function returns immediately
-			 *	and loads the chunk from the backing store
-			 *	in the background, or loads the chunk
-			 *	synchronously is implementation-defined,
-			 *	and should not be relied upon.
-			 *
-			 *	\param [in] x
-			 *		The x-coordinate of the chunk.
-			 *		This is the displacement of the
-			 *		target chunk from the origin in
-			 *		chunks, and is unrelated to blocks.
-			 *	\param [in] y
-			 *		The y-coordinate of the chunk.
-			 *		This is the displacement of the
-			 *		target chunk from the origin in
-			 *		chunks, and is unrelated to blocks.
-			 *	\param [in] z
-			 *		The z-coordinate of the chunk.
-			 *		This is the displacement of the
-			 *		target chunk from the origin in
-			 *		chunks, and is unrelated to blocks.
-			 *	\param [in] dimension
-			 *		The dimension in which the target
-			 *		chunk resides.
-			 *	\param [in] callback
-			 *		A function to be invoked once the
-			 *		chunk has been loaded.
-			 */
-			//virtual void LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, ChunkLoad callback) = 0;
-			/**
-			 *	Starts the process of saving a chunk to
-			 *	the backing store.
-			 *
-			 *	Whether this function returns immediately
-			 *	and saves the chunk in the background, or
-			 *	saves the chunk synchronously is
-			 *	implementation-defined, and should not be
-			 *	relied upon.
-			 *
-			 *	\param [in] x
-			 *		The x-coordinate of the chunk.
-			 *		This is the displacement of the
-			 *		target chunk from the origin in
-			 *		chunks, and is unrelated to blocks.
-			 *	\param [in] y
-			 *		The y-coordinate of the chunk.
-			 *		This is the displacement of the
-			 *		target chunk from the origin in
-			 *		chunks, and is unrelated to blocks.
-			 *	\param [in] z
-			 *		The z-coordinate of the chunk.
-			 *		This is the displacement of the
-			 *		target chunk from the origin in
-			 *		chunks, and is unrelated to blocks.
-			 *	\param [in] dimension
-			 *		The dimension in which the target
-			 *		chunk resides.
-			 *	\param [in] begin
-			 *		A begin iterator to the contiguous
-			 *		buffer of bytes which represent the
-			 *		chunk.
-			 *	\param [in] end
-			 *		An end iterator to the contiguous
-			 *		buffer of bytes which represent the
-			 *		chunk.
-			 *	\param [in] populated
-			 *		\em true if the chunk-in-question is
-			 *		populated, \em false otherwise.
-			 *	\param [in] callback_begin
-			 *		A callback which shall be invoked
-			 *		as the chunk saving process is about
-			 *		to begin.
-			 *	\param [in] callback_end
-			 *		A callback which shall be invoked
-			 *		after the chunk saving process is
-			 *		complete.
-			 */
-			/*virtual void SaveChunk (
-				Int32 x,
-				Int32 y,
-				Int32 z,
-				SByte dimension,
-				const Byte * begin,
-				const Byte * end,
-				bool populated,
-				ChunkSaveBegin callback_begin,
-				ChunkSaveEnd callback_end
-			) = 0;*/
-			
-			
-			virtual void LoadColumn (Int32 x, Int32 z, SByte dimension, ColumnLoad callback) = 0;
-			virtual void SaveColumn (Int32 x, Int32 z, SByte dimension, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) = 0;
+			virtual bool LoadColumn (Int32 x, Int32 z, SByte dimension, Column * column) = 0;
+			virtual void SaveColumn (Int32 x, Int32 z, SByte dimension, const Column & column, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) = 0;
 			
 			
 			/**

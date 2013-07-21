@@ -85,15 +85,15 @@ class Kick : public Module {
 					
 						ChatMessage message;
 						message.AddRecipients(client);
-						message	<<	ChatColour::Red
+						message	<<	ChatStyle::Red
 								<<	ChatStyle::Bold
 								<<	ChatFormat::Label
 								<<	ChatFormat::LabelSeparator
-								<<	ChatFormat::PopStyle
+								<<	ChatFormat::Pop
 								<<	" player "
 								<<	ChatStyle::Bold
 								<<	target
-								<<	ChatFormat::PopStyle
+								<<	ChatFormat::Pop
 								<<	" could not be found";
 								
 						Chat->Send(message);

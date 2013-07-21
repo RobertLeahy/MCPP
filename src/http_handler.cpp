@@ -116,10 +116,10 @@ namespace MCPP {
 			//	-1 for max_fd
 			if (max_fd==-1) {
 			
-				//	Set wait flag since we
-				//	can't wait for whatever
-				//	it is that cURL is doing
-				wait=true;
+				//	Wait since we can't poll
+				//	whatever libcurl wants
+				//	to wait on
+				Thread::Sleep(worker_timeout);
 			
 				goto call_curl;
 				
@@ -147,115 +147,110 @@ namespace MCPP {
 				)
 			);
 			
-			//	We can call cURL
-			if (num_socks!=0) {
+			call_curl:
+		
+			mutex.Acquire();
 			
-				call_curl:
-			
-				mutex.Acquire();
-				
-				try {
-			
-					//	Call cURL until it has nothing
-					//	more to do
-					int running_handles;
-					do {
+			try {
+		
+				//	Call cURL until it has nothing
+				//	more to do
+				int running_handles;
+				do {
 
-						result=curl_multi_perform(
-							multi,
-							&running_handles
-						);
-						
-					} while (result==CURLM_CALL_MULTI_PERFORM);
-					
-					//	Error?
-					if (result!=CURLM_OK) throw std::runtime_error(
-						curl_multi_strerror(
-							result
-						)
+					result=curl_multi_perform(
+						multi,
+						&running_handles
 					);
 					
-					//	Convert the number of running handles
-					//	to the same type as the count of
-					//	open requests (the size of the map)
-					decltype(requests.size()) running_handles_safe=static_cast<decltype(requests.size())>(
-						SafeInt<int>(running_handles)
-					);
+				} while (result==CURLM_CALL_MULTI_PERFORM);
+				
+				//	Error?
+				if (result!=CURLM_OK) throw std::runtime_error(
+					curl_multi_strerror(
+						result
+					)
+				);
+				
+				//	Convert the number of running handles
+				//	to the same type as the count of
+				//	open requests (the size of the map)
+				decltype(requests.size()) running_handles_safe=static_cast<decltype(requests.size())>(
+					SafeInt<int>(running_handles)
+				);
+				
+				//	See if any requests finished
+				if (running_handles_safe!=requests.size()) {
+				
+					//	At least one request finished,
+					//	handle it
+					CURLMsg * msg;
+					int msgs;	//	Ignored
+					while ((msg=curl_multi_info_read(multi,&msgs))!=nullptr) {
 					
-					//	See if any requests finished
-					if (running_handles_safe!=requests.size()) {
-					
-						//	At least one request finished,
-						//	handle it
-						CURLMsg * msg;
-						int msgs;	//	Ignored
-						while ((msg=curl_multi_info_read(multi,&msgs))!=nullptr) {
+						//	Finished!
+						if (msg->msg==CURLMSG_DONE) {
 						
-							//	Finished!
-							if (msg->msg==CURLMSG_DONE) {
+							//	Lookup this handle
+							SmartPointer<HTTPRequest> request(requests[msg->easy_handle]);
 							
-								//	Lookup this handle
-								SmartPointer<HTTPRequest> request(requests[msg->easy_handle]);
+							//	Dispatch callback as appropriate
+							if (msg->data.result!=CURLE_OK) {
+							
+								//	FAIL
+								request->Done(0);
 								
-								//	Dispatch callback as appropriate
-								if (msg->data.result!=CURLE_OK) {
+							} else {
+							
+								//	Lookup HTTP status code
+								long status_code;
+								CURLcode result=curl_easy_getinfo(
+									msg->easy_handle,
+									CURLINFO_RESPONSE_CODE,
+									&status_code
+								);
 								
-									//	FAIL
-									request->Done(0);
-									
-								} else {
-								
-									//	Lookup HTTP status code
-									long status_code;
-									CURLcode result=curl_easy_getinfo(
-										msg->easy_handle,
-										CURLINFO_RESPONSE_CODE,
-										&status_code
-									);
-									
-									if (result!=CURLE_OK) throw std::runtime_error(
-										curl_easy_strerror(
-											result
-										)
-									);
-									
-									Word safe_status_code=Word(SafeInt<long>(status_code));
-									
-									//	Dispatch
-									request->Done(safe_status_code);
-								
-								}
-								
-								//	Remove handle
-								if ((result=curl_multi_remove_handle(
-									multi,
-									msg->easy_handle
-								))!=CURLM_OK) throw std::runtime_error(
-									curl_multi_strerror(
+								if (result!=CURLE_OK) throw std::runtime_error(
+									curl_easy_strerror(
 										result
 									)
 								);
 								
-								//	Kill the handle
-								requests.erase(msg->easy_handle);
+								Word safe_status_code=Word(SafeInt<long>(status_code));
+								
+								//	Dispatch
+								request->Done(safe_status_code);
 							
 							}
+							
+							//	Remove handle
+							if ((result=curl_multi_remove_handle(
+								multi,
+								msg->easy_handle
+							))!=CURLM_OK) throw std::runtime_error(
+								curl_multi_strerror(
+									result
+								)
+							);
+							
+							//	Kill the handle
+							requests.erase(msg->easy_handle);
 						
 						}
 					
 					}
-					
-				} catch (...) {
-				
-					mutex.Release();
-					
-					throw;
 				
 				}
 				
+			} catch (...) {
+			
 				mutex.Release();
+				
+				throw;
 			
 			}
+			
+			mutex.Release();
 		
 		}
 	
@@ -354,13 +349,6 @@ namespace MCPP {
 	
 	
 	static inline void common_opts (CURL * curl, const String & url, SmartPointer<HTTPRequest> request) {
-	
-		//	We'll need the UTF-8,
-		//	null-terminated representation
-		//	of the URL to pass through to
-		//	cURL
-		Vector<Byte> url_encoded(UTF8().Encode(url));
-		url_encoded.Add(0);
 		
 		//	Apply settings
 		CURLcode result;
@@ -369,9 +357,9 @@ namespace MCPP {
 			((result=curl_easy_setopt(
 				curl,
 				CURLOPT_URL,
-				reinterpret_cast<char *>(
-					static_cast<Byte *>(
-						url_encoded
+				reinterpret_cast<const char *>(
+					static_cast<const Byte *>(
+						request->URL()
 					)
 				)
 			))!=CURLE_OK) ||
@@ -464,6 +452,7 @@ namespace MCPP {
 			request=SmartPointer<HTTPRequest>::Make(
 				curl,
 				max_bytes,
+				url,
 				std::move(callback)
 			);
 			

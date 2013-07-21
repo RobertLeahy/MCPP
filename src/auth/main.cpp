@@ -23,6 +23,7 @@ static const Word priority=1;
 //	Minecraft.net sends "YES" (3 bytes) or "NO" (2 bytes)
 static const Word max_http_bytes=3;
 static const Word num_random_bytes=4;
+static const String auth_pa_key("auth");
 
 
 enum class AuthenticationState {
@@ -452,7 +453,7 @@ class Authentication : public Module {
 						);
 						
 						//	Protocol analysis
-						if (RunningServer->ProtocolAnalysis) {
+						if (RunningServer->IsVerbose(auth_pa_key)) {
 						
 							String log(pa_banner);
 							log << Newline << String::Format(
@@ -484,7 +485,7 @@ class Authentication : public Module {
 									timer.Stop();
 								
 									//	Protocol analysis
-									if (RunningServer->ProtocolAnalysis) {
+									if (RunningServer->IsVerbose(auth_pa_key)) {
 									
 										String log(pa_banner);
 										log << Newline;

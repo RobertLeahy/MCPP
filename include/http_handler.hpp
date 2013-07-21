@@ -103,6 +103,7 @@ namespace MCPP {
 			Vector<Byte> buffer;
 			Word max_bytes;
 			CURL * handle;
+			Vector<Byte> url;
 	
 	
 		public:
@@ -115,7 +116,7 @@ namespace MCPP {
 			HTTPRequest & operator = (HTTPRequest &) = delete;
 		
 		
-			HTTPRequest (CURL * handle, Word max_bytes, HTTPStatusStringDone status_string_done);
+			HTTPRequest (CURL * handle, Word max_bytes, const String & url, HTTPStatusStringDone status_string_done);
 			~HTTPRequest () noexcept;
 		
 		
@@ -123,6 +124,7 @@ namespace MCPP {
 			Word Read (Byte * ptr, Word size) noexcept;
 			void Done (Word status_code) noexcept;
 			bool Header (const String & key, const String & value) noexcept;
+			const Vector<Byte> & URL () const noexcept;
 	
 	
 	};

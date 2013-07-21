@@ -7,12 +7,10 @@
 
 
 #include <common.hpp>
-#include <unordered_set>
 #include <unordered_map>
-#include <atomic>
+#include <unordered_set>
 #include <functional>
-#include <utility>
-#include <type_traits>
+#include <atomic>
 
 
 namespace MCPP {
@@ -78,6 +76,15 @@ namespace MCPP {
 			 *		The column that contains this block.
 			 */
 			ColumnID ContainedBy () const noexcept;
+			/**
+			 *	Retrieves the offset of this block within
+			 *	the column that contains it.
+			 *
+			 *	\return
+			 *		The offset of this block within the
+			 *		column that contains it.
+			 */
+			Word Offset () const noexcept;
 			
 			
 			/**
@@ -266,415 +273,55 @@ namespace MCPP {
 
 
 	/**
-	 *	\cond
+	 *	Encapsulates a single block in the
+	 *	Minecraft world.
 	 */
-
-
-	class WorldLockInfo {
+	class Block {
 	
 	
 		public:
 		
 		
-			WorldLockInfo () noexcept;
-		
-		
-			//	The specific blocks that this lock
-			//	desires exclusive access to
-			std::unordered_set<BlockID> Blocks;
-			//	The specific columns that this lock
-			//	desires exclusive access to
-			std::unordered_set<ColumnID> Columns;
-			//	An optional barrier which blocking locks
-			//	will wait on if they cannot acquire
-			//	the lock immediately
-			SmartPointer<Barrier> Wait;
-			//	An optional callback which non-blocking
-			//	locks will use to take whatever action
-			//	they are acquiring the lock for
-			std::function<void ()> Callback;
-			//	Used to communicate ID in the case of
-			//	sychronous lock acquisition, is set
-			//	to nullptr otherwise.
-			Word * ID;
-			
-	
-	};
-	
-	
-	/**
-	 *	\endcond
-	 */
-
-
-	/**
-	 *	Allows per-block, per-column, and exclusive
-	 *	locks to be acquired on the world.
-	 */
-	class WorldLock {
-	
-	
-		private:
-		
-		
-			//	Incrementing IDs for tasks
-			Word id;
-			
-			
-			//	Tasks or threads waiting to acquire
-			//	a lock
-			Vector<WorldLockInfo> waiting;
-			//	Map from task ID to running task
-			std::unordered_map<Word,WorldLockInfo> running;
-			
-			
-			//	Whether exclusive lock is held/desired
-			bool exclusive;
-			//	Set of locked columns
-			std::unordered_set<ColumnID> columns;
-			//	Set of locked blocks
-			std::unordered_set<BlockID> blocks;
-			//	Set of columns that contain locked
-			//	blocks
-			std::unordered_set<ColumnID> enclosing_columns;
-			
-			
-			//	Lock which guards data structures
-			//	from unsynchronized access
-			Mutex lock;
-			
-			
-			//	Thread pool for asynchronous
-			//	callbacks
-			ThreadPool & pool;
-			
-			
-			//	Checks to see if a given lock can be
-			//	immediately acquired.
-			//
-			//	Requires that the mutex be held.
-			inline bool check (const WorldLockInfo &);
-			//	Synchronously acquires a given lock.
-			inline Word acquire (WorldLockInfo);
-			//	Asynchronously acquires a given lock.
-			void acquire (WorldLockInfo, std::function<void ()>);
-			
-			
-		public:
-		
-		
-			WorldLock () = delete;
-			WorldLock (const WorldLock &) = delete;
-			WorldLock (WorldLock &&) = delete;
-			WorldLock & operator = (const WorldLock &) = delete;
-			WorldLock & operator = (WorldLock &&) = delete;
-		
-		
 			/**
-			 *	Creates a new WorldLock object.
+			 *	The block type associated with this
+			 *	block.
 			 *
-			 *	\param [in] pool
-			 *		The ThreadPool that the WorldLock
-			 *		should use to invoke asynchronous
-			 *		callbacks.
+			 *	All bits higher than the 12th bit
+			 *	will be ignored, meaning that this
+			 *	field has an effective maximum of
+			 *	4095.
 			 */
-			WorldLock (ThreadPool & pool) noexcept;
-		
-		
+			UInt16 Type;
 			/**
-			 *	Synchronously acquires a lock
-			 *	on a certain block.
+			 *	The metadata associated with this
+			 *	block.
 			 *
-			 *	\param [in] block
-			 *		The block on which a lock
-			 *		is to be acquired.
-			 *
-			 *	\return
-			 *		An ID which shall be used
-			 *		to release the lock.
+			 *	All bits higher than the 4th bit
+			 *	will be ignored, meaning that this
+			 *	field has an effective maximum of
+			 *	15.
 			 */
-			Word Acquire (BlockID block);
+			Byte Metadata;
 			/**
-			 *	Synchronously acquires a lock
-			 *	on a number of blocks.
+			 *	The light value associated with this
+			 *	block.
 			 *
-			 *	\param [in] blocks
-			 *		A hash set which contains
-			 *		all the blocks on which a
-			 *		lock shall be acquired.
-			 *
-			 *	\return
-			 *		An ID which shall be used
-			 *		to release the lock.
+			 *	All bits higher than the 4th bit
+			 *	will be ignored, meaning that this
+			 *	field has an effective maximum of
+			 *	15.
 			 */
-			Word Acquire (std::unordered_set<BlockID> blocks);
+			Byte Light;
 			/**
-			 *	Synchronously acquires a lock on
-			 *	the entire world.
+			 *	The skylight value associated with this
+			 *	block.
 			 *
-			 *	\return
-			 *		An ID which shall be used to
-			 *		release the lock.
+			 *	All bits higher than the 4th bit
+			 *	will be ignored, meaning that this
+			 *	field has an effective maximum of
+			 *	15.
 			 */
-			Word Acquire ();
-			/**
-			 *	Synchronously acquires a lock on a
-			 *	certain column.
-			 *
-			 *	\param [in] column
-			 *		The column on which a lock is to be
-			 *		acquired.
-			 *
-			 *	\return
-			 *		An ID which shall be used to release
-			 *		the lock.
-			 */
-			Word Acquire (ColumnID column);
-			/**
-			 *	Synchronously acquires a lock on a
-			 *	number of columns.
-			 *
-			 *	\param [in] columns
-			 *		A hash set which contains all
-			 *		the columns on which a lock
-			 *		shall be acquired.
-			 *
-			 *	\return
-			 *		An ID which shall be used to
-			 *		release the lock.
-			 */
-			Word Acquire (std::unordered_set<ColumnID> columns);
-			/**
-			 *	Releases an acquired lock.
-			 *
-			 *	\param [in] task_id
-			 *		The ID returned when the
-			 *		lock was acquired.
-			 */
-			void Release (Word task_id);
-			
-			
-			/**
-			 *	Enqueues an asynchronous task to be
-			 *	executed when an exclusive lock may
-			 *	be acquired on a certain block.
-			 *
-			 *	\tparam T
-			 *		The type of the callback to be
-			 *		asynchronously executed.
-			 *	\tparam Args
-			 *		The types of the parameters to be
-			 *		forwarded to the callback.
-			 *
-			 *	\param [in] block
-			 *		The block on which a lock is to be
-			 *		acquired.
-			 *	\param [in] callback
-			 *		The callback to be executed once the
-			 *		lock is acquired.
-			 *	\param [in] args
-			 *		The arguments to forward to \em callback.
-			 */
-			template <typename T, typename... Args>
-			void Enqueue (BlockID block, T && callback, Args &&... args) {
-			
-				WorldLockInfo info;
-				info.Blocks.insert(block);
-			
-				acquire(
-					std::move(info),
-					std::bind(
-						std::forward<T>(callback),
-						std::forward<Args>(args)...
-					)
-				);
-			
-			}
-			/**
-			 *	Enqueues an asynchronous task to be
-			 *	executed when an exclusive lock may
-			 *	be acquired on a certain column.
-			 *
-			 *	\tparam T
-			 *		The type of the callback to be
-			 *		asynchronously executed.
-			 *	\tparam Args
-			 *		The types of the parameters to be
-			 *		forwarded to the callback.
-			 *
-			 *	\param [in] column
-			 *		The column on which a lock is to be
-			 *		acquired.
-			 *	\param [in] callback
-			 *		The callback to be executed once the
-			 *		lock is acquired.
-			 *	\param [in] args
-			 *		The arguments to forward to \em callback.
-			 */
-			template <typename T, typename... Args>
-			void Enqueue (ColumnID column, T && callback, Args &&... args) {
-			
-				WorldLockInfo info;
-				info.Columns.insert(column);
-				
-				acquire(
-					std::move(info),
-					std::bind(
-						std::forward<T>(callback),
-						std::forward<Args>(args)...
-					)
-				);
-			
-			}
-			/**
-			 *	Enqueues an asynchronous task to be
-			 *	executed when an exclusive lock may
-			 *	be acquired on a certain set of
-			 *	columns.
-			 *
-			 *	\tparam T
-			 *		The type of the callback to be
-			 *		asynchronously executed.
-			 *	\tparam Args
-			 *		The types of the parameters to be
-			 *		forwarded to the callback.
-			 *
-			 *	\param [in] columns
-			 *		A hash set containing the columns on
-			 *		which a lock is to be acquired.
-			 *	\param [in] callback
-			 *		The callback to be executed once the
-			 *		lock is acquired.
-			 *	\param [in] args
-			 *		The arguments to forward to \em callback.
-			 */
-			template <typename T, typename... Args>
-			void Enqueue (std::unordered_set<ColumnID> columns, T && callback, Args &&... args) {
-			
-				WorldLockInfo info;
-				info.Columns=std::move(columns);
-				
-				acquire(
-					std::move(info),
-					std::bind(
-						std::forward<T>(callback),
-						std::forward<Args>(args)...
-					)
-				);
-			
-			}
-			/**
-			 *	Enqueues an asynchronous task to be
-			 *	executed when an exclusive lock may
-			 *	be acquired on a certain set of
-			 *	blocks.
-			 *
-			 *	\tparam T
-			 *		The type of the callback to be
-			 *		asynchronously executed.
-			 *	\tparam Args
-			 *		The types of the parameters to be
-			 *		forwarded to the callback.
-			 *
-			 *	\param [in] blocks
-			 *		A hash set containing the blocks on
-			 *		which a lock is to be acquired.
-			 *	\param [in] callback
-			 *		The callback to be executed once the
-			 *		lock is acquired.
-			 *	\param [in] args
-			 *		The arguments to forward to \em callback.
-			 */
-			template <typename T, typename... Args>
-			void Enqueue (std::unordered_set<BlockID> blocks, T && callback, Args &&... args) {
-			
-				WorldLockInfo info;
-				info.Blocks=std::move(blocks);
-				
-				acquire(
-					std::move(info),
-					std::bind(
-						std::forward<T>(callback),
-						std::forward<Args>(args)...
-					)
-				);
-			
-			}
-			/**
-			 *	Enqueues an asynchronous task to be
-			 *	executed when an exclusive lock may
-			 *	be acquired on the entire world.
-			 *
-			 *	\tparam T
-			 *		The type of the callback to be
-			 *		asynchronously executed.
-			 *	\tparam Args
-			 *		The types of the parameters to be
-			 *		forwarded to the callback.
-			 *
-			 *	\param [in] callback
-			 *		The callback to be executed once the
-			 *		lock is acquired.
-			 *	\param [in] args
-			 *		The arguments to forward to \em callback.
-			 */
-			template <typename T, typename... Args>
-			typename std::enable_if<
-				!(
-					std::is_same<
-						typename std::decay<T>::type,
-						BlockID
-					>::value ||
-					std::is_same<
-						typename std::decay<T>::type,
-						ColumnID
-					>::value ||
-					std::is_same<
-						typename std::decay<T>::type,
-						std::unordered_set<ColumnID>
-					>::value ||
-					std::is_same<
-						typename std::decay<T>::type,
-						std::unordered_set<BlockID>
-					>::value
-				)
-			>::type Enqueue (T && callback, Args &&... args) {
-			
-				acquire(
-					WorldLockInfo(),
-					std::bind(
-						std::forward<T>(callback),
-						std::forward<Args>(args)...
-					)
-				);
-			
-			}
-	
-	
-	};
-
-
-	class WorldTask {
-	
-	
-		private:
-		
-		
-			//	The columns that the task is
-			//	waiting on
-			std::unordered_set<ColumnID> columns;
-			//	The function that is waiting to
-			//	be invoked
-			std::function <void ()> func;
-			//	The blocks that the task needs
-			//	a lock on
-			Vector<Coordinates> coords;
-	
-	
-		public:
-		
-		
-			
+			Byte Skylight;
 	
 	
 	};
@@ -683,28 +330,420 @@ namespace MCPP {
 	class ColumnContainer {
 	
 	
-		private:
+		public:
 		
 		
-			//	The column's data
-			SmartPointer<Column> column;
-			//	Column lock
-			RWLock column_lock;
-			//	List of players who have or
-			//	want this column
-			std::unordered_set<Client *> clients;
-			//	Number of tasks either waiting on
-			//	or actively using this column
-			std::atomic<Word> tasks;
+			ColumnContainer ();
+			ColumnContainer (const ColumnContainer &) = delete;
+			ColumnContainer (ColumnContainer &&) = delete;
+			ColumnContainer & operator = (const ColumnContainer &) = delete;
+			ColumnContainer & operator = (ColumnContainer &&) = delete;
+		
+		
+			//	The raw column data
+			Column Storage;
+			
+			//	A lock which guards the structure
+			//	against unsynchronized access
+			Mutex Lock;
+			
+			//	Whether the column has been generated
+			//	or not
+			bool Generated;
+			
+			//	Whether the column is being processed
+			//	(i.e. generated or populated) currently
+			bool Processing;
+			
+			//	A condition variable on which threads
+			//	may wait for the column's state to
+			//	change.
+			CondVar Wait;
+			
+			//	The interest count.  So long as the
+			//	interest count is not zero the chunk
+			//	shall not be unloaded.
+			std::atomic<Word> Interested;
+
+			//	The set of clients which have or are
+			//	interested in this column
+			std::unordered_set<SmartPointer<Client>> Clients;
+			
+			//	True if the column has been modified,
+			//	false otherwise.
+			bool Dirty;
 	
 	
 	};
 	
 	
 	/**
-	 *	Contains the Minecraft world.
+	 *	The various states that a column
+	 *	may be in.
 	 */
-	//extern Nullable<WorldContainer> World;
+	enum class ColumnState {
+	
+		Unloaded,	/**<	The column is not loaded/generated.	*/
+		Generating,	/**<	The column is currently loading or generating.	*/
+		Generated,	/**<	The column has been generated, but is not populated.	*/
+		Populating,	/**<	The column has been generated and is being populated.	*/
+		Populated	/**<	The column has been generated and populated.	*/
+	
+	};
+
+
+	/**
+	 *	Contains the Minecraft world and is
+	 *	responsible for loading, unloading,
+	 *	and sending columns and other block-related
+	 *	packets.
+	 */
+	class WorldContainer : public Module {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The type of callback which shall be
+			 *	invoked to obtain unpopulated columns.
+			 */
+			typedef std::function<void (ColumnID, Column &)> Provider;
+			/**
+			 *	The type of callback which shall be
+			 *	invoked to populate a column.
+			 */
+			typedef std::function<void (ColumnID)> Populator;
+			
+			
+		private:
+		
+		
+			//
+			//	PROVIDERS
+			//
+		
+		
+			//	Maps dimensions to maps which
+			//	map the world type string to
+			//	their column providers
+			std::unordered_map<
+				SByte,
+				std::unordered_map<
+					String,
+					Provider
+				>
+			> providers;
+			//	Maps dimensions to a default
+			//	provider for that dimension,
+			//	which shall be used if there
+			//	is no provider for the given
+			//	world type
+			std::unordered_map<
+				SByte,
+				Provider
+			> default_providers;
+			
+			
+			//
+			//	POPULATORS
+			//
+			
+			
+			//	A list of providers.  The tuple
+			//	stores their priority, which is
+			//	used as they are being added to
+			//	determine the order in which they
+			//	shall be called.
+			Vector<
+				Tuple<
+					Word,
+					Populator
+				>
+			> populators;
+			
+			
+			//
+			//	COLUMN STORAGE/MANAGEMENT
+			//
+			
+			
+			//	Stores the world by mapping
+			//	ColumnIDs to ColumnContainers
+			//
+			//	ColumnContainers are stored
+			//	in a SmartPointer for two reasons:
+			//
+			//	1.	Because they are not copyable
+			//		or movable.
+			//	2.	Because this reduces the amount
+			//		of time that threads must spend
+			//		with the world lock acquired.
+			std::unordered_map<
+				ColumnID,
+				SmartPointer<ColumnContainer>
+			> world;
+			//	Guards the world against unsynchronized
+			//	modification
+			Mutex world_lock;
+			//	Maps clients to columns that they
+			//	have
+			std::unordered_map<
+				SmartPointer<Client>,
+				std::unordered_set<ColumnID>
+			> client_map;
+			
+			
+			//
+			//	MISC.
+			//
+			
+			
+			std::function<void ()> save_callback;
+			
+			
+			//
+			//	SETTINGS
+			//
+			
+			
+			//	The world type to be used in generation
+			String world_type;
+			//	The amount of time the container will wait
+			//	between checking columns for unloading
+			Word unload_interval;
+			
+			
+			//
+			//	STATISTICS
+			//
+			
+			
+			//	Number of chunks generated
+			std::atomic<Word> generated;
+			//	Number of chunks loaded
+			std::atomic<Word> loaded;
+			//	Number of chunks populated
+			std::atomic<Word> populated;
+			//	Amount of time spent generating
+			std::atomic<UInt64> generate_time;
+			//	Amount of time spent loading
+			std::atomic<UInt64> load_time;
+			//	Amount of time spent populating
+			std::atomic<UInt64> populate_time;
+			
+			
+			//
+			//	PRIVATE METHODS
+			//
+			
+			
+			//	Retrieves a column container.
+			//
+			//	If the requested column is not available, it
+			//	will be loaded or generated.
+			//
+			//	The interest count on the column shall be
+			//	incremented.
+			//
+			//	If population is requested, the column shall
+			//	be populated before this function returns.
+			SmartPointer<ColumnContainer> load (ColumnID, bool);
+			inline bool set_block (BlockID, Block, SmartPointer<ColumnContainer>);
+			
+			
+		public:
+		
+		
+			/**
+			 *	\cond
+			 */
+		
+		
+			WorldContainer ();
+			virtual Word Priority () const noexcept override;
+			virtual const String & Name () const noexcept override;
+			virtual void Install () override;
+			
+			
+			/**
+			 *	\endcond
+			 */
+		
+		
+			/**
+			 *	An event invoked whenever an attempt to set
+			 *	a block is made.
+			 *
+			 *	Only invoked if the target column has been
+			 *	populated.
+			 *
+			 *	<B>Parameters:</B>
+			 *
+			 *	1.	The ID of the block which is being set.
+			 *	2.	The details which are trying to be set
+			 *		to the block given by the first parameter.
+			 *
+			 *	Returning \em false will block the attempt
+			 *	to set the block, returning \em false will
+			 *	allow it.
+			 */
+			Event<bool (BlockID, Block)> OnSet;
+		
+		
+			/**
+			 *	Gets the current state of a given column.
+			 *
+			 *	\param [in] id
+			 *		The column whose state sholl be determined.
+			 *	\param [in] acquire
+			 *		\em true if interest in the column-in-question
+			 *		should be expressed, \em false otherwise.
+			 *		Defaults to \em false.  Interest shall never
+			 *		be expressed in an unloaded column.
+			 *
+			 *	\return
+			 *		The current state of the column specified by
+			 *		\em id.
+			 */
+			ColumnState GetColumnState (ColumnID id, bool acquire=false) noexcept;
+			/**
+			 *	Ends interest in a given column.
+			 *
+			 *	If the column is not loaded, nothing happens.
+			 *
+			 *	If interest is ended in a column on which
+			 *	interest was never acquired, the result is
+			 *	undefined behaviour.
+			 *
+			 *	\param [in] id
+			 *		The column in which the coller is no
+			 *		longer interested.
+			 */
+			void EndInterest (ColumnID id) noexcept;
+			/**
+			 *	Sets the block at the position indicated
+			 *	by \em id to be \em block.
+			 *
+			 *	\param [in] id
+			 *		The position of the block to set.
+			 *	\param [in] block
+			 *		The block to set the block at \em id
+			 *		to be equal to.
+			 *	\param [in] release
+			 *		If \em true, shall release interest in
+			 *		the column which contains \em id.
+			 *		Defaults to \em false.
+			 *
+			 *	\return
+			 *		\em true if the block was successfully
+			 *		set, \em false if the attempt to set it
+			 *		was disallowed.  If the attempt to set
+			 *		the block is disallowed, and \em release
+			 *		was \em true, interest is still released.
+			 */
+			bool SetBlock (BlockID id, Block block, bool release=false);
+			/**
+			 *	Gets the block at the position indicated by
+			 *	\em id.
+			 *
+			 *	\param [in] id
+			 *		The position of the block to retrieve.
+			 *	\param [in] acquire
+			 *		If \em true, shall acquire interest in
+			 *		the column which contains \em id.
+			 *		Defaults to \em false.
+			 *
+			 *	\return
+			 *		The block at the position given by
+			 *		\em id.
+			 */
+			Block GetBlock (BlockID id, bool acquire=false);
+			/**
+			 *	Adds a specific client to a specific column,
+			 *	which will be sent to that client.
+			 *
+			 *	The column may be added at once, generated or
+			 *	loaded synchronously and then added, or
+			 *	added at some point in the future.  This is
+			 *	up to the implementation.
+			 *
+			 *	If the client is already added to the specified
+			 *	column, nothing happens.
+			 *
+			 *	\param [in] id
+			 *		The column to add the client to.
+			 *	\param [in] client
+			 *		The client to add to the column specified
+			 *		by \em id.
+			 */
+			void Add (ColumnID id, SmartPointer<Client> client);
+			/**
+			 *	Removes a specific client from a specific
+			 *	column.
+			 *
+			 *	The client will be sent a packet instructing them
+			 *	to unload the column.
+			 *
+			 *	If the client is not added to the specified column,
+			 *	nothing happens.
+			 *
+			 *	\param [in] id
+			 *		The column to remove the client from.
+			 *	\param [in] client
+			 *		The client to remove from the column specified
+			 *		by \em id.
+			 */
+			void Remove (ColumnID id, SmartPointer<Client> client);
+			/**
+			 *	Adds a provider for a specific dimension to the
+			 *	world.
+			 *
+			 *	This is not thread safe and should not be called
+			 *	after the module loading process.
+			 *
+			 *	\param [in] dimension
+			 *		The dimension this provider can provide
+			 *		columns for.
+			 *	\param [in] world_type
+			 *		The world type this provider can provide
+			 *		columns for.
+			 *	\param [in] provider
+			 *		The provider.
+			 *	\param [in] is_default
+			 *		Whether this provider should overwrite the
+			 *		default provider (which will be used if no
+			 *		provider for a world type/dimension
+			 *		combination can be found).  Defaults to
+			 *		\em false.
+			 */
+			void Add (SByte dimension, String world_type, Provider provider, bool is_default=false);
+			/**
+			 *	Adds a populator.
+			 *
+			 *	During the population process, populators will be
+			 *	called from the lowest \em priority to the highest, with
+			 *	populators with the same \em priority called in
+			 *	an indeterminate order.
+			 *
+			 *	This is not thread safe and should not be called
+			 *	after the module loading process.
+			 *
+			 *	\param [in] priority
+			 *		The priority of this populator.
+			 *	\param [in] populator
+			 *		The populator.
+			 */
+			void Add (Word priority, Populator populator);
+	
+	
+	};
+	
+	
+	/**
+	 *	The Minecraft world.
+	 */
+	extern Nullable<WorldContainer> World;
 
 
 }

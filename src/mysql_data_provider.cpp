@@ -41,9 +41,6 @@ namespace MCPP {
 	static const char * kvp_delete_pair_query="DELETE FROM `keyvaluepairs` WHERE `key`=? AND `value`=?";
 	static const char * kvp_insert_query="INSERT INTO `keyvaluepairs` (`key`,`value`) VALUES (?,?)";
 	static const char * chat_log_query="INSERT INTO `chat_log` (`from`,`to`,`message`,`notes`) VALUES (?,?,?,?)";
-	/*static const char * chunk_query="SELECT `data`,`populated` FROM `chunks` WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?";
-	static const char * chunk_insert_query="INSERT INTO `chunks` (`data`,`populated`,`x`,`y`,`z`,`dimension`) VALUES (?,?,?,?,?,?)";
-	static const char * chunk_update_query="UPDATE `chunks` SET `data`=?, `populated`=? WHERE `x`=? AND `y`=? AND `z`=? AND `dimension`=?";*/
 	static const char * column_query="SELECT `data`,`skylight`,`add`,`populated` FROM `columns` WHERE `x`=? AND `y`=? AND `dimension`=?";
 	static const char * column_update_query="UPDATE `columns` SET `data`=?,`skylight`=?,`add`=?,`populated`=? WHERE `x`=? AND `y`=? AND `dimension`=?";
 	static const char * column_insert_query="INSERT INTO `columns` (`data`,`skylight`,`add`,`populated`,`x`,`y`,`dimension`) VALUES (?,?,?,?,?,?,?)";
@@ -169,9 +166,6 @@ namespace MCPP {
 		destroy_stmt(kvp_delete_pair_stmt);
 		destroy_stmt(kvp_insert_stmt);
 		destroy_stmt(chat_log_stmt);
-		/*destroy_stmt(chunk_stmt);
-		destroy_stmt(chunk_insert_stmt);
-		destroy_stmt(chunk_update_stmt);*/
 		destroy_stmt(column_stmt);
 		destroy_stmt(column_insert_stmt);
 		destroy_stmt(column_update_stmt);
@@ -314,9 +308,6 @@ namespace MCPP {
 			kvp_delete_pair_stmt(nullptr),
 			kvp_insert_stmt(nullptr),
 			chat_log_stmt(nullptr),
-			/*chunk_stmt(nullptr),
-			chunk_insert_stmt(nullptr),
-			chunk_update_stmt(nullptr),*/
 			column_stmt(nullptr),
 			column_insert_stmt(nullptr),
 			column_update_stmt(nullptr),
@@ -797,7 +788,7 @@ namespace MCPP {
 	
 		//	We tell the worker thread to
 		//	log and then we proceed
-		pool.Enqueue([&] () {
+		pool.Enqueue([=] () {
 		
 			//	Setup parameters
 			MYSQL_BIND param [4];
@@ -972,397 +963,118 @@ namespace MCPP {
 	}
 	
 	
-	/*void MySQLDataProvider::LoadChunk (Int32 x, Int32 y, Int32 z, SByte dimension, ChunkLoad callback) {
+	bool MySQLDataProvider::LoadColumn (Int32 x, Int32 z, SByte dimension, Column * column) {
+	
+		//	If the column pointer is null, do
+		//	not even bother to proceed
+		if (column==nullptr) return false;
+		
+		//	Prepare a value to return
+		bool returnthis=false;
 	
 		//	Dispatch worker
-		pool.Enqueue([=] () {
+		auto handle=pool.Enqueue([&] () {
 		
-			//	Setup parameters
-			MYSQL_BIND param [4];
-			memset(param,0,sizeof(MYSQL_BIND)*4);
+			//	Create params bind
+			MYSQL_BIND param [3];
+			memset(param,0,sizeof(MYSQL_BIND)*3);
 			
-			//	Parameter #1 - X-coordinate
+			//	Parameter #1 - X coordinate
 			bind(param[0],x);
-			//	Parameter #2 - Y-coordinate
-			bind(param[1],y);
-			//	Parameter #3 - Z-coordinate
-			bind(param[2],z);
-			//	Paremeter #4 - Dimension
-			bind(param[3],dimension);
+			//	Parameter #2 - Z coordinate
+			bind(param[1],z);
+			//	Parameter #3 - Dimension
+			bind(param[2],dimension);
 			
-			MYSQL_BIND result [2];
-			memset(result,0,sizeof(MYSQL_BIND)*2);
+			//	Create results bind
+			MYSQL_BIND result [4];
+			memset(result,0,sizeof(MYSQL_BIND)*4);
 			
-			//	Result #1 - Binary data
+			//	Result #1 - Raw column data
 			result[0].buffer_type=MYSQL_TYPE_BLOB;
-			my_bool buffer_is_null;
-			result[0].is_null=&buffer_is_null;
-			unsigned long real_length=0;
-			result[0].length=&real_length;
+			result[0].buffer_length=sizeof(column->Data);
+			result[0].buffer=column->Data;
+			//	Result #2 - Skylight data present
+			bind(result[1],column->Skylight);
+			//	Result #3 - Add data present
+			bind(result[2],column->Add);
+			//	Result #4 - Populated
+			bind(result[3],column->Populated);
 			
-			//	Result #2 - Populated t/f
-			UInt16 populated_val;
-			bind(result[1],populated_val);
-			my_bool populated_is_null;
-			result[1].is_null=&populated_is_null;
+			//	Is the server still there?
+			keep_alive();
 			
-			Nullable<Vector<Byte>> buffer;
-			Nullable<bool> populated;
+			//	Regenerate prepared statement if
+			//	necessary
+			prepare_stmt(column_stmt,column_query);
 			
-			//	Catch all errors for reporting
-			//	to the callee
-			try {
+			//	Bind and execute
+			int success;
+			if (
+				(mysql_stmt_bind_param(column_stmt,param)!=0) ||
+				(mysql_stmt_bind_result(column_stmt,result)!=0) ||
+				(mysql_stmt_execute(column_stmt)!=0) ||
+				((success=mysql_stmt_fetch(column_stmt))==1)
+			) throw std::runtime_error(mysql_stmt_error(column_stmt));
 			
-				//	Is the server still there?
-				keep_alive();
+			++requests;
+			
+			if (success!=MYSQL_NO_DATA) {
+			
+				returnthis=true;
 				
-				//	Regenerate prepared statement if
-				//	necessary
-				prepare_stmt(chunk_stmt,chunk_query);
-				
-				//	Bind and execute
-				int success;
-				if (
-					(mysql_stmt_bind_param(chunk_stmt,param)!=0) ||
-					(mysql_stmt_bind_result(chunk_stmt,result)!=0) ||
-					(mysql_stmt_execute(chunk_stmt)!=0) ||
-					((success=mysql_stmt_fetch(chunk_stmt))==1)
-				) throw std::runtime_error(mysql_stmt_error(chunk_stmt));
-				
-				++requests;
-				
-				//	Check to see if data
-				//	exists
-				if (!(
-					(success==MYSQL_NO_DATA) ||
-					buffer_is_null
-				)) {
-				
-					//	There is data
-					
-					//	Construct populated
-					populated.Construct(
-						//	If populated does not exist
-						//	we assume FALSE since it doesn't
-						//	make sense for populated to be
-						//	NULL while the chunk data is
-						//	NOT NULL
-						populated_is_null
-							?	false
-							:	populated_val!=0
-					);
-					
-					//	How long is the buffer data?
-					if (real_length==0) {
-					
-						//	Zero bytes
-						buffer.Construct();
-					
-					} else {
-					
-						//	More than zero bytes --
-						//	we need to allocate a
-						//	sufficiently-sized buffer
-						
-						Word buffer_len=Word(
-							SafeInt<
-								decltype(real_length)
-							>(
-								real_length
-							)
-						);
-						buffer.Construct(buffer_len);
-						
-						//	Wire buffer into the result
-						//	bind
-						result[0].buffer=to_char(*buffer);
-						result[0].buffer_length=real_length;
-						
-						//	Retrieve data straight into
-						//	the buffer
-						if (mysql_stmt_fetch_column(
-							chunk_stmt,
-							&result[0],
-							0,
-							0
-						)!=0) throw std::runtime_error(mysql_stmt_error(chunk_stmt));
-						
-						//	There's data in the buffer, set
-						//	count
-						buffer->SetCount(buffer_len);
-					
-					}
-				
-				}
-				
-				//	Flush all results out of
-				//	result set so that more commands
-				//	to the server may be executed
+				//	Finish up
 				while (success!=MYSQL_NO_DATA) {
 				
-					success=mysql_stmt_fetch(chunk_stmt);
+					success=mysql_stmt_fetch(column_stmt);
 					
-					//	Make sure there are no errors
-					if (success==1) throw std::runtime_error(mysql_stmt_error(chunk_stmt));
+					//	Ensure there are no errors
+					if (success==1) throw std::runtime_error(mysql_stmt_error(column_stmt));
 				
 				}
 			
-			} catch (...) {
-			
-				//	Notify that the chunk loading process
-				//	failed
-				try {
-				
-					//	Make sure we null out
-					//	variables
-					populated.Destroy();
-					buffer.Destroy();
-				
-					callback(x,y,z,dimension,false,buffer,populated);
-				
-				} catch (...) {	}
-				
-				throw;
-			
 			}
-			
-			//	Notify that the chunk loading process
-			//	succeeded
-			callback(
-				x,
-				y,
-				z,
-				dimension,
-				true,
-				std::move(buffer),
-				std::move(populated)
-			);
 		
 		});
+		
+		handle->Wait();
+		
+		if (!handle->Success()) throw std::runtime_error(mysql_failed);
+		
+		return returnthis;
 	
 	}
 	
 	
-	void MySQLDataProvider::SaveChunk (Int32 x, Int32 y, Int32 z, SByte dimension, const Byte * begin, const Byte * end, bool populated, ChunkSaveBegin callback_begin, ChunkSaveEnd callback_end) {
+	void MySQLDataProvider::SaveColumn (Int32 x, Int32 z, SByte dimension, const Column & column, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) {
 	
-		//	Dispatch worker
-		pool.Enqueue([=] () {
-		
-			//	Setup parameters
-			MYSQL_BIND param [6];
-			memset(param,0,sizeof(MYSQL_BIND)*6);
-			
-			//	Parameter #1 - Chunk data
-			param[0].buffer_type=MYSQL_TYPE_BLOB;
-			param[0].buffer_length=static_cast<decltype(param[0].buffer_length)>(end-begin);
-			//	Casting away constness is acceptable
-			//	because these parameters will never
-			//	be written to
-			param[0].buffer=const_cast<Byte *>(begin);
-			
-			//	Parameter #2 - Populated
-			param[1].buffer_type=MYSQL_TYPE_TINY;
-			param[1].buffer_length=sizeof(bool);
-			param[1].buffer=const_cast<bool *>(&populated);
-			
-			//	Parameter #3 - X-coordinate
-			bind(param[2],x);
-			
-			//	Parameter #4 - Y-coordinate
-			bind(param[3],y);
-			
-			//	Parameter #5 - Z-coordinate
-			bind(param[4],z);
-			
-			//	Parameter #6 - Dimension
-			bind(param[5],dimension);
-			
-			//	Invoke callback
-			if (callback_begin(x,y,z,dimension)) try {
-			
-				//	Is the server still there?
-				keep_alive();
-				
-				//	Regenerate prepared statement if
-				//	necessary
-				prepare_stmt(chunk_update_stmt,chunk_update_query);
-				
-				//	Bind and execute
-				
-				//	Attempt to update an existing
-				//	chunk
-				if (
-					(mysql_stmt_bind_param(chunk_update_stmt,param)!=0) ||
-					(mysql_stmt_execute(chunk_update_stmt)!=0)
-				) throw std::runtime_error(mysql_stmt_error(chunk_update_stmt));
-				
-				++requests;
-				
-				//	Did we update the chunk?
-				if (mysql_stmt_affected_rows(chunk_update_stmt)==0) {
-				
-					//	NO -- attempt to insert it
-					
-					prepare_stmt(chunk_insert_stmt,chunk_insert_query);
-					
-					if (
-						(mysql_stmt_bind_param(chunk_insert_stmt,param)!=0) ||
-						(mysql_stmt_execute(chunk_insert_stmt)!=0)
-					) throw std::runtime_error(mysql_stmt_error(chunk_insert_stmt));
-					
-					++requests;
-				
-				}
-			
-			//	Inform caller of failure
-			} catch (...) {
-			
-				try {
-			
-					callback_end(x,y,z,dimension,false);
-					
-				} catch (...) {	}
-				
-				throw;
-			
-			}
-			
-			//	Inform caller of success
-			callback_end(x,y,z,dimension,true);
-		
-		});
-	
-	}*/
-	
-	
-	void MySQLDataProvider::LoadColumn (Int32 x, Int32 z, SByte dimension, ColumnLoad callback) {
-	
-		//	Dispatch worker
-		pool.Enqueue([=] () {
-		
-			try {
-			
-				//	Create a column
-				auto column=SmartPointer<Column>::Make();
-				
-				//	Create params bind
-				MYSQL_BIND param [3];
-				memset(param,0,sizeof(MYSQL_BIND)*3);
-				
-				//	Parameter #1 - X coordinate
-				bind(param[0],x);
-				//	Parameter #2 - Z coordinate
-				bind(param[1],z);
-				//	Parameter #3 - Dimension
-				bind(param[2],dimension);
-				
-				//	Create results bind
-				MYSQL_BIND result [4];
-				memset(result,0,sizeof(MYSQL_BIND)*4);
-				
-				//	Result #1 - Raw column data
-				result[0].buffer_type=MYSQL_TYPE_BLOB;
-				result[0].buffer_length=sizeof(column->Data);
-				result[0].buffer=column->Data;
-				//	Result #2 - Skylight data present
-				bind(result[1],column->Skylight);
-				//	Result #3 - Add data present
-				bind(result[2],column->Add);
-				//	Result #4 - Populated
-				bool populated;
-				bind(result[3],populated);
-				
-				//	Is the server still there?
-				keep_alive();
-				
-				//	Regenerate prepared statement if
-				//	necessary
-				prepare_stmt(column_stmt,column_query);
-				
-				//	Bind and execute
-				int success;
-				if (
-					(mysql_stmt_bind_param(column_stmt,param)!=0) ||
-					(mysql_stmt_bind_result(column_stmt,result)!=0) ||
-					(mysql_stmt_execute(column_stmt)!=0) ||
-					((success=mysql_stmt_fetch(column_stmt))==1)
-				) throw std::runtime_error(mysql_stmt_error(column_stmt));
-				
-				++requests;
-				
-				//	Check to see if there's data
-				if (success==MYSQL_NO_DATA) {
-				
-					//	There's no data
-					
-					callback(
-						x,
-						z,
-						dimension,
-						true,
-						false,
-						std::move(column),
-						false
-					);
-				
-				} else {
-				
-					//	There's data
-					
-					//	Finish up
-					while (success!=MYSQL_NO_DATA) {
-					
-						success=mysql_stmt_fetch(column_stmt);
-						
-						//	Ensure there are no errors
-						if (success==1) throw std::runtime_error(mysql_stmt_error(column_stmt));
-					
-					}
-					
-					callback(
-						x,
-						z,
-						dimension,
-						true,
-						true,
-						std::move(column),
-						populated
-					);
-				
-				}
-			
-			} catch (...) {
-			
-				try {
-				
-					callback(
-						x,
-						z,
-						dimension,
-						false,
-						false,
-						SmartPointer<Column>(),
-						false
-					);
-				
-				} catch (...) {	}
-				
-				throw;
-			
-			}
-		
-		});
-	
-	}
-	
-	
-	void MySQLDataProvider::SaveColumn (Int32 x, Int32 z, SByte dimension, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) {
-	
-		pool.Enqueue([=] () {
+		pool.Enqueue([=,&column] () {
 		
 			//	Prepare parameters
 			MYSQL_BIND param [7];
 			memset(param,0,sizeof(MYSQL_BIND)*7);
+			
+			//	Parameter #1 - Raw chunk data
+			param[0].buffer_type=MYSQL_TYPE_BLOB;
+			param[0].buffer_length=sizeof(column.Data);
+			//	Remove add from length if it's
+			//	absent
+			if (!column.Add) param[0].buffer_length-=16*8*256;
+			//	Remove skylight form length if it's
+			//	absent
+			if (!column.Skylight) param[0].buffer_length-=16*8*256;
+			param[0].buffer=const_cast<void *>(
+				reinterpret_cast<const void *>(
+					&column.Data
+				)
+			);
+			
+			//	Parameter #2 - Skylight y/n?
+			bind(param[1],column.Skylight);
+			//	Parameter #3 - Add y/n?
+			bind(param[2],column.Add);
+			//	Parameter #4 - Populated y/n?
+			bind(param[3],column.Populated);
 			
 			//	Parameter #5 - X coordinate
 			bind(param[4],x);
@@ -1371,35 +1083,6 @@ namespace MCPP {
 			//	Parameter #7 - Dimension
 			bind(param[6],dimension);
 			
-			//	Acquire locks/get pointer to chunk
-			bool populated;
-			auto column=callback_begin(
-				x,
-				z,
-				dimension,
-				&populated
-			);
-			
-			//	Bail out if the pointer is null
-			if (column.IsNull()) return;
-			
-			//	Bind remainder of parameters now
-			//	that we have access to the column
-			
-			//	Parameter #1 - Raw chunk data
-			param[0].buffer_type=MYSQL_TYPE_BLOB;
-			param[0].buffer_length=(16*16*16*16*2)+(16*16);
-			if (column->Add) param[0].buffer_length+=16*16*16*16/2;
-			if (column->Skylight) param[0].buffer_length+=16*16*16*16/2;
-			param[0].buffer=column->Data;
-			
-			//	Parameter #2 - Skylight y/n?
-			bind(param[1],column->Skylight);
-			//	Parameter #3 - Add y/n?
-			bind(param[2],column->Add);
-			//	Parameter #4 - Populated y/n?
-			bind(param[3],populated);
-			
 			try {
 			
 				//	Reconnect if necessary
@@ -1407,6 +1090,13 @@ namespace MCPP {
 				
 				//	Regenerate statement if necessary
 				prepare_stmt(column_update_stmt,column_update_query);
+				
+				//	Invoke callback
+				if (!callback_begin(
+					x,
+					z,
+					dimension
+				)) return;
 			
 				//	Attempt UPDATE
 				if (

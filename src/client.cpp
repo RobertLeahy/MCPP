@@ -12,6 +12,7 @@ namespace MCPP {
 	static const String key_pa("Key:");
 	static const String iv_pa("Initialization Vector:");
 	static const String recv_pa_template("{0}:{1} ==> Server - Packet of type {2}");
+	static const String encrypt_pa_key("encryption");
 	
 	
 	//	Formats a byte for display/logging
@@ -80,7 +81,7 @@ namespace MCPP {
 	void Client::enable_encryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
 	
 		//	Protocol analysis
-		if (RunningServer->ProtocolAnalysis) {
+		if (RunningServer->IsVerbose(encrypt_pa_key)) {
 		
 			String log(pa_banner);
 			log	<<	Newline
@@ -114,7 +115,10 @@ namespace MCPP {
 	SmartPointer<SendHandle> Client::send (const Packet & packet) {
 	
 		//	Protocol analysis
-		if (RunningServer->ProtocolAnalysis) {
+		if (RunningServer->LogPacket(
+			packet.Type(),
+			ProtocolDirection::ServerToClient
+		)) {
 		
 			String log(pa_banner);
 			log	<<	Newline
@@ -313,7 +317,10 @@ namespace MCPP {
 	Packet Client::CompleteReceive () noexcept {
 	
 		//	Protocol Analysis
-		if (RunningServer->ProtocolAnalysis) {
+		if (RunningServer->LogPacket(
+			in_progress.Type(),
+			ProtocolDirection::ClientToServer
+		)) {
 		
 			String log(pa_banner);
 			log << Newline << String::Format(

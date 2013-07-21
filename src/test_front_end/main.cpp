@@ -123,13 +123,14 @@ int Main (const Vector<const String> & args) {
 	#endif
 
 	#ifdef DEBUG
-	if (test()) return EXIT_SUCCESS;
+	//if (test()) return EXIT_SUCCESS;
 	#endif
 
 	console_write.Construct(1);
 	RunningServer.Construct();
 	
-	//RunningServer->ProtocolAnalysis=true;
+	RunningServer->ProtocolAnalysis=true;
+	RunningServer->LoggedPackets.insert(0x03);
 	RunningServer->OnLogin.Add([] (SmartPointer<Client> client) {
 		
 		typedef PacketTypeMap<0x06> sp;

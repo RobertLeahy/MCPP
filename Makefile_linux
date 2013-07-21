@@ -1,11 +1,11 @@
 OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors
 #OPTIMIZATION=-O3
-OPTS_SHARED=-static-libgcc -static-libstdc++ -Wall -Wpedantic -fno-rtti -std=gnu++11 -I include -Dlinux -fPIC
-GPP=/opt/gcc-4.8.0/bin/g++ $(OPTS_SHARED) $(OPTIMIZATION)
+OPTS_SHARED=-static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include -Dlinux -fPIC
+GPP=g++ $(OPTS_SHARED) $(OPTIMIZATION)
 LINK=-Wl,-rpath,'$$ORIGIN' -Wl,-rpath-link,bin -Wl,-rpath-link,bin/mods -Wl,-rpath-link,bin/chat_mods
 
 
-DEPS=include/aes_128_cfb_8.hpp include/chunk.hpp include/client.hpp include/common.hpp include/compression.hpp include/data_provider.hpp include/event.hpp include/hash.hpp include/metadata.hpp include/mod.hpp include/mod_loader.hpp include/nbt.hpp include/network.hpp include/packet.hpp include/packet_router.hpp include/random.hpp include/rsa_key.hpp include/server.hpp include/sha1.hpp include/thread_pool.hpp include/typedefs.hpp
+DEPS=include/aes_128_cfb_8.hpp include/chunk.hpp include/client.hpp include/common.hpp include/compression.hpp include/data_provider.hpp include/event.hpp include/hash.hpp include/metadata.hpp include/mod.hpp include/mod_loader.hpp include/nbt.hpp include/network.hpp include/packet.hpp include/packet_router.hpp include/random.hpp include/rsa_key.hpp include/server.hpp include/sha1.hpp include/thread_pool.hpp include/typedefs.hpp bin/rleahylib.so
 
 
 #	DEFAULT
@@ -23,6 +23,15 @@ cleanall: clean
 	-$(RM) bin/data_providers/*
 	-$(RM) bin/mods/*
 	-$(RM) bin/chat_mods/*
+	
+	
+#	RLEAHYLIB
+
+bin/rleahylib.so: ../RLeahyLib/release/bin/rleahylib.so
+	-rm -f ./bin/rleahylib.so
+	-rm -f ./include/rleahylib/*
+	yes | cp ../RLeahyLib/release/bin/rleahylib.so ./bin
+	yes | cp ../RLeahyLib/release/include/* ./include/rleahylib
 	
 	
 #	MCPP MAIN LIBRARY
@@ -55,9 +64,9 @@ obj/thread_pool_handle.o \
 obj/sha1.o \
 obj/new_delete.o \
 bin/data_provider.so
-	$(GPP) -shared -o $@ obj/server.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o -lrleahy -lcrypto -lz -lcurl bin/data_provider.so $(LINK) -Wl,-soname,mcpp.so
+	$(GPP) -shared -o $@ obj/server.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o -lcrypto -lz -lcurl bin/data_provider.so bin/rleahylib.so $(LINK) -Wl,-soname,mcpp.so
 
-obj/server.o: src/server.cpp $(DEPS)
+obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp $(DEPS)
 	$(GPP) src/server.cpp -c -o $@
 
 obj/mod.o: src/mod.cpp $(DEPS)
@@ -123,13 +132,13 @@ obj/sha1.o: src/sha1.cpp $(DEPS)
 
 #	HTTP
 
-obj/url.o: src/url.cpp include/url.hpp
+obj/url.o: src/url.cpp include/url.hpp bin/rleahylib.so
 	$(GPP) src/url.cpp -c -o $@
 	
-obj/http_handler.o: src/http_handler.cpp src/http_handler_callbacks.cpp include/http_handler.hpp
+obj/http_handler.o: src/http_handler.cpp src/http_handler_callbacks.cpp include/http_handler.hpp bin/rleahylib.so
 	$(GPP) src/http_handler.cpp -c -o $@
 	
-obj/http_request.o: src/http_request.cpp include/http_handler.hpp
+obj/http_request.o: src/http_request.cpp include/http_handler.hpp bin/rleahylib.so
 	$(GPP) src/http_request.cpp -c -o $@
 	
 	
@@ -148,13 +157,13 @@ bin/data_provider.so: bin/data_providers/mysql_data_provider.so
 	cp bin/data_providers/mysql_data_provider.so bin/data_provider.so
 	
 bin/data_providers/mysql_data_provider.so: obj/mysql_data_provider.o obj/data_provider.o obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o
-	$(GPP) -shared -o bin/data_providers/data_provider.so obj/mysql_data_provider.o obj/data_provider.o -L /usr/lib64/mysql -lmysqlclient -lrleahy obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o $(LINK) -Wl,-soname,data_provider.so
+	$(GPP) -shared -o bin/data_providers/data_provider.so obj/mysql_data_provider.o obj/data_provider.o -L /usr/lib64/mysql -lmysqlclient bin/rleahylib.so obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o $(LINK) -Wl,-soname,data_provider.so
 	mv bin/data_providers/data_provider.so bin/data_providers/mysql_data_provider.so
 
-obj/mysql_data_provider.o: src/mysql_data_provider.cpp src/login_info.cpp include/data_provider.hpp include/mysql_data_provider.hpp include/column.hpp include/thread_pool.hpp
+obj/mysql_data_provider.o: src/mysql_data_provider.cpp src/login_info.cpp include/data_provider.hpp include/mysql_data_provider.hpp bin/rleahylib.so include/column.hpp include/thread_pool.hpp
 	$(GPP) src/mysql_data_provider.cpp -c -o $@
 	
-obj/data_provider.o: src/data_provider.cpp include/data_provider.hpp
+obj/data_provider.o: src/data_provider.cpp include/data_provider.hpp bin/rleahylib.so
 	$(GPP) src/data_provider.cpp -c -o $@
 	
 
@@ -163,10 +172,10 @@ obj/data_provider.o: src/data_provider.cpp include/data_provider.hpp
 .PHONY: thread_pool
 thread_pool: obj/thread_pool.o obj/thread_pool_handle.o include/thread_pool.hpp
 
-obj/thread_pool.o: src/thread_pool.cpp include/thread_pool.hpp
+obj/thread_pool.o: src/thread_pool.cpp include/thread_pool.hpp bin/rleahylib.so
 	$(GPP) src/thread_pool.cpp -c -o $@
 	
-obj/thread_pool_handle.o: src/thread_pool_handle.cpp include/thread_pool.hpp
+obj/thread_pool_handle.o: src/thread_pool_handle.cpp include/thread_pool.hpp bin/rleahylib.so
 	$(GPP) src/thread_pool_handle.cpp -c -o $@
 	
 	
@@ -194,49 +203,49 @@ bin/chat_mods/kick.so
 #	PING SUPPORT
 
 bin/mods/ping.so: src/ping/main.cpp bin/mcpp.so obj/new_delete.o $(DEPS)
-	$(GPP) -shared -o $@ src/ping/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy $(LINK) -Wl,-soname,ping.so
+	$(GPP) -shared -o $@ src/ping/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so $(LINK) -Wl,-soname,ping.so
 	
 
 #	AUTHENTICATION SUPPORT
 
 bin/mods/auth.so: src/auth/main.cpp bin/mcpp.so obj/new_delete.o $(DEPS)
-	$(GPP) -shared -o $@ src/auth/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy $(LINK) -Wl,-soname,auth.so
+	$(GPP) -shared -o $@ src/auth/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so $(LINK) -Wl,-soname,auth.so
 	
 	
 #	KEEP ALIVE SUPPORT
 
 bin/mods/keep_alive.so: src/keep_alive/main.cpp bin/mcpp.so obj/new_delete.o $(DEPS)
-	$(GPP) -shared -o $@ src/keep_alive/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy $(LINK) -Wl,-soname,keep_alive.so
+	$(GPP) -shared -o $@ src/keep_alive/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so $(LINK) -Wl,-soname,keep_alive.so
 	
 	
 #	DISCONNECT SUPPORT
 
-bin/mods/disconnect.so: src/disconnect/main.cpp bin/mcpp.so -lrleahy obj/new_delete.o $(DEPS)
-	$(GPP) -shared -o $@ src/disconnect/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy $(LINK) -Wl,-soname,disconnect.so
+bin/mods/disconnect.so: src/disconnect/main.cpp bin/mcpp.so bin/rleahylib.so obj/new_delete.o $(DEPS)
+	$(GPP) -shared -o $@ src/disconnect/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so $(LINK) -Wl,-soname,disconnect.so
 	
 	
 #	CHAT SUPPORT
 
 bin/mods/chat.so: src/chat/main.cpp bin/mcpp.so obj/new_delete.o src/chat/chat_misc.cpp src/chat/chat_parser.cpp $(DEPS) include/chat/chat.hpp
-	$(GPP) -shared -o $@ src/chat/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy src/chat/chat_misc.cpp src/chat/chat_parser.cpp $(LINK) -Wl,-soname,chat.so
+	$(GPP) -shared -o $@ src/chat/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so src/chat/chat_misc.cpp src/chat/chat_parser.cpp $(LINK) -Wl,-soname,chat.so
 	
 	
 #	PLAYER LIST SUPPORT
 
 bin/mods/player_list.so: bin/mcpp.so obj/new_delete.o src/player_list/main.cpp $(DEPS)
-	$(GPP) -shared -o $@ bin/mcpp.so -lrleahy obj/new_delete.o src/player_list/main.cpp $(LINK) -Wl,-soname,player_list.so
+	$(GPP) -shared -o $@ bin/mcpp.so bin/rleahylib.so obj/new_delete.o src/player_list/main.cpp $(LINK) -Wl,-soname,player_list.so
 	
 	
 #	OPERATOR SUPPORT
 
 bin/mods/op.so: bin/mcpp.so bin/data_provider.so src/op/main.cpp obj/new_delete.o $(DEPS) include/op/op.hpp
-	$(GPP) -shared -o $@ bin/mcpp.so bin/data_provider.so -lrleahy obj/new_delete.o src/op/main.cpp $(LINK) -Wl,-soname,op.so
+	$(GPP) -shared -o $@ bin/mcpp.so bin/data_provider.so bin/rleahylib.so obj/new_delete.o src/op/main.cpp $(LINK) -Wl,-soname,op.so
 	
 	
 #	BAN SUPPORT
 
 bin/mods/ban.so: bin/mcpp.so bin/data_provider.so src/ban/main.cpp obj/new_delete.o $(DEPS) include/ban/ban.hpp
-	$(GPP) -shared -o $@ bin/mcpp.so bin/data_provider.so -lrleahy obj/new_delete.o src/ban/main.cpp $(LINK) -Wl,-soname,ban.so
+	$(GPP) -shared -o $@ bin/mcpp.so bin/data_provider.so bin/rleahylib.so obj/new_delete.o src/ban/main.cpp $(LINK) -Wl,-soname,ban.so
 	
 
 #	CHAT SUB-MODULES
@@ -245,37 +254,37 @@ bin/mods/ban.so: bin/mcpp.so bin/data_provider.so src/ban/main.cpp obj/new_delet
 #	GLOBAL CHAT
 
 bin/chat_mods/basic_chat.so: bin/mods/chat.so src/basic_chat/main.cpp obj/new_delete.o bin/mcpp.so $(DEPS) include/chat/chat.hpp
-	$(GPP) -shared -o $@ src/basic_chat/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy bin/mods/chat.so $(LINK) -Wl,-soname,basic_chat.so
+	$(GPP) -shared -o $@ src/basic_chat/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so bin/mods/chat.so $(LINK) -Wl,-soname,basic_chat.so
 	
 #	WHISPERS
 
 bin/chat_mods/whisper.so: bin/mods/chat.so src/whisper/main.cpp obj/new_delete.o bin/mcpp.so $(DEPS) include/chat/chat.hpp
-	$(GPP) -shared -o $@ src/whisper/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy bin/mods/chat.so $(LINK) -Wl,-soname,whisper.so
+	$(GPP) -shared -o $@ src/whisper/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so bin/mods/chat.so $(LINK) -Wl,-soname,whisper.so
 	
 #	LOGIN/LOGOUT BROADCASTS
 
 bin/chat_mods/chat_login.so: bin/mods/chat.so src/chat_login/main.cpp obj/new_delete.o bin/mcpp.so $(DEPS) include/chat/chat.hpp
-	$(GPP) -shared -o $@ src/chat_login/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy bin/mods/chat.so $(LINK) -Wl,-soname,chat_login.so
+	$(GPP) -shared -o $@ src/chat_login/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so bin/mods/chat.so $(LINK) -Wl,-soname,chat_login.so
 	
 #	INFORMATION THROUGH CHAT
 
-bin/chat_mods/info.so: bin/mods/chat.so src/info/main.cpp obj/new_delete.o bin/mcpp.so bin/mods/op.so $(DEPS) include/chat/chat.hpp include/op/op.hpp
-	$(GPP) -shared -o $@ src/info/main.cpp obj/new_delete.o bin/mcpp.so -lrleahy bin/mods/chat.so bin/mods/op.so $(LINK) -Wl,-soname,info.so
+bin/chat_mods/info.so: bin/mods/chat.so src/info/main.cpp obj/new_delete.o bin/mcpp.so bin/mods/op.so $(DEPS) include/chat/chat.hpp include/op/op.hpp src/info/posix.cpp
+	$(GPP) -shared -o $@ src/info/main.cpp obj/new_delete.o bin/mcpp.so bin/rleahylib.so bin/mods/chat.so bin/mods/op.so $(LINK) -Wl,-soname,info.so
 	
 #	INFORMATION ABOUT BANS THROUGH CHAT
 
 bin/chat_mods/ban_info.so: bin/mods/chat.so bin/mods/op.so bin/mods/ban.so src/ban_info/main.cpp obj/new_delete.o bin/mcpp.so $(DEPS) include/ban/ban.hpp include/chat/chat.hpp include/op/op.hpp
-	$(GPP) -shared -o $@ bin/mods/chat.so bin/mods/op.so bin/mods/ban.so src/ban_info/main.cpp obj/new_delete.o -lrleahy bin/mcpp.so $(LINK) -Wl,-soname,ban_info.so
+	$(GPP) -shared -o $@ bin/mods/chat.so bin/mods/op.so bin/mods/ban.so src/ban_info/main.cpp obj/new_delete.o bin/rleahylib.so bin/mcpp.so $(LINK) -Wl,-soname,ban_info.so
 	
 #	OP/DEOP THROUGH CHAT
 
 bin/chat_mods/chat_op.so: bin/mods/chat.so bin/mods/op.so src/chat_op/main.cpp obj/new_delete.o bin/mcpp.so $(DEPS) include/chat/chat.hpp include/op/op.hpp
-	$(GPP) -shared -o $@ bin/mods/chat.so bin/mods/op.so src/chat_op/main.cpp obj/new_delete.o -lrleahy bin/mcpp.so $(LINK) -Wl,-soname,chat_op.so
+	$(GPP) -shared -o $@ bin/mods/chat.so bin/mods/op.so src/chat_op/main.cpp obj/new_delete.o bin/rleahylib.so bin/mcpp.so $(LINK) -Wl,-soname,chat_op.so
 	
 #	KICKING THROUGH CHAT
 
 bin/chat_mods/kick.so: bin/mods/chat.so bin/mods/op.so src/kick/main.cpp obj/new_delete.o bin/mcpp.so $(DEPS) include/chat/chat.hpp include/op/op.hpp
-	$(GPP) -shared -o $@ bin/mods/chat.so bin/mods/op.so src/kick/main.cpp obj/new_delete.o -lrleahy bin/mcpp.so $(LINK) -Wl,-soname,kick.so
+	$(GPP) -shared -o $@ bin/mods/chat.so bin/mods/op.so src/kick/main.cpp obj/new_delete.o bin/rleahylib.so bin/mcpp.so $(LINK) -Wl,-soname,kick.so
 	
 	
 #	SERVER FRONT-END
@@ -284,10 +293,10 @@ bin/chat_mods/kick.so: bin/mods/chat.so bin/mods/op.so src/kick/main.cpp obj/new
 front_end: bin/server
 
 bin/server: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.so obj/new_delete.o $(DEPS)
-	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.so -lrleahy obj/new_delete.o $(LINK)
+	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.so bin/rleahylib.so obj/new_delete.o $(LINK)
 	
 bin/mcpp: src/interactive_front_end/main.cpp bin/mcpp.so bin/data_provider.so obj/new_delete.o $(DEPS)
-	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.so -lrleahy bin/data_provider.so obj/new_delete.o $(LINK)
+	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.so bin/rleahylib.so bin/data_provider.so obj/new_delete.o $(LINK)
 	
 	
 #	TEST
@@ -297,4 +306,4 @@ bin/mcpp: src/interactive_front_end/main.cpp bin/mcpp.so bin/data_provider.so ob
 test: bin/test.exe
 
 bin/test: src/test/test.cpp obj/thread_pool.o obj/network.o obj/thread_pool_handle.o
-	$(GPP) -o $@ -lrleahy obj/thread_pool.o obj/network.o src/test/test.cpp obj/thread_pool_handle.o
+	$(GPP) -o $@ bin/rleahylib.so obj/thread_pool.o obj/network.o src/test/test.cpp obj/thread_pool_handle.o

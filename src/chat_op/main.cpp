@@ -61,10 +61,10 @@ class ChatOp : public Module {
 						Ops->Op(match[1].Value());
 						
 						ChatMessage message;
-						message	<<	ChatStyle::Bold
-								<<	ChatColour::BrightGreen
+						message	<<	ChatStyle::BrightGreen
+								<<	ChatStyle::Bold
 								<<	client->GetUsername()
-								<<	ChatFormat::PopStyle
+								<<	ChatFormat::Pop
 								<<	" opped "
 								<<	ChatStyle::Bold
 								<<	match[1].Value();
@@ -84,10 +84,10 @@ class ChatOp : public Module {
 						Ops->DeOp(match[1].Value());
 						
 						ChatMessage message;
-						message	<<	ChatStyle::Bold
-								<<	ChatColour::Red
+						message <<	ChatStyle::Red
+								<<	ChatStyle::Bold
 								<<	client->GetUsername()
-								<<	ChatFormat::PopStyle
+								<<	ChatFormat::Pop
 								<<	" deopped "
 								<<	ChatStyle::Bold
 								<<	match[1].Value();

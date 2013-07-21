@@ -14,10 +14,7 @@ namespace MCPP {
 	ChatToken::ChatToken (String segment) noexcept : Type(ChatFormat::Segment), Segment(std::move(segment)) {	}
 	
 	
-	ChatToken::ChatToken (ChatColour colour) noexcept : Type(ChatFormat::PushColour), Colour(colour) {	}
-	
-	
-	ChatToken::ChatToken (ChatStyle style) noexcept : Type(ChatFormat::PushStyle), Style(style) {	}
+	ChatToken::ChatToken (ChatStyle style) noexcept : Type(ChatFormat::Push), Style(style) {	}
 	
 	
 	ChatToken::ChatToken (ChatFormat type) noexcept : Type(type) {
@@ -40,14 +37,10 @@ namespace MCPP {
 		
 			new (&Segment) String (other.Segment);
 		
-		} else if (Type==ChatFormat::PushStyle) {
+		} else if (Type==ChatFormat::Push) {
 		
 			Style=other.Style;
-		
-		} else if (Type==ChatFormat::PushColour) {
-		
-			Colour=other.Colour;
-		
+			
 		}
 	
 	}
@@ -130,8 +123,6 @@ namespace MCPP {
 	
 	ChatMessage::ChatMessage (String message) : Echo(false) {
 	
-		Message.EmplaceBack(ChatFormat::DefaultStyle);
-		Message.EmplaceBack(ChatFormat::DefaultColour);
 		Message.EmplaceBack(ChatFormat::Label);
 		Message.EmplaceBack(ChatFormat::LabelSeparator);
 		Message.EmplaceBack(String(" "));
@@ -142,8 +133,6 @@ namespace MCPP {
 	
 	ChatMessage::ChatMessage (SmartPointer<Client> from, String message) : From(std::move(from)), Echo(false) {
 	
-		Message.EmplaceBack(ChatFormat::DefaultStyle);
-		Message.EmplaceBack(ChatFormat::DefaultColour);
 		Message.EmplaceBack(ChatFormat::Label);
 		Message.EmplaceBack(ChatFormat::LabelSeparator);
 		Message.EmplaceBack(String(" "));
@@ -156,8 +145,7 @@ namespace MCPP {
 	
 		To.EmplaceBack(std::move(to));
 	
-		Message.EmplaceBack(ChatFormat::DefaultStyle);
-		Message.EmplaceBack(ChatFormat::DefaultColour);
+		Message.EmplaceBack(ChatStyle::Pink);
 		Message.EmplaceBack(ChatFormat::Label);
 		Message.EmplaceBack(ChatFormat::LabelSeparator);
 		Message.EmplaceBack(String(" "));

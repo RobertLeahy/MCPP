@@ -1,6 +1,82 @@
 #define p_a(x) case x:return protocol_analysis_impl<x>(packet);
 
 
+static const Regex tab_regex(
+	"^",
+	RegexOptions().SetMultiline()
+);
+static const RegexReplacement tab_regex_replacement(
+	"\t"
+);
+
+
+template <typename T>
+class is_packet_array {
+
+
+	public:
+	
+	
+		typedef T Type;
+	
+	
+		static const bool Value=false;
+
+
+};
+
+
+template <typename TCount, typename TItem>
+class is_packet_array<PacketArray<TCount,TItem>> {
+
+
+	public:
+	
+	
+		typedef Vector<TItem> Type;
+	
+	
+		static const bool Value=true;
+
+
+};
+
+
+//
+//	FORWARD DECLARATIONS
+//
+
+
+template <typename T, typename=void>
+class can_be_rendered;
+template <typename T>
+static inline typename std::enable_if<
+	(
+		can_be_rendered<T>::value &&
+		!is_packet_array<T>::Value
+	),
+	String
+>::type render_helper (const T &);
+template <typename T>
+static inline typename std::enable_if<
+	(
+		can_be_rendered<T>::value &&
+		is_packet_array<T>::Value
+	),
+	String
+>::type render_helper (const T &);
+template <typename T>
+static inline typename std::enable_if<
+	!can_be_rendered<T>::value,
+	String
+>::type render_helper (const T &);
+
+
+//
+//	END FORWARD DECLARATIONS
+//
+
+
 //	Formats a byte for display/logging
 static inline String byte_format (Byte b) {
 
@@ -50,14 +126,6 @@ static inline String buffer_format (const Vector<Byte> & buffer) {
 }
 
 
-template <typename T>
-String render (const T & value) {
-
-	return "UNABLE TO RENDER";
-
-}
-
-
 static String render (bool value) {
 
 	String returnthis("Boolean: ");
@@ -75,6 +143,16 @@ static String render (const Vector<Byte> & value) {
 	returnthis << String(value.Count()) << " bytes):" << Newline << buffer_format(value);
 	
 	return returnthis;
+
+}
+
+
+static String render (UInt128 value) {
+
+	return String::Format(
+		"128-bit Unsigned Integer: {0}",
+		value
+	);
 
 }
 
@@ -139,6 +217,16 @@ static String render (SByte value) {
 }
 
 
+static String render (Byte value) {
+
+	return String::Format(
+		"Unsigned byte: {0}",
+		value
+	);
+
+}
+
+
 static String render (const String & value) {
 
 	return String::Format(
@@ -153,62 +241,161 @@ static String render (const String & value) {
 }
 
 
-static String render (const Vector<String> & value) {
+template <typename T>
+static String render (const Vector<T> & value) {
 
-	String returnthis("Array of strings (");
-	returnthis << String(value.Count()) << " strings):";
+	String array_rendered;
 	
-	for (const auto & s : value) returnthis << Newline << render(s);
+	for (Word i=0;i<value.Count();++i) {
+	
+		array_rendered << Newline << "[" << String(i) << "] " << render_helper(value[i]);
+	
+	}
+	
+	array_rendered=tab_regex.Replace(
+		array_rendered,
+		tab_regex_replacement
+	);
+	
+	String returnthis(
+		String::Format(
+			"Array of {0} element{1}:",
+			value.Count(),
+			(value.Count()==1) ? "" : "s"
+		)
+	);
+	
+	returnthis << array_rendered;
 	
 	return returnthis;
 
 }
 
 
-template <typename T>
-class is_packet_array {
+template <Word i, typename... Args>
+typename std::enable_if<
+	i>=sizeof...(Args),
+	String
+>::type tuple_render (const Tuple<Args...> & value) {
 
-
-	public:
-	
-	
-		static const bool Value=false;
-
-
-};
-
-
-template <typename TCount, typename TItem>
-class is_packet_array<PacketArray<TCount,TItem>> {
-
-
-	public:
-	
-	
-		static const bool Value=true;
-
-
-};
-
-
-template <Word i, typename T>
-inline auto protocol_analysis_packet_retrieve_helper (const Packet & packet) -> const typename std::enable_if<
-	is_packet_array<T>::Value,
-	decltype(packet.Retrieve<T>(i).Payload)
->::type & {
-
-	return packet.Retrieve<decltype(packet.Retrieve<T>(i).Payload)>(i);
+	return String();
 
 }
 
 
-template <Word i, typename T>
-inline const typename std::enable_if<
-	!is_packet_array<T>::Value,
-	T
->::type & protocol_analysis_packet_retrieve_helper (const Packet & packet) {
+template <Word i, typename... Args>
+typename std::enable_if<
+	i<sizeof...(Args),
+	String
+>::type tuple_render (const Tuple<Args...> & value) {
 
-	return packet.Retrieve<T>(i);
+	String returnthis;
+	returnthis << Newline << render_helper(value.template Item<i>()) << tuple_render<i+1>(value);
+	return returnthis;
+
+}
+
+
+template <typename... Args>
+String render (const Tuple<Args...> & value) {
+
+	String tuple_rendered(
+		tuple_render<0>(value)
+	);
+	
+	tuple_rendered=tab_regex.Replace(
+		tuple_rendered,
+		tab_regex_replacement
+	);
+	
+	String returnthis(
+		String::Format(
+			"{0}-Tuple:{1}",
+			sizeof...(Args),
+			tuple_rendered
+		)
+	);
+	
+	return returnthis;
+
+}
+
+
+template <typename T, typename>
+class can_be_rendered {
+
+
+	public:
+	
+	
+		static const bool value=false;
+
+
+};
+
+
+template <typename T>
+class can_be_rendered<
+	T,
+	typename std::enable_if<
+		std::is_same<
+			String,
+			decltype(
+				render(
+					std::declval<
+						typename is_packet_array<T>::Type
+					>()
+				)
+			)
+		>::value
+	>::type
+> {
+
+
+	public:
+	
+	
+		static const bool value=true;
+
+
+};
+
+
+template <typename T>
+static inline typename std::enable_if<
+	(
+		can_be_rendered<T>::value &&
+		!is_packet_array<T>::Value
+	),
+	String
+>::type render_helper (const T & value) {
+
+	return render(value);
+
+}
+
+
+template <typename T>
+static inline typename std::enable_if<
+	(
+		can_be_rendered<T>::value &&
+		is_packet_array<T>::Value
+	),
+	String
+>::type render_helper (const T & value) {
+
+	return render(value.Payload);
+
+}
+
+
+template <typename T>
+static inline typename std::enable_if<
+	!can_be_rendered<T>::value,
+	String
+>::type render_helper (const T &) {
+
+	return "UNABLE TO RENDER";
 
 }
 
@@ -217,11 +404,10 @@ template <Byte type, Word i>
 inline String protocol_analysis_render (const Packet & packet) {
 
 	String returnthis(Newline);
-	returnthis << "#" << String(i+1) << " - " << render(
-		protocol_analysis_packet_retrieve_helper<
-			i,
+	returnthis << "#" << String(i+1) << " - " << render_helper(
+		packet.Retrieve<
 			typename PacketTypeMap<type>::template RetrieveType<i>::Type
-		>(packet)
+		>(i)
 	);
 	
 	return returnthis;

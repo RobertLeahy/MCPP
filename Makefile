@@ -14,7 +14,7 @@ GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe 
 #	DEFAULT
 
 .PHONY: all
-all: mods front_end test
+all: mods front_end
 
 .PHONY: clean
 clean:
@@ -210,7 +210,8 @@ bin/chat_mods/ban_info.dll \
 bin/chat_mods/info.dll \
 bin/chat_mods/chat_op.dll \
 bin/chat_mods/kick.dll \
-bin/mods/world.dll
+bin/mods/world.dll \
+bin/world_mods/flat.dll
 
 
 #	PING SUPPORT
@@ -263,8 +264,9 @@ bin/mods/ban.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/ban/
 
 #	WORLD
 
-bin/mods/world.dll: bin/mcpp.dll bin/rleahy_lib.dll src/world/world_lock.cpp obj/new_delete.o src/world/block_id.cpp src/world/world_lock_info.cpp src/world/column_id.cpp include/world/world.hpp
-	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/world_lock.cpp src/world/column_id.cpp src/world/block_id.cpp src/world/world_lock_info.cpp
+
+bin/mods/world.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/block_id.cpp src/world/column_id.cpp include/world/world.hpp src/world/world.cpp src/world/column_container.cpp
+	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/column_id.cpp src/world/block_id.cpp src/world/world.cpp src/world/column_container.cpp
 	
 
 #	CHAT SUB-MODULES
@@ -287,7 +289,7 @@ bin/chat_mods/chat_login.dll: bin/mods/chat.dll src/chat_login/main.cpp obj/new_
 	
 #	INFORMATION THROUGH CHAT
 
-bin/chat_mods/info.dll: bin/mods/chat.dll src/info/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll bin/mods/op.dll
+bin/chat_mods/info.dll: bin/mods/chat.dll src/info/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll bin/mods/op.dll src/info/windows.cpp
 	$(GPP) -shared -o $@ src/info/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll bin/mods/op.dll
 	
 #	INFORMATION ABOUT BANS THROUGH CHAT
@@ -306,6 +308,15 @@ bin/chat_mods/kick.dll: bin/mods/chat.dll bin/mods/op.dll src/kick/main.cpp obj/
 	$(GPP) -shared -o $@ bin/mods/chat.dll bin/mods/op.dll src/kick/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
 	
 	
+#	WORLD SUB-MODULES
+
+
+#	FLAT WORLD GENERATOR
+
+bin/world_mods/flat.dll: bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll src/flat/main.cpp obj/new_delete.o
+	$(GPP) -shared -o $@ bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll src/flat/main.cpp obj/new_delete.o
+	
+	
 #	SERVER FRONT-END
 
 .PHONY: front_end
@@ -316,13 +327,3 @@ bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp
 	
 bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
 	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
-	
-	
-#	TEST
-
-
-.PHONY: test
-test: bin/test.exe
-
-bin/test.exe: bin/rleahy_lib.dll src/test/test.cpp obj/thread_pool.o obj/network.o obj/thread_pool_handle.o src/world/world_lock.cpp include/world/world.hpp src/world/column_id.cpp src/world/block_id.cpp src/world/world_lock_info.cpp
-	$(GPP) -o $@ bin/rleahy_lib.dll obj/thread_pool.o obj/network.o src/test/test.cpp -lws2_32 obj/thread_pool_handle.o src/world/world_lock.cpp src/world/column_id.cpp src/world/block_id.cpp src/world/world_lock_info.cpp

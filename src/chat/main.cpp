@@ -28,7 +28,7 @@ namespace MCPP {
 				),
 				mods_dir
 			),
-			[&] (const String & message, Service::LogType type) {
+			[] (const String & message, Service::LogType type) {
 			
 				String log(log_prepend);
 				log << message;
@@ -185,10 +185,17 @@ namespace MCPP {
 	
 	Vector<String> ChatModule::Send (const ChatMessage & message) {
 	
+		//	Get the formatted string
+		String formatted(Format(message));
+		
+		//	If there's nothing there, silently
+		//	fail
+		if (formatted.Size()==0) return Vector<String>();
+	
 		//	Build the packet
 		Packet packet;
 		packet.SetType<pt>();
-		packet.Retrieve<pt,0>()=Format(message);
+		packet.Retrieve<pt,0>()=std::move(formatted);
 		
 		//	Return to sender if applicable
 		if (message.Echo && !message.From.IsNull()) {

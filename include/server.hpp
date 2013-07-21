@@ -34,9 +34,24 @@ namespace MCPP {
 #include <event.hpp>
 #include <typedefs.hpp>
 #include <http_handler.hpp>
+#include <unordered_set>
+#include <unordered_map>
 
 
 namespace MCPP {
+
+
+	/**
+	 *	The direction information is travelling
+	 *	over the wire.
+	 */
+	enum class ProtocolDirection {
+	
+		ClientToServer,	/**<	From the client to the server.	*/
+		ServerToClient,	/**<	From the server to the client.	*/
+		Both			/**<	Both	*/
+	
+	};
 
 
 	class Server : public Service {
@@ -75,6 +90,7 @@ namespace MCPP {
 			//					//
 			inline void server_startup();
 			inline void load_mods();
+			inline void cleanup_events () noexcept;
 			
 			
 		protected:
@@ -98,6 +114,40 @@ namespace MCPP {
 			 *	needed.
 			 */
 			bool ProtocolAnalysis;
+			/**
+			 *	If ProtocolAnalysis is \em true, the
+			 *	direction of the traffic which is to
+			 *	be logged.
+			 *
+			 *	Defaults to ProtocolDirection::Both.
+			 */
+			ProtocolDirection Direction;
+			/**
+			 *	If ProtocolAnalysis is \em true, the
+			 *	types of packet that shall be logged.
+			 */
+			std::unordered_set<Byte> LoggedPackets;
+			/**
+			 *	If ProtocolAnalysis is \em true, and this
+			 *	is \em true, all packets shall be logged.
+			 *
+			 *	Defaults to \em false.
+			 */
+			bool LogAllPackets;
+			/**
+			 *	If ProtocolAnalysis is \em true, the
+			 *	modules or components that shall emit
+			 *	verbose output.
+			 */
+			std::unordered_set<String> Verbose;
+			/**
+			 *	If ProtocolAnalysis is \em true, and
+			 *	this is \em true, all modules and
+			 *	components shall emit verbose output.
+			 *
+			 *	Defaults to \em false.
+			 */
+			bool VerboseAll;
 			/**
 			 *	The maxiumum number of bytes which
 			 *	the server shall allow to be buffered
@@ -169,6 +219,24 @@ namespace MCPP {
 			 *	packets.
 			 */
 			PacketRouter Router;
+			/**
+			 *	Returns a string representing the date
+			 *	and time the server was built in this
+			 *	format: \"MMM DD YYYY HH:MM:SS\".
+			 *
+			 *	\return
+			 *		A string of the above format.
+			 */
+			String BuildDate () const;
+			/**
+			 *	Returns a string representing the compiler
+			 *	the server was built with.
+			 *
+			 *	\return
+			 *		A string representing the compiler used
+			 *		to build the server.
+			 */
+			String CompiledWith () const;
 			
 		
 			Server (const Server &) = delete;
@@ -241,6 +309,35 @@ namespace MCPP {
 			 *	Attempts to shut the server down.
 			 */
 			void Panic () noexcept;
+			
+			
+			/**
+			 *	Whether the packet should be logged.
+			 *
+			 *	\param [in] type
+			 *		The type of the packet.
+			 *	\param [in] direction
+			 *		The direction the packet is moving.
+			 *
+			 *	\return
+			 *		\em true if the packet should be
+			 *		logged, \em false otherwise.
+			 */
+			bool LogPacket (Byte type, ProtocolDirection direction) const noexcept;
+			/**
+			 *	Whether the module or component given
+			 *	should be verbose.
+			 *
+			 *	\param [in] key
+			 *		The key of the module or component
+			 *		in question.
+			 *
+			 *	\return
+			 *		\em true if the module or component
+			 *		should be verbose, \em false
+			 *		otherwise.
+			 */
+			bool IsVerbose (const String & key) const noexcept;
 			
 			
 			//			//
