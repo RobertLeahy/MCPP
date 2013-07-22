@@ -1133,8 +1133,22 @@ namespace MCPP {
 				
 				}
 				
-				//	Launch worker thread
-				worker=Thread([=] () {	worker_func();	});
+				try {
+				
+					//	Launch worker thread
+					worker=Thread([=] () {	worker_func();	});
+					
+				} catch (...) {
+				
+					//	Make sure accept thread gets
+					//	shut down
+					WSASetEvent(stop);
+					
+					accept.Join();
+					
+					throw;
+				
+				}
 				
 			} catch (...) {
 			
