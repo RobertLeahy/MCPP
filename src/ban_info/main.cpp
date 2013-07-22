@@ -205,7 +205,7 @@ class BanInfo : public Module {
 };
 
 
-Nullable<BanInfo> module;
+static Nullable<BanInfo> module;
 
 
 extern "C" {

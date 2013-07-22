@@ -38,9 +38,11 @@ namespace MCPP {
 		generated=0;
 		loaded=0;
 		populated=0;
+		saved=0;
 		generate_time=0;
 		load_time=0;
 		populate_time=0;
+		save_time=0;
 		
 		//	Fire up the mod loader
 		mods.Construct(
@@ -893,32 +895,9 @@ namespace MCPP {
 	}
 	
 	
-	ColumnState WorldContainer::GetColumnState (ColumnID id, bool acquire) noexcept {
-	
-		world_lock.Acquire();
+	static inline ColumnState get_column_state (SmartPointer<ColumnContainer> column) noexcept {
 		
-		auto iter=world.find(id);
-		
-		//	Unloaded
-		if (iter==world.end()) {
-		
-			world_lock.Release();
-			
-			return ColumnState::Unloaded;
-		
-		}
-		
-		auto column=iter->second;
-		
-		//	Prevent the column from being
-		//	unloaded while we examine it
-		++column->Interested;
-		
-		world_lock.Release();
-		
-		column->Lock.Acquire();
-		
-		ColumnState result=(
+		return (
 			column->Processing
 				?	(
 						column->Generated
@@ -935,14 +914,42 @@ namespace MCPP {
 								)
 					)
 		);
+	
+	}
+	
+	
+	ColumnState WorldContainer::GetColumnState (ColumnID id, bool acquire) noexcept {
+	
+		world_lock.Acquire();
 		
-		column->Lock.Release();
+		auto iter=world.find(id);
+		
+		//	Unloaded
+		if (iter==world.end()) {
+		
+			world_lock.Release();
+			
+			return ColumnState::Unloaded;
+		
+		}
+		
+		//	Prevent the column from being
+		//	unloaded while we examine it
+		++iter->second->Interested;
+		
+		world_lock.Release();
+		
+		iter->second->Lock.Acquire();
+		
+		ColumnState result=get_column_state(iter->second);
+		
+		iter->second->Lock.Release();
 		
 		//	Release interest if necessary
 		if (
 			!acquire ||
 			(result==ColumnState::Unloaded)
-		) --column->Interested;
+		) --iter->second->Interested;
 		
 		return result;
 	
@@ -958,6 +965,107 @@ namespace MCPP {
 		if (iter!=world.end()) --iter->second->Interested;
 		
 		world_lock.Release();
+	
+	}
+	
+	
+	WorldContainerInfo WorldContainer::GetInfo () const {
+	
+		WorldContainerInfo result{
+			world_type,
+			loaded,
+			saved,
+			generated,
+			populated,
+			load_time,
+			save_time,
+			generate_time,
+			populate_time,
+			Vector<ColumnInfo>()
+		};
+		
+		world_lock.Acquire();
+		
+		try {
+		
+			result.Columns=Vector<ColumnInfo>(world.size());
+		
+			for (const auto & pair : world) {
+			
+				ColumnInfo info;
+			
+				pair.second->Lock.Acquire();
+				
+				try {
+				
+					info.Clients=Vector<SmartPointer<Client>>(
+						pair.second->Clients.size()
+					);
+					
+					for (const auto & client : pair.second->Clients) info.Clients.Add(client);
+				
+				} catch (...) {
+				
+					pair.second->Lock.Release();
+					
+					throw;
+				
+				}
+				
+				info.ID=pair.first;
+				info.State=get_column_state(pair.second);
+				info.Interested=pair.second->Interested;
+				
+				pair.second->Lock.Release();
+				
+				result.Columns.Add(
+					std::move(info)
+				);
+			
+			}
+		
+		} catch (...) {
+		
+			world_lock.Release();
+			
+			throw;
+		
+		}
+		
+		world_lock.Release();
+		
+		return result;
+	
+	}
+	
+	
+	void WorldContainer::SetDimensionName (String world_type, SByte dimension, const String & name, bool is_default) {
+	
+		auto pair=dimension_names.emplace(
+			std::move(world_type),
+			std::unordered_map<SByte,String>()
+		);
+		
+		pair.first->second[dimension]=name;
+		
+		if (is_default) default_dimension_names[dimension]=name;
+	
+	}
+	
+	
+	Nullable<String> WorldContainer::GetDimensionName (SByte dimension) const {
+	
+		Nullable<String> result;
+	
+		auto iter=dimension_names.find(world_type);
+		
+		auto & map=(iter==dimension_names.end()) ? default_dimension_names : iter->second;
+		
+		auto iter2=map.find(dimension);
+		
+		if (iter2!=map.end()) result.Construct(iter2->second);
+		
+		return result;
 	
 	}
 	
@@ -1006,6 +1114,8 @@ namespace MCPP {
 					if (pair.second->Dirty) {
 					
 						pair.second->Lock.Release();
+						
+						Timer timer=Timer::CreateAndStart();
 					
 						RunningServer->Data().SaveColumn(
 							pair.first.X,
@@ -1025,6 +1135,9 @@ namespace MCPP {
 								//	succeeded
 								pair.second->Dirty=!success;
 								pair.second->Lock.Release();
+								
+								save_time+=timer.ElapsedNanoseconds();
+								++saved;
 								
 								//	Check to see if we can unload
 								if (success) {

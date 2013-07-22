@@ -211,7 +211,8 @@ bin/chat_mods/info.dll \
 bin/chat_mods/chat_op.dll \
 bin/chat_mods/kick.dll \
 bin/mods/world.dll \
-bin/world_mods/flat.dll
+bin/world_mods/flat.dll \
+bin/chat_mods/world_info.dll
 
 
 #	PING SUPPORT
@@ -313,8 +314,13 @@ bin/chat_mods/kick.dll: bin/mods/chat.dll bin/mods/op.dll src/kick/main.cpp obj/
 
 #	FLAT WORLD GENERATOR
 
-bin/world_mods/flat.dll: bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll src/flat/main.cpp obj/new_delete.o
+bin/world_mods/flat.dll: bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll src/flat/main.cpp obj/new_delete.o include/world/world.hpp
 	$(GPP) -shared -o $@ bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll src/flat/main.cpp obj/new_delete.o
+	
+#	INFORMATION ABOUT THE WORLD THROUGH CHAT
+
+bin/chat_mods/world_info.dll: bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll bin/mods/chat.dll bin/mods/op.dll obj/new_delete.o src/world_info/main.cpp include/world/world.hpp include/chat/chat.hpp include/op/op.hpp
+	$(GPP) -shared -o $@ bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll bin/mods/chat.dll bin/mods/op.dll obj/new_delete.o src/world_info/main.cpp
 	
 	
 #	SERVER FRONT-END

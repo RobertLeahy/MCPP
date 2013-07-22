@@ -345,7 +345,7 @@ namespace MCPP {
 			
 			//	A lock which guards the structure
 			//	against unsynchronized access
-			Mutex Lock;
+			mutable Mutex Lock;
 			
 			//	Whether the column has been generated
 			//	or not
@@ -388,6 +388,105 @@ namespace MCPP {
 		Generated,	/**<	The column has been generated, but is not populated.	*/
 		Populating,	/**<	The column has been generated and is being populated.	*/
 		Populated	/**<	The column has been generated and populated.	*/
+	
+	};
+	
+	
+	/**
+	 *	Contains information about a particular
+	 *	column loaded in a WorldContainer.
+	 */
+	class ColumnInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The coordinates and dimension
+			 *	of the column.
+			 */
+			ColumnID ID;
+			/**
+			 *	The state that the column is in.
+			 */
+			ColumnState State; 
+			/**
+			 *	The clients who have this column.
+			 */
+			Vector<SmartPointer<Client>> Clients;
+			/**
+			 *	The interest count of the column.
+			 */
+			Word Interested;
+	
+	
+	};
+	
+	
+	/**
+	 *	Contains information about a WorldContainer
+	 *	at a certain instant in time.
+	 */
+	class WorldContainerInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The world type string that was
+			 *	specified in the server's
+			 *	settings.
+			 */
+			String WorldType;
+			/**
+			 *	The number of columns that
+			 *	the WorldContainer has loaded
+			 *	from the backing store.
+			 */
+			Word Loaded;
+			/**
+			 *	The number of times the WorldContainer
+			 *	has saved a column to the backing store.
+			 */
+			Word Saved;
+			/**
+			 *	The number of columns that the WorldConatiner
+			 *	has generated.
+			 */
+			Word Generated;
+			/**
+			 *	The number of columns that the WorldContainer
+			 *	has populated.
+			 */
+			Word Populated;
+			/**
+			 *	The number of nanoseconds that have been
+			 *	spent loading columns from the backing
+			 *	store.
+			 */
+			UInt64 LoadTime;
+			/**
+			 *	The number of nanoseconds that have been
+			 *	spent saving columns to the backing store.
+			 */
+			UInt64 SaveTime;
+			/**
+			 *	The number of nanoseconds that have been
+			 *	spent generating columns.
+			 */
+			UInt64 GenerateTime;
+			/**
+			 *	The number of nanoseconds that have been
+			 *	spent populating columns.
+			 */
+			UInt64 PopulateTime;
+			/**
+			 *	Information about each loaded column.
+			 */
+			Vector<ColumnInfo> Columns;
+	
 	
 	};
 
@@ -485,13 +584,38 @@ namespace MCPP {
 			> world;
 			//	Guards the world against unsynchronized
 			//	modification
-			Mutex world_lock;
+			mutable Mutex world_lock;
 			//	Maps clients to columns that they
 			//	have
 			std::unordered_map<
 				SmartPointer<Client>,
 				std::unordered_set<ColumnID>
 			> client_map;
+			
+			
+			//
+			//	DIMENSION NAMES
+			//
+			
+			
+			//	Stores dimension names by mapping
+			//	world types to a map which maps
+			//	dimension numbers to a string which
+			//	names the dimension.
+			std::unordered_map<
+				String,
+				std::unordered_map<
+					SByte,
+					String
+				>
+			> dimension_names;
+			//	Stores fallback dimension names by
+			//	mappign dimension numbers to a string
+			//	which names the dimension.
+			std::unordered_map<
+				SByte,
+				String
+			> default_dimension_names;
 			
 			
 			//
@@ -525,12 +649,16 @@ namespace MCPP {
 			std::atomic<Word> loaded;
 			//	Number of chunks populated
 			std::atomic<Word> populated;
+			//	Number of saves performed
+			std::atomic<Word> saved;
 			//	Amount of time spent generating
 			std::atomic<UInt64> generate_time;
 			//	Amount of time spent loading
 			std::atomic<UInt64> load_time;
 			//	Amount of time spent populating
 			std::atomic<UInt64> populate_time;
+			//	Amount of time spent saving
+			std::atomic<UInt64> save_time;
 			
 			
 			//
@@ -798,6 +926,53 @@ namespace MCPP {
 			 *		The populator.
 			 */
 			void Add (Word priority, Populator populator);
+			
+			
+			/**
+			 *	Specifies a name for a certain dimension within a certain
+			 *	world type.
+			 *
+			 *	This is not thread safe, do not call after the initial
+			 *	module loading process.
+			 *
+			 *	\param [in] world_type
+			 *		The world type to set the dimension name for.
+			 *	\param [in] dimension
+			 *		The dimension to set the name for.
+			 *	\param [in] name
+			 *		The name of \em dimension.
+			 *	\param [in] is_default
+			 *		If \em true \em name will be consedered to be
+			 *		the default name for \em dimension.  Defaults to
+			 *		\em false.
+			 */
+			void SetDimensionName (String world_type, SByte dimension, const String & name, bool is_default=false);
+			/**
+			 *	Attempts to retrieve the name of a given dimension within
+			 *	the current world type.
+			 *
+			 *	\param [in] dimension
+			 *		The dimension to attempt to retrieve the name for.
+			 *
+			 *	\return
+			 *		A string representing the name of \em dimension,
+			 *		or \em null if a name for \em dimension has not
+			 *		been specified.
+			 */
+			Nullable<String> GetDimensionName (SByte dimension) const;
+			
+			
+			/**
+			 *	Retrieves information about the current state
+			 *	of the WorldContainer.
+			 *
+			 *	\return
+			 *		A WorldContainerInfo object containing
+			 *		information about the WorldContainer
+			 *		as of the time of the invocation of
+			 *		this function.
+			 */
+			WorldContainerInfo GetInfo () const;
 	
 	
 	};
