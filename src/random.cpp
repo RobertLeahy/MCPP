@@ -1,20 +1,18 @@
 #include <random.hpp>
 #include <openssl/rand.h>
 #include <openssl/err.h>
+#include <stdexcept>
 
 
 namespace MCPP {
 
 
-	Vector<Byte> CryptoRandom (Word num) {
+	void CryptoRandom (Byte * ptr, Word num) {
 	
 		int safe_num=int(SafeWord(num));
-		Vector<Byte> buffer(num);
 		
 		if (RAND_bytes(
-			reinterpret_cast<unsigned char *>(
-				static_cast<Byte *>(buffer)
-			),
+			reinterpret_cast<unsigned char *>(ptr),
 			safe_num
 		)!=1) throw std::runtime_error(
 			ERR_error_string(
@@ -22,10 +20,6 @@ namespace MCPP {
 				nullptr
 			)
 		);
-		
-		buffer.SetCount(num);
-		
-		return buffer;
 	
 	}
 

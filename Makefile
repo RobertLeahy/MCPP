@@ -75,8 +75,9 @@ obj/thread_pool.o \
 obj/thread_pool_handle.o \
 obj/sha1.o \
 obj/new_delete.o \
+obj/simplex.o \
 bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ obj/server.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
+	$(GPP) -shared -o $@ obj/server.o obj/simplex.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
 
 obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp
 	$(GPP) src/server.cpp -c -o $@
@@ -158,6 +159,9 @@ obj/http_request.o: src/http_request.cpp
 
 obj/random.o: src/random.cpp
 	$(GPP) $? -c -o $@
+	
+obj/simplex.o: src/simplex.cpp include/simplex.hpp include/random.hpp
+	$(GPP) src/simplex.cpp -c -o $@
 
 
 #	DATA PROVIDERS
@@ -212,7 +216,8 @@ bin/chat_mods/chat_op.dll \
 bin/chat_mods/kick.dll \
 bin/mods/world.dll \
 bin/world_mods/flat.dll \
-bin/chat_mods/world_info.dll
+bin/chat_mods/world_info.dll \
+bin/mods/player.dll
 
 
 #	PING SUPPORT
@@ -265,9 +270,14 @@ bin/mods/ban.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/ban/
 
 #	WORLD
 
-
 bin/mods/world.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/block_id.cpp src/world/column_id.cpp include/world/world.hpp src/world/world.cpp src/world/column_container.cpp
 	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/column_id.cpp src/world/block_id.cpp src/world/world.cpp src/world/column_container.cpp
+	
+	
+#	PLAYER
+
+bin/mods/player.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/player/player_position.cpp include/player/player.hpp include/world/world.hpp bin/mods/world.dll
+	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/player/player_position.cpp bin/mods/world.dll
 	
 
 #	CHAT SUB-MODULES
@@ -326,10 +336,13 @@ bin/chat_mods/world_info.dll: bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll
 #	SERVER FRONT-END
 
 .PHONY: front_end
-front_end: bin/server.exe bin/mcpp.exe
+front_end: bin/server.exe bin/mcpp.exe bin/simplex_test.exe
 
 bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
 	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
 	
 bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
 	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
+	
+bin/simplex_test.exe: src/simplex_test/test.cpp include/simplex.hpp include/random.hpp
+	$(GPP) -o $@ src/simplex_test/test.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o

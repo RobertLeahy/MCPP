@@ -9,24 +9,50 @@
 #include <rleahylib/rleahylib.hpp>
 #include <random>
 #include <limits>
-#include <stdexcept>
 
 
 namespace MCPP {
 
 
 	/**
-	 *	Generates random numbers suitable for
+	 *	Generates pseudo-random numbers suitable for
 	 *	use in cryptography.
 	 *
+	 *	\param [in] ptr
+	 *		A pointer at which to store the
+	 *		cryptographically-secure pseudo-random
+	 *		bytes.
 	 *	\param [in] num
 	 *		The number of cryptographically-secure
-	 *		random bytes to generate.
+	 *		pseudo-random bytes to generate.
+	 */
+	void CryptoRandom (Byte * ptr, Word num);
+	
+	
+	/**
+	 *	Generates a pseudo-random number suitable for
+	 *	use in cryptography.
+	 *
+	 *	\tparam T
+	 *		The type of value to generate.
 	 *
 	 *	\return
-	 *		A buffer of random bytes.
+	 *		A random value of type \em T.
 	 */
-	Vector<Byte> CryptoRandom (Word num);
+	template <typename T>
+	T CryptoRandom () {
+	
+		union {
+			Byte bytes [sizeof(T)];
+			T value;
+		};
+		
+		CryptoRandom(bytes,sizeof(T));
+		
+		return value;
+	
+	}
+	
 
 
 	/**
@@ -52,20 +78,9 @@ namespace MCPP {
 			
 			inline void seed () {
 			
-				Vector<Byte> buffer(
-					CryptoRandom(
-						sizeof(typename decltype(generator)::result_type)
-					)
+				generator.seed(
+					CryptoRandom<typename decltype(generator)::result_type>()
 				);
-				
-				union {
-					Byte * byte_ptr;
-					typename decltype(generator)::result_type * seed_ptr;
-				};
-				
-				byte_ptr=static_cast<Byte *>(buffer);
-				
-				generator.seed(*seed_ptr);
 			
 			}
 			
