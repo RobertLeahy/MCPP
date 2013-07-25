@@ -142,6 +142,141 @@ namespace MCPP {
 	/**
 	 *	\cond
 	 */
+	 
+	 
+	template <Word dimensions, typename=void>
+	class Gradient;
+	
+	
+	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
+	 *	Generates a gradient.
+	 *
+	 *	\tparam dimensions
+	 *		The number of dimensions of
+	 *		the gradient generator.
+	 */
+	template <Word dimensions>
+	class Gradient<dimensions,typename std::enable_if<(dimensions>0)>::type> {
+	
+	
+		private:
+		
+		
+			Double points [dimensions];
+			Double len;
+			
+			
+			template <Word>
+			static constexpr Double dot_product () noexcept {
+			
+				return 0;
+			
+			}
+			
+			
+			template <Word i, typename... Args>
+			inline Double dot_product (Double x, Args &&... args) const noexcept {
+			
+				return (x*points[i])+dot_product<i+1>(std::forward<Args>(args)...);
+			
+			}
+			
+			
+			template <Word>
+			static inline void assign_points () noexcept {	}
+			
+			
+			template <Word i, typename... Args>
+			inline void assign_points (Double x, Args &&... args) noexcept {
+			
+				points[i]=x;
+				
+				assign_points<i+1>(std::forward<Args>(args)...);
+			
+			}
+	
+	
+		public:
+		
+		
+			Gradient () = delete;
+			/**
+			 *	Creates a new gradient generator based on
+			 *	a specific line.
+			 *
+			 *	\param [in] point
+			 *		Together with \em args gives the
+			 *		coordinate of the vector which represents
+			 *		the line along which this gradient
+			 *		shall be generator.
+			 *	\param [in] args
+			 *		Together with \em point gives the
+			 *		coordinate of the vector which represents
+			 *		the line along which this gradient
+			 *		shall be generator.
+			 */
+			template <typename... Args>
+			explicit Gradient (typename std::enable_if<
+				sizeof...(Args)==(dimensions-1),
+				Double
+			>::type point, Args &&... args) noexcept {
+			
+				points[0]=point;
+				
+				assign_points<1>(std::forward<Args>(args)...);
+				
+				len=0;
+				for (Word i=0;i<dimensions;++i) len+=points[i]*points[i];
+				len=sqrt(len);
+			
+			}
+			
+			
+			/**
+			 *	Retrieves the value at a specific point.
+			 *
+			 *	\param [in] args
+			 *		A point in space at which to retrieve
+			 *		the value of the gradient.
+			 *
+			 *	\return
+			 *		The gradient value which is in the range
+			 *		[-1,1].
+			 */
+			template <typename... Args>
+			typename std::enable_if<
+				sizeof...(Args)==dimensions,
+				Double
+			>::type operator () (Args &&... args) const noexcept {
+			
+				if (len==0) return -1;
+			
+				Double dp=dot_product<0>(
+					std::forward<Args>(args)...
+				);
+				
+				if (dp<=0) return -1;
+				
+				Double proj_len=dp/len;
+				
+				if (proj_len>=len) return 1;
+				
+				return ((proj_len/len)*2)-1;
+			
+			}
+	
+	
+	};
+	
+	
+	/**
+	 *	\cond
+	 */
 	
 	
 	template <typename T, typename=void>
@@ -287,7 +422,7 @@ namespace MCPP {
 			Double frequency;
 			
 			
-			inline Double process_arg (Double arg, Double frequency) const noexcept {
+			static inline Double process_arg (Double arg, Double frequency) noexcept {
 			
 				return arg*frequency;
 			
@@ -463,6 +598,241 @@ namespace MCPP {
 	};
 	
 	
+	template <typename T>
+	class Turbulence {
+	
+	
+		private:
+		
+		
+			SimplexChain<T> wrapped;
+			Double size;
+			
+			
+			static inline Double process_arg (Double arg, Double size) noexcept {
+			
+				return arg/size;
+			
+			}
+			
+			
+		public:
+		
+		
+			Turbulence () = delete;
+			Turbulence (
+				T wrap,
+				Double size
+			) noexcept(std::is_nothrow_constructible<SimplexChain<T>,T>::value)
+				:	wrapped(std::forward<T>(wrap)),
+					size(size)
+			{	}
+			
+			
+			template <typename... Args>
+			Double operator () (Args &&... args) const noexcept(
+				noexcept(std::declval<SimplexChain<T>>()(std::declval<Args>()...))
+			) {
+			
+				Double value=0;
+				Double curr_size=size;
+				Double cumulator=0;
+				
+				while (curr_size>=1) {
+				
+					value+=wrapped(
+						process_arg(args,curr_size)...
+					)*curr_size;
+				
+					cumulator+=curr_size;
+					curr_size/=2;
+				
+				}
+				
+				return value/cumulator;
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename CallbackT, typename T>
+	class Range {
+	
+	
+		private:
+		
+		
+			SimplexChain<T> wrapped;
+			CallbackT callback;
+			
+			
+		public:
+		
+		
+			Range () = delete;
+			Range (
+				T wrap,
+				CallbackT callback
+			) noexcept(
+				std::is_nothrow_constructible<SimplexChain<T>,T>::value &&
+				std::is_nothrow_constructible<CallbackT,CallbackT &&>::value
+			)	:	wrapped(std::forward<T>(wrap)),
+					callback(std::move(callback))
+			{	}
+			
+			
+			template <typename... Args>
+			auto operator () (Args &&... args) const noexcept(
+				noexcept(std::declval<SimplexChain<T>>()(std::declval<Args>()...)) &&
+				noexcept(callback(wrapped(std::forward<Args>(args)...)))
+			) -> decltype(callback(wrapped(std::forward<Args>(args)...))) {
+			
+				return callback(wrapped(std::forward<Args>(args)...));
+			
+			}
+	
+	
+	};
+	
+	
+	template <Word flags, typename T, typename TNoise>
+	class PerturbateDomain {
+	
+	
+		private:
+		
+		
+			SimplexChain<T> wrapped;
+			SimplexChain<TNoise> noise;
+			
+			
+			template <Word>
+			static inline void perturb (Double) noexcept {	}
+			
+			
+			template <Word i, typename... Args>
+			static inline void perturb (Double amount, Double & curr, Args &... args) noexcept {
+			
+				if (((static_cast<Word>(1)<<i)&flags)!=0) curr+=amount;
+				
+				perturb<i+1>(amount,args...);
+			
+			}
+			
+			
+			template <typename... Args>
+			inline Double impl (Double amount, Args... args) const noexcept(
+				noexcept(wrapped(args...))
+			) {
+			
+				perturb<0>(amount,args...);
+				
+				return wrapped(args...);
+			
+			}
+			
+			
+		public:
+		
+		
+			PerturbateDomain () = delete;
+			PerturbateDomain (
+				T wrap,
+				TNoise noise
+			) noexcept(
+				std::is_nothrow_constructible<SimplexChain<T>,T>::value &&
+				std::is_nothrow_constructible<SimplexChain<T>,TNoise>::value
+			)	:	wrapped(std::forward<T>(wrap)),
+					noise(std::forward<TNoise>(noise))
+			{	}
+			
+			
+			template <typename... Args>
+			Double operator () (Args &&... args) const noexcept(
+				noexcept(wrapped(Double(args)...)) &&
+				noexcept(noise(std::forward<Args>(args)...))
+			) {
+			
+				Double amount=Double(
+					noise(
+						std::forward<Args>(args)...
+					)
+				);
+				
+				return impl(
+					amount,
+					Double(args)...
+				);
+			
+			}
+	
+	
+	};
+	
+	
+	template <Word flags, typename T>
+	class ScaleDomain {
+	
+	
+		private:
+		
+		
+			SimplexChain<T> wrapped;
+			Double factor;
+			
+			
+			template <Word>
+			inline void scale () const noexcept {	}
+			
+			
+			template <Word i, typename... Args>
+			inline void scale (Double & curr, Args &... args) const noexcept {
+			
+				if (((static_cast<Word>(1)<<i)&flags)!=0) curr*=factor;
+				
+				scale<i+1>(args...);
+			
+			}
+			
+			
+			template <typename... Args>
+			inline Double impl (Args... args) const noexcept(noexcept(wrapped(args...))) {
+			
+				scale<0>(args...);
+				
+				return wrapped(args...);
+			
+			}
+			
+			
+		public:
+		
+		
+			ScaleDomain () = delete;
+			ScaleDomain (
+				T wrap,
+				Double factor
+			) noexcept(std::is_nothrow_constructible<SimplexChain<T>,T>::value)
+				:	wrapped(std::forward<T>(wrap)),
+					factor(factor)
+			{	}
+			
+			
+			template <typename... Args>
+			Double operator () (Args &&... args) const noexcept(
+				noexcept(wrapped(Double(args)...))
+			) {
+			
+				return impl(Double(args)...);
+			
+			}
+	
+	
+	};
+	
+	
 	/**
 	 *	\endcond
 	 */
@@ -470,7 +840,7 @@ namespace MCPP {
 	
 	/**
 	 *	Adds a scale filter to the filter
-	 *	chain ontop of a simplex noise
+	 *	chain ontop of a noise
 	 *	generator.
 	 *
 	 *	A scale filter takes the noise generator's
@@ -508,7 +878,7 @@ namespace MCPP {
 	
 	/**
 	 *	Adds an octave filter to the filter
-	 *	chain ontop of a simplex noise generator.
+	 *	chain ontop of a noise generator.
 	 *
 	 *	An octave filter gets output from the noise
 	 *	generator for each octave, and for each such
@@ -553,7 +923,7 @@ namespace MCPP {
 	
 	/**
 	 *	Adds a bias filter to the filter chain ontop
-	 *	of a simplex noise generator.
+	 *	of a noise generator.
 	 *
 	 *	A bias filter gets output from the noise generator
 	 *	and &quot;pushes&quot; the values towards 1
@@ -585,7 +955,7 @@ namespace MCPP {
 	
 	/**
 	 *	Adds a gain filter to the filter chain ontop
-	 *	of a simplex noise generator.
+	 *	of a noise generator.
 	 *
 	 *	A gain filter gets output from the noise generator
 	 *	and &quot;pushes&quot; it towards 0 if the gain is
@@ -647,6 +1017,160 @@ namespace MCPP {
 	
 		return Convert<TargetT,T>(
 			std::forward<T>(wrap)
+		);
+	
+	}
+	
+	
+	/**
+	 *	Adds a turbulence filter to the filter chain ontop
+	 *	of a noise generator.
+	 *
+	 *	A turbulence filter combines various noise samples
+	 *	together at various scales.  So a certain pass might
+	 *	create a gentle curve, and then a subsequent pass will
+	 *	unsmooth that curve by adding small inperfections obtained
+	 *	by getting more output from the noise generator, scaling
+	 *	it down, and adding it to the resulting noise.
+	 *
+	 *	\param [in] wrap
+	 *		The filter chain to add this filter to the end of.
+	 *	\param [in] size
+	 *		The start zooming factor of this filter.
+	 *
+	 *	\return
+	 *		A filter which is the new end of the filter
+	 *		chain.
+	 */
+	template <typename T>
+	Turbulence<T> MakeTurbulence (T && wrap, Double size) noexcept(
+		std::is_nothrow_constructible<Turbulence<T>,T &&,Double>::value
+	) {
+	
+		return Turbulence<T>(
+			std::forward<T>(wrap),
+			size
+		);
+	
+	}
+	
+	
+	/**
+	 *	Adds a range filter to the filter chain ontop of
+	 *	a noise generator.
+	 *
+	 *	A range filter uses a provided callback to transform
+	 *	the range in some way.  The provided callback is passed
+	 *	the output of the noise generator, and returns a replacement
+	 *	value.
+	 *
+	 *	\param [in] wrap
+	 *		The filter chain to add this filter to the end of.
+	 *	\param [in] callback
+	 *		The callback which shall transform the chain's
+	 *		range.
+	 *
+	 *	\return
+	 *		A filter which is the new end of the filter chain.
+	 */
+	template <typename T, typename CallbackT>
+	Range<CallbackT,T> MakeRange (T && wrap, CallbackT && callback) noexcept(
+		std::is_nothrow_constructible<
+			Range<CallbackT,T>,
+			T &&,
+			CallbackT &&
+		>::value
+	) {
+	
+		return Range<CallbackT,T>(
+			std::forward<T>(wrap),
+			std::forward<CallbackT>(callback)
+		);
+	
+	}
+	
+	
+	/**
+	 *	Adds a domain perturbation filter to the filter chain
+	 *	ontop of a noise generator.
+	 *
+	 *	A domain perturbation filter uses the output of a
+	 *	noise filter stack to alter the domain of another
+	 *	noise filter stack.
+	 *
+	 *	\tparam flags
+	 *		Bit flags which specify which components of
+	 *		the domain to perturbate.  Bit flags are set
+	 *		from lowest to highest order.  So for three
+	 *		dimensional noise the low order bit refers
+	 *		to the X component, the second low order bit
+	 *		to the Y component, and the third low order
+	 *		bit to the Z component.
+	 *
+	 *	\param [in] wrap
+	 *		The filter chain to add this filter to the
+	 *		end of.
+	 *	\param [in] noise
+	 *		The filter chain to use to acquire noise for
+	 *		perturbation.
+	 *
+	 *	\return
+	 *		A filter which is the new end of the filter
+	 *		chain.
+	 */
+	template <Word flags, typename T, typename TNoise>
+	PerturbateDomain<flags,T,TNoise> MakePerturbateDomain (T && wrap, TNoise && noise) noexcept(
+		std::is_nothrow_constructible<
+			PerturbateDomain<flags,T,TNoise>,
+			T &&,
+			TNoise &&
+		>::value
+	) {
+	
+		return PerturbateDomain<flags,T,TNoise>(
+			std::forward<T>(wrap),
+			std::forward<TNoise>(noise)
+		);
+	
+	}
+	
+	
+	/**
+	 *	Adds a domain scaling filter to the filter chain
+	 *	ontop of a noise generator.
+	 *
+	 *	A domain scaling filter scales certain components
+	 *	of the domain of a noise filter stack by some
+	 *	constant.
+	 *
+	 *	\tparam flags
+	 *		Bit flags which specify which components of
+	 *		the domain to scale.  Bit flags are set
+	 *		from lowest to highest order.  So for three
+	 *		dimensional noise the low order bit refers
+	 *		to the X component, the second low order bit
+	 *		to the Y component, and the third low order
+	 *		bit to the Z component.
+	 *
+	 *	\param [in] wrap
+	 *		The filter chain to add this filter to the
+	 *		end of.
+	 *	\param [in] factor
+	 *		The factor by which all domain components
+	 *		specified by \em flags shall be multiplied.
+	 *
+	 *	\return
+	 *		A filter which is the new end of the filter
+	 *		chain.
+	 */
+	template <Word flags, typename T>
+	ScaleDomain<flags,T> MakeScaleDomain (T && wrap, Double factor) noexcept(
+		std::is_nothrow_constructible<ScaleDomain<flags,T>,T &&>::value
+	) {
+	
+		return ScaleDomain<flags,T>(
+			std::forward<T>(wrap),
+			factor
 		);
 	
 	}
