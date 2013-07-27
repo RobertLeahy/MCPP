@@ -113,6 +113,8 @@ namespace MCPP {
 			 *		The x value.
 			 *	\param [in] y
 			 *		The y value.
+			 *	param [in] z
+			 *		The z value.
 			 *
 			 *	\return
 			 *		The raw noise output.
@@ -168,6 +170,7 @@ namespace MCPP {
 		
 		
 			Double points [dimensions];
+			Double origin [dimensions];
 			Double len;
 			
 			
@@ -182,7 +185,11 @@ namespace MCPP {
 			template <Word i, typename... Args>
 			inline Double dot_product (Double x, Args &&... args) const noexcept {
 			
-				return (x*points[i])+dot_product<i+1>(std::forward<Args>(args)...);
+				return fma(
+					x,
+					points[i],
+					dot_product<i+1>(std::forward<Args>(args)...)
+				);
 			
 			}
 			
@@ -195,8 +202,82 @@ namespace MCPP {
 			inline void assign_points (Double x, Args &&... args) noexcept {
 			
 				points[i]=x;
+				origin[i]=0;
 				
 				assign_points<i+1>(std::forward<Args>(args)...);
+			
+			}
+			
+			
+			inline void calc_len () noexcept {
+			
+				len=0;
+				for (Word i=0;i<dimensions;++i) len=fma(
+					points[i],
+					points[i],
+					len
+				);
+				len=sqrt(len);
+			
+			}
+			
+			
+			template <Word>
+			static inline void assign_points_and_origin () noexcept {	}
+			
+			
+			template <Word i, typename... Args>
+			inline void assign_points_and_origin (Double x, Args &&... args) noexcept {
+			
+				if (i>=dimensions) {
+				
+					Word offset=i%dimensions;
+					
+					points[offset]=x-origin[offset];
+				
+				} else {
+				
+					origin[i]=x;
+				
+				}
+				
+				assign_points_and_origin<i+1>(std::forward<Args>(args)...);
+			
+			}
+			
+			
+			template <Word>
+			inline void offset () const noexcept {	}
+			
+			
+			template <Word i, typename... Args>
+			inline void offset (Double & curr, Args &... args) const noexcept {
+			
+				curr-=origin[i];
+				
+				offset<i+1>(args...);
+			
+			}
+			
+			
+			template <typename... Args>
+			inline Double impl (Args... args) const noexcept {
+			
+				offset<0>(args...);
+				
+				Double dp=dot_product<0>(args...);
+				
+				if (dp<=0) return -1;
+				
+				Double proj_len=dp/len;
+				
+				if (proj_len>=len) return 1;
+				
+				return fma(
+					proj_len/len,
+					2,
+					-1
+				);
 			
 			}
 	
@@ -212,13 +293,13 @@ namespace MCPP {
 			 *	\param [in] point
 			 *		Together with \em args gives the
 			 *		coordinate of the vector which represents
-			 *		the line along which this gradient
-			 *		shall be generator.
+			 *		the line along which the gradient
+			 *		shall lie.
 			 *	\param [in] args
 			 *		Together with \em point gives the
 			 *		coordinate of the vector which represents
-			 *		the line along which this gradient
-			 *		shall be generator.
+			 *		the line along which the gradient
+			 *		shall lie.
 			 */
 			template <typename... Args>
 			explicit Gradient (typename std::enable_if<
@@ -230,9 +311,38 @@ namespace MCPP {
 				
 				assign_points<1>(std::forward<Args>(args)...);
 				
-				len=0;
-				for (Word i=0;i<dimensions;++i) len+=points[i]*points[i];
-				len=sqrt(len);
+				calc_len();
+			
+			}
+			/**
+			 *	Creates a new gradient generator based on
+			 *	a specific line.
+			 *
+			 *	\param [in] offset
+			 *		Together wiht \em args gives the
+			 *		start and end (respectively)
+			 *		coordinates of the vector which
+			 *		represents the line along which
+			 *		the gradient shall lie.
+			 *	\param [in] args
+			 *		Together with \em point gives the
+			 *		start and end (respectively)
+			 *		coordinates of the vector which
+			 *		represents the line along which the
+			 *		gradient shall lie.
+			 *		
+			 */
+			template <typename... Args>
+			Gradient (typename std::enable_if<
+				sizeof...(Args)==((dimensions*2)-1),
+				Double
+			>::type offset, Args &&... args) noexcept {
+			
+				origin[0]=offset;
+				
+				assign_points_and_origin<1>(std::forward<Args>(args)...);
+				
+				calc_len();
 			
 			}
 			
@@ -255,18 +365,8 @@ namespace MCPP {
 			>::type operator () (Args &&... args) const noexcept {
 			
 				if (len==0) return -1;
-			
-				Double dp=dot_product<0>(
-					std::forward<Args>(args)...
-				);
 				
-				if (dp<=0) return -1;
-				
-				Double proj_len=dp/len;
-				
-				if (proj_len>=len) return 1;
-				
-				return ((proj_len/len)*2)-1;
+				return impl(Double(args)...);
 			
 			}
 	
@@ -503,10 +603,18 @@ namespace MCPP {
 				noexcept(std::declval<SimplexChain<T>>()(std::declval<Args>()...))
 			) {
 			
-				return (pow(
-					(wrapped(std::forward<Args>(args)...)+1)/2,
-					log(bias)/log(0.5)
-				)*2)-1;
+				return fma(
+					pow(
+						fma(
+							wrapped(std::forward<Args>(args)...),
+							0.5,
+							0.5
+						),
+						log(bias)/log(0.5)
+					),
+					2,
+					-1
+				);
 			
 			}
 	
@@ -544,11 +652,10 @@ namespace MCPP {
 			) {
 			
 				Double noise=wrapped(std::forward<Args>(args)...)+1;
-				Double input=1-gain;
 				Double bias=(noise>1) ? 2-noise : noise;
 				
 				Double result=pow(
-					input,
+					1-gain,
 					log(bias)/log(0.5)
 				);
 				
@@ -833,6 +940,104 @@ namespace MCPP {
 	};
 	
 	
+	template <typename T>
+	class Ridged {
+	
+	
+		private:
+		
+		
+			SimplexChain<T> wrapped;
+			
+			
+		public:
+		
+		
+			Ridged () = delete;
+			Ridged (
+				T wrap
+			) noexcept(std::is_nothrow_constructible<SimplexChain<T>,T>::value)
+				:	wrapped(std::forward<T>(wrap))
+			{	}
+			
+			
+			template <typename... Args>
+			Double operator () (Args &&... args) const noexcept(
+				noexcept(wrapped(std::forward<Args>(args)...))
+			) {
+			
+				return fma(
+					1-fabs(wrapped(std::forward<Args>(args)...)),
+					2,
+					-1
+				);
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T1, typename T2, typename TCallback>
+	class Combine {
+	
+	
+		private:
+		
+		
+			SimplexChain<T1> wrapped1;
+			SimplexChain<T2> wrapped2;
+			TCallback callback;
+			
+			
+		public:
+		
+		
+			Combine () = delete;
+			Combine (
+				T1 wrap1,
+				T2 wrap2,
+				TCallback callback
+			) noexcept(
+				std::is_nothrow_constructible<
+					TCallback,
+					decltype(std::move(callback))
+				>::value &&
+				std::is_nothrow_constructible<
+					SimplexChain<T1>,
+					T1 &&
+				>::value &&
+				std::is_nothrow_constructible<
+					SimplexChain<T2>,
+					T2 &&
+				>::value
+			)	:	wrapped1(std::forward<T1>(wrap1)),
+					wrapped2(std::forward<T2>(wrap2)),
+					callback(std::move(callback))
+			{	}
+			
+			
+			template <typename... Args>
+			Double operator () (Args &&... args) const noexcept(
+				noexcept(
+					callback(
+						wrapped1(std::forward<Args>(args)...),
+						wrapped2(std::forward<Args>(args)...)
+					)
+				)
+			) {
+			
+				return callback(
+					wrapped1(std::forward<Args>(args)...),
+					wrapped2(std::forward<Args>(args)...)
+				);
+			
+			}
+	
+	
+	};
+	
+	
 	/**
 	 *	\endcond
 	 */
@@ -1103,8 +1308,8 @@ namespace MCPP {
 	 *		the domain to perturbate.  Bit flags are set
 	 *		from lowest to highest order.  So for three
 	 *		dimensional noise the low order bit refers
-	 *		to the X component, the second low order bit
-	 *		to the Y component, and the third low order
+	 *		to the X component, the second lowest order bit
+	 *		to the Y component, and the third lowest order
 	 *		bit to the Z component.
 	 *
 	 *	\param [in] wrap
@@ -1148,8 +1353,8 @@ namespace MCPP {
 	 *		the domain to scale.  Bit flags are set
 	 *		from lowest to highest order.  So for three
 	 *		dimensional noise the low order bit refers
-	 *		to the X component, the second low order bit
-	 *		to the Y component, and the third low order
+	 *		to the X component, the second lowest order bit
+	 *		to the Y component, and the third lowest order
 	 *		bit to the Z component.
 	 *
 	 *	\param [in] wrap
@@ -1171,6 +1376,69 @@ namespace MCPP {
 		return ScaleDomain<flags,T>(
 			std::forward<T>(wrap),
 			factor
+		);
+	
+	}
+	
+	
+	/**
+	 *	Adds a ridged multifractal filter to the filter
+	 *	chain ontop of a noise generator.
+	 *
+	 *	\param [in] wrap
+	 *		The filter chain to add this filter to the
+	 *		end of.
+	 *
+	 *	\return
+	 *		A filter which is the new end of the filter
+	 *		chain.
+	 */
+	template <typename T>
+	Ridged<T> MakeRidged (T && wrap) noexcept(
+		std::is_nothrow_constructible<Ridged<T>,T &&>::value
+	) {
+	
+		return Ridged<T>(
+			std::forward<T>(wrap)
+		);
+	
+	}
+	
+	
+	/**
+	 *	Adds a combine filter to the filter chain ontop
+	 *	of a noise generator.
+	 *
+	 *	A combine filter takes the output of two filter
+	 *	chains and combines that output into a single
+	 *	output using a supplied callback function.
+	 *
+	 *	\param [in] wrap1
+	 *		The first filter chain to be combined.
+	 *	\param [in] wrap2
+	 *		The second filter chain to be combined.
+	 *	\param [in] callback
+	 *		The callback which shall be used to combine
+	 *		the values of \em wrap1 and \em wrap2.
+	 *
+	 *	\return
+	 *		A filter which is the new end of the filter
+	 *		chain.
+	 */
+	template <typename T1, typename T2, typename TCallback>
+	Combine<T1,T2,TCallback> MakeCombine (T1 && wrap1, T2 && wrap2, TCallback && callback) noexcept(
+		std::is_nothrow_constructible<
+			Combine<T1,T2,TCallback>,
+			T1 &&,
+			T2 &&,
+			TCallback &&
+		>::value
+	) {
+	
+		return Combine<T1,T2,TCallback>(
+			std::forward<T1>(wrap1),
+			std::forward<T2>(wrap2),
+			std::forward<TCallback>(callback)
 		);
 	
 	}
