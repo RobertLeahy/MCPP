@@ -5,8 +5,8 @@ INC_CURL=-I "G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/in
 INC_OPENSSL=-I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include"
 INC_ZLIB=-I "G:/Downloads/zlib128-dll/include/"
 INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
-OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
-#OPTIMIZATION=-O3
+#OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
+OPTIMIZATION=-O3
 OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
 GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 
@@ -75,9 +75,9 @@ obj/thread_pool.o \
 obj/thread_pool_handle.o \
 obj/sha1.o \
 obj/new_delete.o \
-obj/simplex.o \
+obj/noise.o \
 bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ obj/server.o obj/simplex.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
+	$(GPP) -shared -o $@ obj/server.o obj/noise.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
 
 obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp
 	$(GPP) src/server.cpp -c -o $@
@@ -160,8 +160,8 @@ obj/http_request.o: src/http_request.cpp
 obj/random.o: src/random.cpp
 	$(GPP) $? -c -o $@
 	
-obj/simplex.o: src/simplex.cpp include/simplex.hpp include/random.hpp
-	$(GPP) src/simplex.cpp -c -o $@
+obj/noise.o: src/noise.cpp include/noise.hpp include/random.hpp include/fma.hpp
+	$(GPP) src/noise.cpp -c -o $@
 
 
 #	DATA PROVIDERS
@@ -343,6 +343,9 @@ bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp
 	
 bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
 	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
-	
-bin/simplex_test.exe: src/simplex_test/test.cpp include/simplex.hpp include/random.hpp
-	$(GPP) -o $@ src/simplex_test/test.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+
+.PHONY: simplex
+simplex: bin/simplex_test.exe
+
+bin/simplex_test.exe: src/simplex_test/test_topdown_with_rivers.cpp include/noise.hpp include/random.hpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -o $@ src/simplex_test/test_topdown_with_rivers.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o

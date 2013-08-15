@@ -7,14 +7,22 @@
 #include <cmath>
 #include <random>
 #include <utility>
+#include <cstring>
+#include <atomic>
 
 
 using namespace MCPP;
 
 
-Word width=50000;
-Word height=256;
-String filename("../simplex.txt");
+const Word width=1024;
+const Word depth=256;
+const Word height=1024;
+const Word sample_freq=16;
+const Word num_threads=4;
+const SWord start_x=-512;
+const SWord start_z=-512;
+const Nullable<std::mt19937_64::result_type> seed;//=10564365128032029849ULL;
+const String filename("../simplex");
 
 
 enum class Biome : Byte {
@@ -50,10 +58,16 @@ void write_file (FILE * handle, const String & s) {
 
 	auto c_string=s.ToCString();
 
-	if (fputs(
-		static_cast<ASCIIChar *>(c_string),
-		handle
-	)<0) throw std::runtime_error("Error writing to file");
+	if (
+		(fputs(
+			static_cast<ASCIIChar *>(c_string),
+			handle
+		)<0) ||
+		(fputc(
+			'\0',
+			handle
+		)<0)
+	) throw std::runtime_error("Error writing to file");
 
 }
 
@@ -103,24 +117,21 @@ inline Double normalize (Double lo, Double hi, Double val) noexcept {
 }
 
 
-int main () {
+void execute (std::mt19937_64::result_type seed) {
+
+	auto gen=std::mt19937_64();
+	gen.seed(seed);
+	StdOut << "Seed: " << seed << Newline;
 
 	auto c_filename=Path::Combine(
 		Path::GetPath(
 			File::GetCurrentExecutableFileName()
 		),
-		filename	
+		filename+"_"+String(seed)+".txt"
 	).ToCString();
 	
 	FILE * fhandle=fopen(
-		static_cast<ASCIIChar *>(
-			Path::Combine(
-				Path::GetPath(
-					File::GetCurrentExecutableFileName()
-				),
-				filename	
-			).ToCString()
-		),
+		static_cast<ASCIIChar *>(c_filename),
 		"w"
 	);
 	
@@ -128,29 +139,28 @@ int main () {
 	
 		StdOut << "Could not open " << filename << " for writing" << Newline;
 	
-		return 1;
+		return;
 	
 	}
 	
 	try {
-	
-		auto gen=std::mt19937_64();
-		//gen.seed(CryptoRandom<std::mt19937_64::result_type>());
-		gen.seed(11653);
 		
 		auto ocean=MakeOctave(
 			Simplex(gen),
 			4,
-			0.2,
-			0.0005
+			0.7,
+			0.00005
 		);
 		
 		auto max=MakeScale(
 			MakeOctave(
 				Simplex(gen),
-				8,
+				/*8,
 				0.2,
-				0.0005
+				0.0005*/
+				4,
+				0.9,
+				0.00005
 			),
 			0,
 			1
@@ -164,7 +174,7 @@ int main () {
 					0.5,
 					0.00005
 				),
-				0.3
+				0.25
 			),
 			0,
 			1
@@ -173,40 +183,15 @@ int main () {
 		auto heightmap=MakeScale(
 			MakeOctave(
 				Simplex(gen),
-				8,
+				/*8,
 				0.3,
-				0.005
+				0.005*/
+				4,
+				0.7,
+				0.0005
 			),
 			0,
 			1
-		);
-		
-		auto perturbate_x=MakeScale(
-			MakeOctave(
-				MakeGain(
-					Simplex(gen),
-					0.25
-				),
-				3,
-				0.4,
-				0.01
-			),
-			-20,
-			20
-		);
-		
-		auto perturbate_z=MakeScale(
-			MakeOctave(
-				MakeGain(
-					Simplex(gen),
-					0.25
-				),
-				3,
-				0.4,
-				0.01
-			),
-			-20,
-			20
 		);
 		
 		auto noise=MakeConvert<Byte>(
@@ -214,7 +199,7 @@ int main () {
 				MakePerturbateDomain<4>(
 					[&] (Double x, Double y, Double z) {
 						
-						auto ocean_val=ocean(x,0,z);
+						auto ocean_val=ocean(x,z);
 						
 						if (ocean_val<-0.0125) {
 						
@@ -234,12 +219,12 @@ int main () {
 							//	Determine the "ceiling"
 							//	and "floor" values
 							Double ceiling=fma(
-								min(x,0,z),
+								min(x,z),
 								16,
-								76
+								68
 							);
 							Double floor=fma(
-								max(x,0,z),
+								max(x,z),
 								-16,
 								48
 							);
@@ -256,7 +241,7 @@ int main () {
 							//	Determine current height
 							return (
 								(y>fma(
-									heightmap(x,0),
+									heightmap(x,z),
 									ceiling-floor,
 									floor
 								))
@@ -294,15 +279,15 @@ int main () {
 							
 							//	Determine the "ceiling" and
 							//	"floor" values
-							Double max_val=max(x,0);
+							Double max_val=max(x,z);
 							Double ceiling=(
-								(max_val<0.2)
+								(max_val<0.3)
 									?	72
 									:	(
 											(max_val<0.8)
 												?	fma(
 														normalize(
-															0.2,
+															0.3,
 															0.8,
 															max_val
 														),
@@ -312,26 +297,26 @@ int main () {
 												:	256
 										)
 							);
-							Double min_val=min(x,0);
+							Double min_val=min(x,z);
 							Double floor=(
-								(min_val<0.1)
+								(min_val<0.2)
 									?	fma(
 											normalize(
 												0,
-												0.1,
+												0.2,
 												min_val
 											),
 											52-64,
 											64
 										)
 									:	(
-											(min_val<0.3)
+											(min_val<0.5)
 												?	64
 												:	(
 														(min_val<0.9)
 															?	fma(
 																	normalize(
-																		0.3,
+																		0.5,
 																		0.9,
 																		min_val
 																	),
@@ -355,7 +340,7 @@ int main () {
 							//	Determine current height
 							return (
 								(y>fma(
-									heightmap(x,0),
+									heightmap(x,z),
 									ceiling-floor,
 									floor
 								))
@@ -367,16 +352,21 @@ int main () {
 						
 						}
 					
-					}
-					perturbate_y
+					},
+					MakeScale(
+						MakeOctave(
+							MakeGain(
+								Simplex(gen),
+								0.25
+							),
+							3,
+							0.4,
+							0.01
+						),
+						-20,
+						20
+					)
 				),
-				perturbate_x
-			)
-		);
-		
-		auto noise=MakeConvert<Byte>(
-			MakePerturbateDomain<1>(
-				,
 				MakeScale(
 					MakeOctave(
 						MakeGain(
@@ -398,44 +388,129 @@ int main () {
 		
 		write_file(
 			fhandle,
-			String(width_str.Size())
+			String(seed)
 		);
 		write_file(
 			fhandle,
-			width_str
+			String(sample_freq)
 		);
 		write_file(
 			fhandle,
-			String(height_str.Size())
+			String(start_x)
 		);
 		write_file(
 			fhandle,
-			height_str
+			String(start_z)
+		);
+		write_file(
+			fhandle,
+			String(width_str)
+		);
+		write_file(
+			fhandle,
+			String(height_str)
 		);
 		
-		Vector<Byte> buffer(width*height);
+		Vector<Byte> buffer(width*height*depth);
+		buffer.SetCount(width*height*depth);
 		
 		Timer timer(Timer::CreateAndStart());
 		
-		for (Word x=0;x<width;++x) for (Word y=0;y<height;++y) buffer.Add(noise(x,y));
+		std::atomic<Word> blocks;
+		blocks=0;
+		Vector<Thread> threads(num_threads);
+		for (Word i=0;i<num_threads;++i) {
+		
+			threads.EmplaceBack(
+				[&] (Word num) {
+				
+					Word lower=(width/num_threads)*num;
+					Word upper=(
+						(num==(num_threads-1))
+							?	width
+							:	(width/num_threads)*(num+1)
+					);
+					
+					for (Word x=lower;x<upper;++x) {
+					
+						SWord real_x=static_cast<SWord>(x*sample_freq)+start_x;
+						
+						for (Word z=0;z<height;++z) {
+						
+							SWord real_z=static_cast<SWord>(z*sample_freq)+start_z;
+							Word offset=(x*height*256)+(z*256);
+							
+							for (Word y=256;(y--)>0;) {
+							
+								auto val=noise(real_x,y,real_z);
+								
+								buffer[offset+y]=val;
+								
+								++blocks;
+								
+								if (val!=255) break;
+							
+							}
+						
+						}
+					
+					}
+				
+				},
+				i
+			);
+		
+		}
+		
+		for (auto & t : threads) t.Join();
 		
 		timer.Stop();
 		
 		StdOut	<< "====GENERATION COMPLETE===="
 				<< Newline
 				<< "Blocks placed: "
-				<< (width*height)
+				<< static_cast<Word>(blocks)
 				<< Newline
 				<< "Elapsed time: "
 				<< timer.ElapsedNanoseconds()
 				<< "ns"
 				<< Newline
 				<< "Average time per block: "
-				<< (timer.ElapsedNanoseconds()/(width*height))
+				<< (timer.ElapsedNanoseconds()/blocks)
 				<< "ns"
 				<< Newline;
 				
-		for (Word i=0;i<buffer.Count();++i) write_file(fhandle,buffer[i]);
+		for (Word x=0;x<width;++x)
+		for (Word z=0;z<height;++z)
+		for (Word y=255;;--y) {
+		
+			if (y==0) {
+			
+				write_file(fhandle,1);
+			
+				break;
+			
+			}
+			
+			Byte val=buffer[(x*height*depth)+(z*depth)+y];
+			
+			if (val==0) {
+			
+				write_file(fhandle,static_cast<Byte>(y));
+				
+				break;
+			
+			}
+			
+			if (val==127) {
+			
+				write_file(fhandle,0);
+				
+				break;
+			
+			}
+		
+		}
 		
 	} catch (...) {
 	
@@ -446,6 +521,19 @@ int main () {
 	}
 	
 	fclose(fhandle);
+
+}
+
+
+int main () {
+
+	do {
+	
+		std::mt19937_64::result_type curr_seed=seed.IsNull() ? CryptoRandom<std::mt19937_64::result_type>() : *seed;
+	
+		execute(curr_seed);
+	
+	} while (seed.IsNull());
 
 	return 0;
 

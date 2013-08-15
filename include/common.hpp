@@ -26,7 +26,7 @@ namespace MCPP {	}
 
 #include <hash.hpp>
 #include <random.hpp>
-#include <simplex.hpp>
+#include <noise.hpp>
 #include <mod.hpp>
 #include <url.hpp>
 #include <sha1.hpp>

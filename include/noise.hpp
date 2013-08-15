@@ -7,9 +7,12 @@
 #include <utility>
 #include <type_traits>
 #include <cmath>
-#include <algorithm>
 #include <cstring>
+#include <functional>
+#include <algorithm>
 #include <limits>
+#include <unordered_map>
+#include <fma.hpp>
  
  
 namespace MCPP {
@@ -87,7 +90,7 @@ namespace MCPP {
 			 *		generator.
 			 */
 			template <typename T, typename=typename std::enable_if<!std::numeric_limits<T>::is_integer>::type>
-			explicit Simplex (T & gen) noexcept(noexcept(init(gen))) {
+			explicit Simplex (T & gen) noexcept(noexcept(std::declval<Simplex>().init(gen))) {
 			
 				init(gen);
 			
@@ -558,7 +561,11 @@ namespace MCPP {
 				
 				for (Word i=0;i<octaves;++i) {
 				
-					total+=wrapped(process_arg(args,frequency)...)*amplitude;
+					total=fma(
+						wrapped(process_arg(args,frequency)...),
+						amplitude,
+						total
+					);
 					
 					frequency*=2;
 					max_amp+=amplitude;

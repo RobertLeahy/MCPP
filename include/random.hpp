@@ -63,8 +63,13 @@ namespace MCPP {
 	 *	\tparam T
 	 *		The type of integer that shall
 	 *		be generated.
+	 *	\tparam TGenerator
+	 *		The type of random number generator
+	 *		that shall be used.  Type must be
+	 *		default constructible.  Defaults to
+	 *		std::default_random_engine.
 	 */
-	template <typename T>
+	template <typename T, typename TGenerator=std::default_random_engine>
 	class Random {
 	
 	
@@ -72,7 +77,7 @@ namespace MCPP {
 	
 	
 			Mutex lock;
-			std::default_random_engine generator;
+			TGenerator generator;
 			std::uniform_int_distribution<T> distribution;
 			
 			
@@ -108,7 +113,45 @@ namespace MCPP {
 			}
 			
 			
-			T operator () () {
+			Random (typename TGenerator::result_type seed) noexcept(
+				noexcept(generator.seed(seed)) &&
+				std::is_nothrow_constructible<
+					decltype(distribution),
+					typename TGenerator::result_type,
+					typename TGenerator::result_type
+				>::value
+			) : distribution(
+				std::numeric_limits<typename TGenerator::result_type>::min(),
+				std::numeric_limits<typename TGenerator::result_type>::max()
+			) {
+			
+				generator.seed(seed);
+			
+			}
+			
+			
+			Random (
+				typename TGenerator::result_type seed,
+				T min,
+				T max
+			) noexcept(
+				noexcept(generator.seed(seed)) &&
+				std::is_nothrow_constructible<
+					decltype(distribution),
+					typename TGenerator::result_type,
+					typename TGenerator::result_type
+				>::value
+			) : distribution(
+				min,
+				max
+			) {
+			
+				generator.seed(seed);
+			
+			}
+			
+			
+			T operator () () noexcept(noexcept(distribution(generator))) {
 			
 				return lock.Execute([&] () {	return distribution(generator);	});
 			

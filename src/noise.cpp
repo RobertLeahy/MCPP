@@ -1,4 +1,4 @@
-#include <simplex.hpp>
+#include <noise.hpp>
 #include <random.hpp>
 #include <random>
 
@@ -136,27 +136,37 @@ namespace MCPP {
 		{0,0,0,0},
 		{3,2,0,1},
 		{3,2,1,0}
-	};	
+	};
 	
 	
-	static inline Double dot (const SByte * g, Double x, Double y) noexcept {
+	template <Word, typename T>
+	inline constexpr Double dot_impl (const T *) noexcept {
 	
-		return g[0]*x+g[1]*y;
-	
-	}
-	
-	
-	static inline Double dot (const SByte * g, Double x, Double y, Double z) noexcept {
-	
-		return g[0]*x + g[1]*y + g[2]*z;
+		return 0;
 	
 	}
 	
 	
-	static inline Double dot (const SByte * g, Double x, Double y, Double z, Double w) noexcept {
+	template <Word i, typename T, typename... Args>
+	inline Double dot_impl (const T * g, Double curr, Args &&... args) noexcept {
 	
-		return g[0]*x + g[1]*y + g[2]*z + g[3]*w;
-		
+		return fma(
+			g[i],
+			curr,
+			dot_impl<i+1>(g,std::forward<Args>(args)...)
+		);
+	
+	}
+	
+	
+	template <typename T, typename... Args>
+	inline Double dot (const T * g, Args &&... args) noexcept {
+	
+		return dot_impl<0>(
+			g,
+			std::forward<Args>(args)...
+		);
+	
 	}
 	
 	
