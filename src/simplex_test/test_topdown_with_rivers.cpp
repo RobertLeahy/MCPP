@@ -56,33 +56,33 @@ void write_file (FILE * handle, Byte c) {
 inline Double normalize (Double lo, Double hi, Double val) noexcept {
 
 	if (lo==hi) {
-	
+
 		if (val==lo) return 0.5;
 		if (val>lo) return 1;
 		return 0;
-	
+
 	}
-	
+
 	bool complement;
 	if (lo>hi) {
-	
+
 		complement=true;
 		std::swap(lo,hi);
-	
+
 	} else {
-	
+
 		complement=false;
-	
+
 	}
-	
+
 	Double difference=val-lo;
 	Double range=hi-lo;
-	
+
 	if (difference<0) return complement ? 1 : 0;
 	if (difference>range) return complement ? 0 : 1;
-	
+
 	Double result=difference/range;
-	
+
 	return complement ? 1-result : result;
 
 }
@@ -100,29 +100,29 @@ void execute (std::mt19937_64::result_type seed) {
 		),
 		filename+"_"+String(seed)+".txt"
 	).ToCString();
-	
+
 	FILE * fhandle=fopen(
 		static_cast<ASCIIChar *>(c_filename),
 		"w"
 	);
-	
+
 	if (fhandle==nullptr) {
-	
+
 		StdOut << "Could not open " << filename << " for writing" << Newline;
-	
+
 		return;
-	
+
 	}
-	
+
 	try {
-		
+
 		auto ocean=MakeOctave(
 			Simplex(gen),
 			4,
 			0.7,
 			0.00005
 		);
-		
+
 		auto max=MakeScale(
 			MakeOctave(
 				Simplex(gen),
@@ -133,7 +133,7 @@ void execute (std::mt19937_64::result_type seed) {
 			0,
 			1
 		);
-		
+
 		auto min=MakeScale(
 			MakeBias(
 				MakeOctave(
@@ -147,7 +147,7 @@ void execute (std::mt19937_64::result_type seed) {
 			0,
 			1
 		);
-		
+
 		auto heightmap=MakeScale(
 			MakeOctave(
 				Simplex(gen),
@@ -158,7 +158,7 @@ void execute (std::mt19937_64::result_type seed) {
 			0,
 			1
 		);
-		
+
 		auto rivers=MakeRidged(
 			MakeOctave(
 				Simplex(gen),
@@ -167,7 +167,7 @@ void execute (std::mt19937_64::result_type seed) {
 				0.0001
 			)
 		);
-		
+
 		auto perturbate_x=MakeScale(
 			MakeOctave(
 				MakeGain(
@@ -181,7 +181,7 @@ void execute (std::mt19937_64::result_type seed) {
 			-20,
 			20
 		);
-		
+
 		auto perturbate_z=MakeScale(
 			MakeOctave(
 				MakeGain(
@@ -195,7 +195,7 @@ void execute (std::mt19937_64::result_type seed) {
 			-20,
 			20
 		);
-		
+
 		auto noise=MakeConvert<Byte>(
 			MakePerturbateDomain<1>(
 				MakePerturbateDomain<4>(
@@ -368,53 +368,36 @@ void execute (std::mt19937_64::result_type seed) {
 						//	Rivers
 						
 						//	Rivers do not occur in the ocean
-						//	proper, nor do they occur underground
-						if (
-							(y>48) &&
-							(ocean_val>=-0.025)
-						) {
+						//	proper
+						if (ocean_val>=-0.025) {
 						
-							//	This is the starting river threshold
-							//	river noise higher than this results
-							//	in a river
-							Double river_threshold=0.966;
+							//	This is the starting river threshold.
+							//
+							//	River noise higher than the final
+							//	value causes a river or river-related
+							//	terrain feature to form.
+							Double river_threshold=0.965;
+							Double river_threshold_start=river_threshold;
+							//	This is the river transitions threshold.
+							//	Within this distance from the river threshold
+							//	transition terrain features will be formed
 							Double river_transition_threshold=0.05;
+							//	This is the river beach threshold.
+							//	Within this distance from the river threshold
+							//	beaches will be formed
+							Double river_beach_threshold=0.0025;
 							
-							//	The heightmap contributes, but only
-							//	by increasing frequency as it descends
-							river_threshold-=(1-height_val)/100;
+							//	Now we adjust the threshold based
+							//	on the surrounding terrain
 							
-							//	Use the average of the ceiling
-							//	and floor to determine what they
-							//	will contribute
-							Double height_avg=(
-								normalize(
-									72,
-									256,
-									ceiling
-								)+normalize(
-									52,
-									128,
-									floor
-								)
-							)/2;
+							//	Use the average of the minimum,
+							//	maximum, and height map to adjust
+							//	the threshold
+							Double avg=(max_val+min_val+height_val)/3;
+							if (avg<0.5) river_threshold-=avg*2*0.06;
+							else river_threshold+=(avg-0.5)*2*(1-river_threshold);
 							
-							//	If it's low it decreases the
-							//	threshold
-							if (height_avg<0.5) river_threshold-=normalize(
-								0.5,
-								0,
-								height_avg
-							)*0.05;
-							//	Otherwise it increases the
-							//	threshold
-							else river_threshold+=normalize(
-								0.5,
-								1,
-								height_avg
-							)*0.15;
-							
-							//	Near the ocean the rivers widen out
+							//	Near oceans rivers widen out
 							//	substantially
 							if (ocean_val<0.04) river_threshold-=normalize(
 								0.04,
@@ -430,77 +413,106 @@ void execute (std::mt19937_64::result_type seed) {
 							
 								river_transition_threshold+=river_threshold;
 								
-								//	River or river transition?
+								//	There needs to be a transition
+								//	between regular terrain and
+								//	a river, check which region we're
+								//	in
 								if (rivers_val<river_transition_threshold) {
 								
-									//	Transition
+									//	We're transitioning towards
+									//	a river
 									
-									//	Transitions do not need to occur
-									//	on beaches
-									if (
-										(ocean_val>=0) ||
-										(ocean_val<-0.0125)
-									) {
+									//	River transitions need not occur
+									//	on beaches -- they're already at
+									//	the proper height anyway -- or in
+									//	the ocean -- it's already underwater
+									//	anyway.
+									if (ocean_val>=0) {
 									
-										//	"Pull" the world height towards
-										//	y=64
-										height=((height-64)*normalize(
-											river_transition_threshold,
-											river_threshold,
-											rivers_val
-										))+64;
+										river_beach_threshold=river_transition_threshold-river_beach_threshold;
 										
+										//	River transition or river beach?
+										if (rivers_val<river_beach_threshold) {
+										
+											//	River transition
+											
+											//	"Pull" the world height towards
+											//	y=64 to meet up with the river
+											height=((height-64)*normalize(
+												river_beach_threshold,
+												river_threshold,
+												rivers_val
+											))+64;
+										
+										} else {
+										
+											//	River beach
+											height=64;
+										
+										}
+										
+										//	Adjust result
 										result=(y>height) ? 255 : 0;
 									
 									}
 								
 								} else {
 								
-									//	River
-									
-									bool is_river=false;
+									//	We're in a river
 									
 									//	Determine the river's depth
-									Double river_depth=(normalize(
+									
+									//	This is the default maximum depth
+									//	of a river
+									Double river_depth=8;
+									
+									//	We use the threshold to adjust the depth
+									if (river_threshold<river_threshold_start) {
+
+										river_depth+=normalize(
+											river_threshold_start,
+											river_threshold_start-0.06-0.25,
+											river_threshold
+										)*16;
+
+									} else {
+
+										river_depth-=normalize(
+											river_threshold_start,
+											1,
+											river_threshold
+										)*8;
+
+									}
+									
+									//	Determine how deep the river
+									//	ought to be based on the strength
+									//	of the noise
+									Double river_noise_strength=normalize(
 										river_transition_threshold,
 										1,
 										rivers_val
-									)*15)+1;
+									);
+									//	To obtain a nice curved river bottom
+									//	we square this value.
+									//
+									//	See graph of y=x^2 for 0<=x<=1
+									river_depth*=river_noise_strength*river_noise_strength;
+									Double river_height=64-river_depth;
 									
-									//	We transition to ocean depth
-									//	as we move through a continental
-									//	shelf
-									if (ocean_val<-0.0125) {
+									height=(
+										(ocean_val<-0.0125)
+											?	river_height+(
+													(height-river_height)*normalize(
+														-0.0125,
+														-0.025,
+														ocean_val
+													)
+												)
+											:	river_height
+									);
 									
-										//	If there's an island, do nothing
-										if (height<64) {
-										
-											Double river_height=64-river_depth;
-											
-											//	If the ocean is deeper than the river,
-											//	do nothing
-											if (height>river_height) {
-											
-												river_height+=(height-river_height)*normalize(
-													-0.0125,
-													-0.025,
-													ocean_val
-												);
-												height=river_height;
-												is_river=true;
-											
-											}
-										
-										}
-									
-									} else {
-									
-										height=64-river_depth;
-										is_river=true;
-									
-									}
-									
-									if (is_river) result=(y>64) ? 255 : ((y>height) ? 127 : 0);
+									result=(y>64) ? 255 : ((y>height) ? 127 : 0);
 								
 								}
 							
@@ -516,10 +528,10 @@ void execute (std::mt19937_64::result_type seed) {
 				perturbate_z
 			)
 		);
-		
+
 		String width_str(width);
 		String height_str(height);
-		
+
 		write_file(
 			fhandle,
 			String(seed)
@@ -544,70 +556,70 @@ void execute (std::mt19937_64::result_type seed) {
 			fhandle,
 			String(height_str)
 		);
-		
+
 		Vector<Byte> buffer(width*height*depth);
 		buffer.SetCount(width*height*depth);
-		
+
 		Timer timer(Timer::CreateAndStart());
-		
+
 		std::atomic<Word> blocks;
 		blocks=0;
 		std::atomic<Word> columns;
 		columns=0;
 		Vector<Thread> threads(num_threads);
 		for (Word i=0;i<num_threads;++i) {
-		
+
 			threads.EmplaceBack(
 				[&] (Word num) {
-				
+
 					Word lower=(width/num_threads)*num;
 					Word upper=(
 						(num==(num_threads-1))
 							?	width
 							:	(width/num_threads)*(num+1)
 					);
-					
+
 					for (Word x=lower;x<upper;++x) {
-					
+
 						SWord real_x=static_cast<SWord>(x*sample_freq)+start_x;
-						
+
 						Word outer_offset=x*height*depth;
-						
+
 						for (Word z=0;z<height;++z) {
-						
+
 							SWord real_z=static_cast<SWord>(z*sample_freq)+start_z;
 							Word offset=outer_offset+(z*depth);
-							
+
 							for (Word y=depth;(y--)>0;) {
-							
+
 								auto val=noise(real_x,y,real_z);
-								
+
 								buffer[offset+y]=val;
-								
+
 								++blocks;
-								
+
 								if (val==0) break;
-							
+
 							}
-						
+
 							++columns;
-						
+
 						}
-					
+
 					}
-				
+
 				},
 				i
 			);
-		
+
 		}
-		
+
 		Word backspaces=0;
 		Word total_columns=height*width;
 		while (columns!=total_columns) {
-		
+
 			Thread::Sleep(250);
-			
+
 			String output(
 				String::Format(
 					"Columns: {0}/{1} ({2}%)",
@@ -616,40 +628,40 @@ void execute (std::mt19937_64::result_type seed) {
 					(static_cast<Double>(columns)/static_cast<Double>(total_columns))*100
 				)
 			);
-			
+
 			Word new_count=output.Size();
-			
+
 			String b;
 			String s;
 			for (Word i=0;i<backspaces;++i) {
-			
+
 				b << "\b";
 				s << " ";
-				
+
 			}
-			
+
 			output=b+s+b+output;
-			
+
 			StdOut << output;
-			
+
 			backspaces=new_count;
-		
+
 		}
-		
+
 		String b;
 		String s;
 		for (Word i=0;i<backspaces;++i) {
-		
+
 			b << "\b";
 			s << " ";
-			
+
 		}
 		StdOut << b << s << b;
-		
+
 		for (auto & t : threads) t.Join();
-		
+
 		timer.Stop();
-		
+
 		StdOut	<< "====GENERATION COMPLETE===="
 				<< Newline
 				<< "Blocks placed: "
@@ -663,26 +675,26 @@ void execute (std::mt19937_64::result_type seed) {
 				<< (timer.ElapsedNanoseconds()/blocks)
 				<< "ns"
 				<< Newline;
-				
+
 		for (Word x=0;x<width;++x)
 		for (Word z=0;z<height;++z) {
-		
+
 			Word water_depth=0;
-		
+
 			for (Word y=depth-1;;--y) {
-			
+
 				if (y==0) {
-				
+
 					write_file(fhandle,0);
-				
+
 					break;
-				
+
 				}
-				
+
 				Byte val=buffer[(x*height*depth)+(z*depth)+y];
-				
+
 				if (val==0) {
-				
+
 					write_file(
 						fhandle,
 						(
@@ -695,25 +707,25 @@ void execute (std::mt19937_64::result_type seed) {
 									)*51)
 						)
 					);
-					
+
 					break;
-				
+
 				}
-				
+
 				if (val==127) ++water_depth;
-			
+
 			}
-			
+
 		}
-		
+
 	} catch (...) {
-	
+
 		fclose(fhandle);
-		
+
 		throw;
-	
+
 	}
-	
+
 	fclose(fhandle);
 
 }
@@ -722,11 +734,11 @@ void execute (std::mt19937_64::result_type seed) {
 int main () {
 
 	do {
-	
+
 		std::mt19937_64::result_type curr_seed=seed.IsNull() ? CryptoRandom<std::mt19937_64::result_type>() : *seed;
-	
+
 		execute(curr_seed);
-	
+
 	} while (seed.IsNull());
 
 	return 0;

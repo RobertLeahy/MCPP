@@ -231,3 +231,5 @@ old_noise.txt
 biome_map.txt
 dep.txt
 *_old.*
+terrain.txt
+*_old

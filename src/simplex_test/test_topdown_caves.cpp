@@ -9,49 +9,23 @@
 #include <utility>
 #include <cstring>
 #include <atomic>
+#include "terrain_generator.cpp"
 
 
 using namespace MCPP;
 
 
-const Word width=4096;
+const Word width=1920;
 const Word depth=256;
-const Word height=1024;
-const Word sample_freq=16;
+//const Word height=1024;
+const Word height=depth;
+const SWord z_slice_pos=0;
+const Word sample_freq=1;
 const Word num_threads=4;
 const SWord start_x=-512;
 const SWord start_z=-512;
-const Nullable<std::mt19937_64::result_type> seed=13615544769841768814ULL;
+const Nullable<std::mt19937_64::result_type> seed=14454031532601581723ULL;
 const String filename("../simplex");
-
-
-enum class Biome : Byte {
-
-	Ocean=0,
-	Plains=1,
-	Desert=2,
-	ExtremeHills=3,
-	Forest=4,
-	Taiga=5,
-	Swamp=6,
-	River=7,
-	Hell=8,
-	Sky=9,
-	FrozenOcean=10,
-	FrozenRiver=11,
-	IcePlains=12,
-	IceMountains=13,
-	MushroomIsland=14,
-	MushroomIslandShore=15,
-	Beach=16,
-	DesertHills=17,
-	ForestHills=18,
-	TaigaHills=19,
-	ExtremeHillsEdge=20,
-	Jungle=21,
-	JungleHills=22
-
-};
 
 
 void write_file (FILE * handle, const String & s) {
@@ -145,33 +119,65 @@ void execute (std::mt19937_64::result_type seed) {
 	
 	try {
 		
-		auto noise=MakeConvert<Byte>(
-			MakeScale(
-				[&gen] (Double x, Double y) -> Double {
-				
-					static auto noise=MakeRidged(
-						MakeOctave(
-							Simplex(gen),
-							4,
-							0.8,//0.7
-							0.0001
-						)
-					);
-					
-					auto val=noise(x,y);
-					
-					if (val>=0.9) return 1;
-					
-					return -1;
-				
-				},
-				2,
-				51
+		
+		auto caves=MakeRidged(
+			MakeOctave(
+				Simplex(gen),
+				4,
+				0.8,
+				0.01
 			)
 		);
 		
-		String width_str(width);
-		String height_str(height);
+		auto cave_surface=MakeScale(
+			MakeOctave(
+				Simplex(gen),
+				3,
+				0.4,
+				0.1
+			),
+			0,
+			12.5
+		);
+		
+		auto heightmap=MakeScale(
+			MakeOctave(
+				Simplex(gen),
+				4,
+				0.6,
+				0.005
+			),
+			32,
+			256
+		);
+		
+		auto noise=[&] (Double x, Double y, Double z) -> Byte {
+			
+			if (y==0) return 0;
+		
+			auto cave_val=caves(x,y,z);
+			
+			//	Ideally this will be dynamically set
+			//Double height=64;
+			Double height=heightmap(x,z);
+			
+			if (y>height) return 255;
+			
+			height+=cave_surface(x,z);
+			
+			if (y>(height-10)) return 0;
+			
+			Double cave_threshold=0.86;
+			
+			cave_threshold-=normalize(
+				height-10,
+				0,
+				y
+			)*0.06;
+			
+			return (cave_val>cave_threshold) ? 255 : 0;
+			
+		};
 		
 		write_file(
 			fhandle,
@@ -187,40 +193,31 @@ void execute (std::mt19937_64::result_type seed) {
 		);
 		write_file(
 			fhandle,
-			String(start_z)
+			String(0)
 		);
 		write_file(
 			fhandle,
-			String(width_str)
+			String(width)
 		);
 		write_file(
 			fhandle,
-			String(height_str)
+			String(height)
 		);
-		
-		Vector<Byte> buffer(width*height);
-		buffer.SetCount(width*height);
 		
 		Timer timer(Timer::CreateAndStart());
-		
-		std::atomic<Word> blocks;
-		blocks=0;
-		Word offset=0;
+		Word blocks=0;
+		Vector<Byte> buffer(width*depth);
 		for (Word x=0;x<width;++x) {
 		
-			SWord real_x=static_cast<SWord>(x*sample_freq)+start_x;
+			SWord real_x=static_cast<Word>(x*sample_freq)+start_x;
 			
-			for (Word z=0;z<height;++z) {
+			for (Word y=0;y<depth;++y) {
 			
-				buffer[offset++]=noise(
-					real_x,
-					static_cast<SWord>(z*sample_freq)+start_z
-				);
-				
+				buffer.Add(noise(real_x,y,z_slice_pos));
 				++blocks;
 			
 			}
-			
+		
 		}
 		
 		timer.Stop();
@@ -239,10 +236,7 @@ void execute (std::mt19937_64::result_type seed) {
 				<< "ns"
 				<< Newline;
 		
-		offset=0;
-		for (Word x=0;x<width;++x)
-		for (Word z=0;z<height;++z)
-		write_file(fhandle,buffer[(x*height)+z]);
+		for (Byte b : buffer) write_file(fhandle,b);
 		
 	} catch (...) {
 	
@@ -259,7 +253,6 @@ void execute (std::mt19937_64::result_type seed) {
 
 int main () {
 
-	bool first=true;
 	do {
 	
 		std::mt19937_64::result_type curr_seed=seed.IsNull() ? CryptoRandom<std::mt19937_64::result_type>() : *seed;
@@ -268,13 +261,8 @@ int main () {
 		
 		if (seed.IsNull()) {
 		
-			if (first) first=false;
-			else {
-			
-				StdOut << "Waiting for CPU to cool down..." << Newline;
-				Thread::Sleep(10000);
-			
-			}
+			StdOut << "Waiting for CPU to cool down..." << Newline;
+			Thread::Sleep(10000);
 		
 		}
 	

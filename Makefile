@@ -7,7 +7,7 @@ INC_ZLIB=-I "G:/Downloads/zlib128-dll/include/"
 INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
 #OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
 OPTIMIZATION=-O3
-OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
+OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
 GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 
 
@@ -347,5 +347,5 @@ bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll
 .PHONY: simplex
 simplex: bin/simplex_test.exe
 
-bin/simplex_test.exe: src/simplex_test/test_topdown_with_rivers.cpp include/noise.hpp include/random.hpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -o $@ src/simplex_test/test_topdown_with_rivers.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+bin/simplex_test.exe: src/simplex_test/test_topdown_oo.cpp src/simplex_test/terrain_generator.cpp include/noise.hpp include/random.hpp bin/mcpp.dll bin/rleahy_lib.dll
+	$(GPP) -o $@ src/simplex_test/test_topdown_oo.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
