@@ -108,8 +108,12 @@ namespace std {
 			>::type compute_hash (const Tuple<Args...> & t) const {
 			
 				size_t hash=compute_hash<i+1>(t);
-			
-				std::hash<decltype(t.template Item<i>())> hasher;
+				
+				std::hash<
+					typename std::decay<
+						decltype(t.template Item<i>())
+					>::type
+				> hasher;
 				
 				hash+=hasher(t.template Item<i>());
 				
