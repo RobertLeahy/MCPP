@@ -412,7 +412,7 @@ namespace MCPP {
 				)(real_x,real_z);
 				Double max_val=MakeScale(
 					MakeOctave(
-						this->max,
+						max,
 						max_num_octaves,
 						max_persistence,
 						max_frequency
