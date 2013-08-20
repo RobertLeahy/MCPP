@@ -6,13 +6,19 @@
 #pragma once
 
 
-#include <rleahylib/rleahylib.hpp>
 #include <common.hpp>
+#include <functional>
+#include <unordered_map>
+#include <utility>
 
 
 namespace MCPP {
 
 
+	/**
+	 *	Represents a single block in the
+	 *	Minecraft world.
+	 */
 	class Block {
 	
 	
@@ -20,7 +26,7 @@ namespace MCPP {
 		
 		
 			UInt32 flags;
-			UInt16 id;
+			UInt16 type;
 			//	Skylight is the high 4 bits,
 			//	metadata is the low 4 bits
 			Byte skylightmetadata;
@@ -30,6 +36,34 @@ namespace MCPP {
 		public:
 		
 		
+			/**
+			 *	Creates a new air block.
+			 */
+			inline Block () noexcept : flags(0), type(0), skylightmetadata(0), light(0) {	}
+			
+			
+			/**
+			 *	Creates a new block of the specified
+			 *	type.
+			 *
+			 *	\param [in] type
+			 *		The type of block to create.
+			 */
+			inline Block (UInt16 type) noexcept : flags(0), type(type), skylightmetadata(0), light(0) {	}
+		
+		
+			/**
+			 *	Tests to see if a certain flag is set
+			 *	on this block.
+			 *
+			 *	\param [in] num
+			 *		The zero-relative index of the flag
+			 *		to test.
+			 *
+			 *	\return
+			 *		\em true if the flag-in-question is
+			 *		set, \em false otherwise.
+			 */
 			inline bool TestFlag (Word num) const noexcept {
 			
 				if (num>31) return false;
@@ -39,6 +73,16 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Sets a certain flag on this block.
+			 *
+			 *	\param [in] num
+			 *		The zero-relative index of the flag
+			 *		to set.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
 			inline Block & SetFlag (Word num) noexcept {
 			
 				if (num<=31) flags|=static_cast<UInt32>(1)<<static_cast<UInt32>(num);
@@ -48,6 +92,16 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Clears a certain flag on this block.
+			 *
+			 *	\param [in] num
+			 *		The zero-relative index of the flag
+			 *		to clear.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
 			inline Block & UnsetFlag (Word num) noexcept {
 			
 				if (num<=31) flags&=~(static_cast<UInt32>(1)<<static_cast<UInt32>(num));
@@ -57,6 +111,12 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Retrieves this block's light value.
+			 *
+			 *	\return
+			 *		This block's light value.
+			 */
 			inline Byte GetLight () const noexcept {
 			
 				return light;
@@ -64,6 +124,16 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Sets this block's light value.
+			 *
+			 *	\param [in] light
+			 *		The light value to associate with
+			 *		this block.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
 			inline Block & SetLight (Byte light) noexcept {
 			
 				if (light<=15) this->light=light;
@@ -73,6 +143,12 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Retrieves this block's metadata.
+			 *
+			 *	\return
+			 *		This block's metadata.
+			 */
 			inline Byte GetMetadata () const noexcept {
 			
 				return skylightmetadata&15;
@@ -80,6 +156,16 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Sets this block's metadata.
+			 *
+			 *	\param [in] metadata
+			 *		The metadata to associate with
+			 *		this block.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
 			inline Block & SetMetadata (Byte metadata) noexcept {
 			
 				if (metadata<=15) skylightmetadata=(skylightmetadata&240)|metadata;
@@ -89,6 +175,12 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Retrieves this block's skylight value.
+			 *
+			 *	\return
+			 *		This block's skylight value.
+			 */
 			inline Byte GetSkylight () const noexcept {
 			
 				return skylightmetadata>>4;
@@ -96,6 +188,16 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Sets this block's skylight value.
+			 *
+			 *	\param [in] skylight
+			 *		The skylight value to associate
+			 *		with this block.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
 			inline Block & SetSkylight (Byte skylight) noexcept {
 			
 				if (skylight<=15) skylightmetadata=(skylightmetadata&15)|(skylight<<4);
@@ -105,21 +207,445 @@ namespace MCPP {
 			}
 			
 			
-			inline UInt16 GetID () const noexcept {
+			/**
+			 *	Retrieves the type of this block.
+			 *
+			 *	\return
+			 *		The type of this block.
+			 */
+			inline UInt16 GetType () const noexcept {
 			
-				return id;
+				return type;
 			
 			}
 			
 			
-			inline UInt16 SetID (UInt16 id) noexcept {
+			/**
+			 *	Sets this block's type.
+			 *
+			 *	\param [in] type
+			 *		The ype of this block.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
+			inline Block & SetType (UInt16 type) noexcept {
 			
-				if (id<=4095) this->id=id;
+				if (type<=4095) this->type=type;
+				
+				return *this;
 			
 			}
 			
 	
 	};
-
+	
+	
+	/**
+	 *	\cond
+	 */
+	 
+	 
+	class BlockID;
+	
+	
+	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
+	 *	Uniquely identifies a column in the
+	 *	Minecraft world.
+	 *
+	 *	Column coordinates are measured in
+	 *	columns, not in blocks.  The column
+	 *	0,0 is defined as the column which
+	 *	contains the block 0,0.
+	 */
+	class ColumnID {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The x-coordinate of the
+			 *	column-in-question.
+			 */
+			Int32 X;
+			/**
+			 *	The z-coordinate of the
+			 *	column-in-question.
+			 */
+			Int32 Z;
+			/**
+			 *	The dimension in which the
+			 *	referenced column resides.
+			 */
+			SByte Dimension;
+			
+			
+			bool operator == (const ColumnID & other) const noexcept;
+			bool operator != (const ColumnID & other) const noexcept;
+			
+			
+			/**
+			 *	Checks to see if this column
+			 *	contains a particular block.
+			 *
+			 *	\param [in] block
+			 *		The block to check.
+			 *
+			 *	\return
+			 *		\em true if this column
+			 *		contains \em block,
+			 *		\em false otherwise.
+			 */
+			bool DoesContain (const BlockID & other) const noexcept;
+			
+			
+			/**
+			 *	Retrieves the lowest block
+			 *	x-coordinate which is still
+			 *	contained within this column.
+			 *
+			 *	\return
+			 *		An x-coordinate measured
+			 *		in blocks.
+			 */
+			Int32 GetStartX () const noexcept;
+			/**
+			 *	Retrieves the lowest block
+			 *	z-coordinate which is still
+			 *	contained within this column.
+			 *
+			 *	\return
+			 *		A z-coordinate measured
+			 *		in blocks.
+			 */
+			Int32 GetStartZ () const noexcept;
+			/**
+			 *	Retrieves the highest block
+			 *	x-coordinate which is still
+			 *	contained within this column.
+			 *
+			 *	\return
+			 *		An x-coordinate measured
+			 *		in blocks.
+			 */
+			Int32 GetEndX () const noexcept;
+			/**
+			 *	Retrieves the highest block
+			 *	z-coordinate which is still
+			 *	contained within this column.
+			 *
+			 *	\return
+			 *		A z-coordinate measured
+			 *		in blocks.
+			 */
+			Int32 GetEndZ () const noexcept;
+	
+	
+	};
+	
+	
+	/**
+	 *	Uniquely identifies a block in the
+	 *	Minecraft world.
+	 */
+	class BlockID {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The x-coordinate of the
+			 *	block-in-question.
+			 */
+			Int32 X;
+			/**
+			 *	The y-coordinate of the
+			 *	block-in-question.
+			 */
+			Byte Y;
+			/**
+			 *	The z-coordinate of the
+			 *	block-in-question.
+			 */
+			Int32 Z;
+			/**
+			 *	The dimension in which the
+			 *	referenced block resides.
+			 */
+			SByte Dimension;
+			
+			
+			bool operator == (const BlockID & other) const noexcept;
+			bool operator != (const BlockID & other) const noexcept;
+			
+			
+			/**
+			 *	Retrieves the ID of the column
+			 *	which contains this block.
+			 *
+			 *	\return
+			 *		The ID which uniquely identifies
+			 *		the column which contains this
+			 *		block.
+			 */
+			ColumnID GetContaining () const noexcept;
+			
+			
+			/**
+			 *	Checks to see if a certain column
+			 *	contains this block.
+			 *
+			 *	\param [in] column
+			 *		The ID of the column to check.
+			 *
+			 *	\return
+			 *		\em true if this block is contained
+			 *		by \em column, \em false otherwise.
+			 */
+			bool IsContainedBy (const ColumnID & column) const noexcept;
+	
+	
+	};
+	
+	
+	/**
+	 *	Checks to see if a given dimension
+	 *	causes skylight values to be sent
+	 *	to the client.
+	 *
+	 *	\param [in] dimension
+	 *		The dimension of interest.
+	 *
+	 *	\return
+	 *		\em true if \em dimension causes
+	 *		skylight values to be sent to
+	 *		the client, \em false otherwise.
+	 */
+	bool HasSkylight (SByte dimension) noexcept;
+	/**
+	 *	Sets the internal value used by
+	 *	HasSkylight for a certain dimension.
+	 *
+	 *	Not thread safe.
+	 *
+	 *	\param [in] dimension
+	 *		The dimension of interest.
+	 *	\param [in] has_skylight
+	 *		\em true if skylight values should
+	 *		be sent to the client for
+	 *		\em dimension, \em false otherwise.
+	 */
+	void SetHasSkylight (SByte dimension, bool has_skylight) noexcept;
+	
+	
+	/**
+	 *	\cond
+	 */
+	
+	
+	class ColumnContainer {
+	
+		
+		public:
+		
+		
+			Block Blocks [16*16*16*16];
+			Byte Biomes [16*16];
+			
+			
+			//	Retrieves a 0x33 packet which represents
+			//	the contained column
+			Vector<Byte> ToChunkData (const ColumnID &) const;
+		
+	
+	};
+	
+	
+	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
+	 *	Provides an interface through which a
+	 *	world generator may be accessed.
+	 *
+	 *	A "world generator" is a pair of a
+	 *	block generator, which places individual
+	 *	blocks when given a block ID, and a
+	 *	biome generator, which returns a biome
+	 *	value when given an X,Z coordinate
+	 *	pair.
+	 */
+	class WorldGenerator {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The type of a block generator callback.
+			 */
+			typedef std::function<Block (const BlockID &)> Generator;
+			/**
+			 *	The type of a biome generator callback.
+			 */
+			typedef std::function<Byte (Int32, Int32, SByte)> BiomeGenerator;
+	
+	
+		private:
+		
+		
+			Generator generator;
+			BiomeGenerator biome_generator;
+		
+		
+		public:
+		
+		
+			/**
+			 *	Creates a new WorldGenerator.
+			 *
+			 *	\param [in] generator
+			 *		The block generator.
+			 *	\param [in] biome_generator
+			 *		The biome generator.
+			 */
+			WorldGenerator (Generator generator, BiomeGenerator biome_generator) noexcept;
+			
+			
+			WorldGenerator () = default;
+			WorldGenerator (WorldGenerator &&) = default;
+			WorldGenerator (const WorldGenerator &) = default;
+			WorldGenerator & operator = (WorldGenerator &&) = default;
+			WorldGenerator & operator = (const WorldGenerator &) = default;
+			
+			
+			/**
+			 *	Determines whether this object
+			 *	contains a valid block
+			 *	generator/biome generator pair.
+			 *
+			 *	\return
+			 *		\em true if this object contains
+			 *		two invocable targets, \em false
+			 *		otherwise.
+			 */
+			operator bool () const noexcept;
+			/**
+			 *	Invokes the block generator.
+			 *
+			 *	\param [in] id
+			 *		The ID of the block which shall
+			 *		be generated and returned.
+			 *
+			 *	\return
+			 *		The block given by \em id.
+			 */
+			Block operator () (const BlockID & id) const;
+			/**
+			 *	Invokes the biome generator.
+			 *
+			 *	\param [in] x
+			 *		The x-coordinate of the
+			 *		column-in-question.
+			 *	\param [in] z
+			 *		The z-coordinate of the
+			 *		column-in-question.
+			 *	\param [in] dimension
+			 *		The dimension in which the
+			 *		column-in-question resides.
+			 *
+			 *	\return
+			 *		A byte indicating the biome
+			 *		of the column specified by
+			 *		\em x, \em z.
+			 */
+			Byte operator () (Int32 x, Int32 z, SByte dimension) const;
+	
+	
+	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	
+	
+	class WorldGeneratorContainer {
+	
+	
+		private:
+		
+		
+			std::unordered_map<
+				Tuple<
+					String,
+					SByte
+				>,
+				WorldGenerator
+			> map;
+			std::unordered_map<
+				SByte,
+				WorldGenerator
+			> default_map;
+	
+	
+		public:
+		
+		
+			void Add (WorldGenerator generator, SByte dimension);
+			void Add (WorldGenerator generator, String type, SByte dimension);
+		
+		
+			const WorldGenerator & operator () (String type, SByte dimension) const;
+	
+	
+	};
+	
+	
+	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
+	 *	Contains and manages the Minecraft world
+	 *	as a collection of columns.
+	 */
+	class WorldContainer {
+	
+	
+		private:
+		
+		
+			//	SETTINGS
+			
+			//	The world type
+			String type;
+		
+		
+			//	Contains loaded world generators
+			WorldGeneratorContainer generators;
+		
+		
+			//	PRIVATE METHODS
+			
+			//	Generates a column
+			void generate (ColumnContainer &, const ColumnID &) const;
+		
+		
+		public:
+	
+	
+	};
+	 
 
 }

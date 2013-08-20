@@ -5,8 +5,8 @@ INC_CURL=-I "G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/in
 INC_OPENSSL=-I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include"
 INC_ZLIB=-I "G:/Downloads/zlib128-dll/include/"
 INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
-#OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
-OPTIMIZATION=-O3
+OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
+#OPTIMIZATION=-O3
 OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
 GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 
@@ -215,8 +215,6 @@ bin/chat_mods/info.dll \
 bin/chat_mods/chat_op.dll \
 bin/chat_mods/kick.dll \
 bin/mods/world.dll \
-bin/world_mods/flat.dll \
-bin/chat_mods/world_info.dll \
 bin/mods/player.dll
 
 
@@ -270,8 +268,15 @@ bin/mods/ban.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/ban/
 
 #	WORLD
 
-bin/mods/world.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/block_id.cpp src/world/column_id.cpp include/world/world.hpp src/world/world.cpp src/world/column_container.cpp
-	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/column_id.cpp src/world/block_id.cpp src/world/world.cpp src/world/column_container.cpp
+bin/mods/world.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o \
+src/world/generator.cpp \
+src/world/world_generator.cpp \
+src/world/block_id.cpp \
+src/world/column_id.cpp \
+src/world/column_container.cpp \
+src/world/has_skylight.cpp \
+src/world/world_generator_container.cpp
+	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/world/generator.cpp src/world/world_generator.cpp src/world/block_id.cpp src/world/column_id.cpp src/world/column_container.cpp src/world/has_skylight.cpp src/world/world_generator_container.cpp
 	
 	
 #	PLAYER
