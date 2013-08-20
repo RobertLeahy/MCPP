@@ -533,7 +533,7 @@ namespace MCPP {
 			 *	\param [in] obj
 			 *		The object to serialize.
 			 *	\param [in] buffer
-			 *		The buffer in which to play the serialization
+			 *		The buffer in which to place the serialization
 			 *		of \em obj.
 			 */
 			static void ToBytes (const T & obj, Vector<Byte> & buffer) {
