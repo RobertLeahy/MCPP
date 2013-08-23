@@ -28,14 +28,17 @@ namespace std {
 				//	Normalize string
 				str.Normalize(NormalizationForm::NFC);
 				
-				size_t returnthis=0;
+				//	djb2
+				size_t retr=5381;
+				
 				for (auto cp : str.CodePoints()) {
 				
-					returnthis+=101*static_cast<size_t>(cp);
+					retr*=33;
+					retr^=cp;
 				
 				}
 				
-				return returnthis;
+				return retr;
 			
 			}
 	
@@ -70,14 +73,16 @@ namespace std {
 					
 					raw_ip=static_cast<UInt128>(ip);
 					
-					size_t returnthis=0;
-					for (Word i=0;i<(sizeof(UInt128)/sizeof(size_t));++i) {
+					size_t retr=23;
 					
-						returnthis+=split[i];
+					for (auto m : split) {
+					
+						retr*=31;
+						retr+=m;
 					
 					}
 					
-					return returnthis;
+					return retr;
 				
 				}
 				
@@ -105,30 +110,28 @@ namespace std {
 			typename std::enable_if<
 				i<sizeof...(Args),
 				size_t
-			>::type compute_hash (const Tuple<Args...> & t) const {
+			>::type compute_hash (size_t curr, const Tuple<Args...> & t) const {
 			
-				size_t hash=compute_hash<i+1>(t);
+				curr*=31;
 				
-				std::hash<
+				curr+=std::hash<
 					typename std::decay<
 						decltype(t.template Item<i>())
 					>::type
-				> hasher;
+				>()(t.template Item<i>());
 				
-				hash+=hasher(t.template Item<i>());
-				
-				return hash;
+				return compute_hash<i+1>(curr,t);
 			
 			}
 			
 			
 			template <Word i>
-			constexpr typename std::enable_if<
+			typename std::enable_if<
 				i>=sizeof...(Args),
 				size_t
-			>::type compute_hash (const Tuple<Args...> &) const noexcept {
+			>::type compute_hash (size_t curr, const Tuple<Args...> &) const noexcept {
 			
-				return 0;
+				return curr;
 			
 			}
 			
@@ -138,7 +141,7 @@ namespace std {
 		
 			size_t operator () (const Tuple<Args...> & t) const {
 			
-				return compute_hash<0>(t);
+				return compute_hash<0>(23,t);
 			
 			}
 	
@@ -155,9 +158,7 @@ namespace std {
 		
 			size_t operator () (const SmartPointer<T> & sp) const noexcept {
 			
-				hash<const T *> hasher;
-				
-				return hasher(static_cast<const T *>(sp));
+				return hash<const T *>()(static_cast<const T *>(sp));
 			
 			}
 	
