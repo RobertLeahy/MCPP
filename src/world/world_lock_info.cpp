@@ -56,7 +56,7 @@ namespace MCPP {
 	void WorldLockInfo::Asynchronous (std::function<void (const void *)> callback) noexcept {
 	
 		sync=false;
-		callback=std::move(callback);
+		this->callback=std::move(callback);
 	
 	}
 	
