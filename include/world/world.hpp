@@ -350,6 +350,74 @@ namespace MCPP {
 	};
 	
 	
+}
+
+
+/**
+ *	\cond
+ */
+
+
+namespace std {
+
+
+	template <>
+	struct hash<ColumnID> {
+	
+	
+		public:
+		
+		
+			size_t operator () (const ColumnID & subject) const noexcept {
+			
+				union {
+					UInt32 u_x;
+					Int32 x;
+				};
+				
+				x=subject.X;
+				
+				union {
+					UInt32 u_z;
+					Int32 z;
+				};
+				
+				z=subject.Z;
+				
+				union {
+					Byte u_d;
+					SByte d;
+				};
+				
+				d=subject.Dimension;
+				
+				size_t retr=23;
+				retr*=31;
+				retr+=u_x;
+				retr*=31;
+				retr+=u_z;
+				retr*=31;
+				retr+=u_d;
+				
+				return retr;
+			
+			}
+	
+	
+	};
+
+
+}
+
+
+/**
+ *	\endcond
+ */
+
+
+namespace MCPP {
+	
+	
 	/**
 	 *	Uniquely identifies a block in the
 	 *	Minecraft world.
