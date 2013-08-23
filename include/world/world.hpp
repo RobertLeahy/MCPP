@@ -302,7 +302,7 @@ namespace MCPP {
 			 *		contains \em block,
 			 *		\em false otherwise.
 			 */
-			bool DoesContain (const BlockID & other) const noexcept;
+			bool DoesContain (const BlockID & block) const noexcept;
 			
 			
 			/**
@@ -469,8 +469,217 @@ namespace MCPP {
 	
 	
 	/**
+	 *	Represents a request for exclusive
+	 *	access to certain elements of the
+	 *	world.
+	 */
+	class WorldLockRequest {
+	
+	
+		private:
+		
+		
+			bool world;
+			Vector<BlockID> blocks;
+			Vector<ColumnID> columns;
+			
+			
+		public:
+		
+		
+			/**
+			 *	Creates a new world lock
+			 *	request which requests
+			 *	exclusive access to the
+			 *	entire world.
+			 */
+			WorldLockRequest () noexcept;
+			/**
+			 *	Creates a new world lock
+			 *	request which requests
+			 *	exclusive access to a certain
+			 *	block.
+			 *
+			 *	\param [in] block
+			 *		The block to which exclusive
+			 *		access is desired.
+			 */
+			WorldLockRequest (BlockID block);
+			/**
+			 *	Creates a new world lock
+			 *	request which requests
+			 *	exclusive access to a certain
+			 *	column.
+			 *
+			 *	\param [in] column
+			 *		The column to which exclusive
+			 *		access is desired.
+			 */
+			WorldLockRequest (ColumnID column);
+			/**
+			 *	Creates a new world lock request
+			 *	which requests exclusive access
+			 *	to certain blocks.
+			 *
+			 *	\param [in] blocks
+			 *		The blocks to which exclusive
+			 *		access is desired.
+			 */
+			WorldLockRequest (Vector<BlockID> blocks) noexcept;
+			/**
+			 *	Creates a new world lock request
+			 *	which requests exclusive access to
+			 *	certain columns.
+			 *
+			 *	\param [in] columns
+			 *		The columns to which exclusive
+			 *		access is desired.
+			 */
+			WorldLockRequest (Vector<ColumnID> columns) noexcept;
+			
+			
+			/**
+			 *	Determines whether or not this
+			 *	lock request is empty, i.e.\ whether
+			 *	or not it does not request a lock
+			 *	on anything.
+			 *
+			 *	\return
+			 *		\em true if this lock does not
+			 *		request exclusive access to any
+			 *		elements of the world, \em false
+			 *		otherwise.
+			 */
+			bool IsEmpty () const noexcept;
+			/**
+			 *	Determines whether or not this lock
+			 *	request contends with some other
+			 *	lock request, i.e.\ whether or not
+			 *	both of them can be held simultaneously.
+			 *
+			 *	\return
+			 *		\em false if the locks contend,
+			 *		i.e.\ may not be held simultaneously.
+			 *		\em true otherwise.
+			 */
+			bool DoesContendWith (const WorldLockRequest & other) const noexcept;
+			
+			
+			/**
+			 *	Adds a block to the world lock
+			 *	request.
+			 *
+			 *	\param [in] block
+			 *		The block to add.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
+			WorldLockRequest & Add (BlockID block);
+			/**
+			 *	Adds a column to the world lock
+			 *	request.
+			 *
+			 *	\param [in] column
+			 *		The column to add.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
+			WorldLockRequest & Add (ColumnID column);
+	
+	
+	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	
+	
+	class WorldLockInfo {
+	
+	
+		private:
+		
+		
+			Mutex lock;
+			CondVar wait;
+			bool sync;
+			bool wake;
+			std::function<void (const void *)> callback;
+	
+	
+		public:
+		
+		
+			WorldLockRequest Request;
+			
+			
+			WorldLockInfo () = delete;
+			WorldLockInfo (WorldLockRequest) noexcept;
+			WorldLockInfo (std::function<void (const void *)>, WorldLockRequest) noexcept;
+			
+			
+			void Asynchronous (std::function<void (const void *)>) noexcept;
+			void Synchronous () noexcept;
+			void Wait () noexcept;
+			void Wake (ThreadPool &);
+	
+	
+	};
+	
+	
+	/**
 	 *	\endcond
 	 */
+	 
+	 
+	class WorldLock {
+	
+	
+		private:
+		
+		
+			ThreadPool & pool;
+		
+		
+			Mutex lock;
+			Vector<SmartPointer<WorldLockInfo>> held;
+			Vector<SmartPointer<WorldLockInfo>> pending;
+			
+			
+			inline void acquire (SmartPointer<WorldLockInfo>);
+			inline void release (const void *);
+			
+			
+		public:
+		
+		
+			WorldLock () = delete;
+			WorldLock (ThreadPool &) noexcept;
+			
+			
+			template <typename T, typename... Args>
+			void Enqueue (WorldLockRequest request, T && callback, Args &&... args) {
+			
+				acquire(
+					SmartPointer<WorldLockInfo>::Make(
+						std::move(request),
+						std::bind(
+							std::forward<T>(callback),
+							std::placeholders::_1,
+							std::forward<Args>(args)...
+						)
+					)
+				);
+			
+			}
+			const void * Acquire (WorldLockRequest request);
+			void Release (const void * handle);
+	
+	
+	};
 	
 	
 	/**
@@ -575,48 +784,6 @@ namespace MCPP {
 	
 	
 	/**
-	 *	\cond
-	 */
-	
-	
-	class WorldGeneratorContainer {
-	
-	
-		private:
-		
-		
-			std::unordered_map<
-				Tuple<
-					String,
-					SByte
-				>,
-				WorldGenerator
-			> map;
-			std::unordered_map<
-				SByte,
-				WorldGenerator
-			> default_map;
-	
-	
-		public:
-		
-		
-			void Add (WorldGenerator generator, SByte dimension);
-			void Add (WorldGenerator generator, String type, SByte dimension);
-		
-		
-			const WorldGenerator & operator () (String type, SByte dimension) const;
-	
-	
-	};
-	
-	
-	/**
-	 *	\endcond
-	 */
-	
-	
-	/**
 	 *	Contains and manages the Minecraft world
 	 *	as a collection of columns.
 	 */
@@ -633,16 +800,31 @@ namespace MCPP {
 		
 		
 			//	Contains loaded world generators
-			WorldGeneratorContainer generators;
+			std::unordered_map<
+				Tuple<
+					String,
+					SByte
+				>,
+				WorldGenerator
+			> generators;
+			std::unordered_map<
+				SByte,
+				WorldGenerator
+			> default_generators;
 		
 		
 			//	PRIVATE METHODS
 			
 			//	Generates a column
 			void generate (ColumnContainer &, const ColumnID &) const;
+			const WorldGenerator & get_generator (SByte) const;
 		
 		
 		public:
+		
+		
+			void Add (WorldGenerator generator, SByte dimension);
+			void Add (WorldGenerator generator, String type, SByte dimension);
 	
 	
 	};

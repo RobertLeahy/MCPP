@@ -24,16 +24,16 @@ namespace MCPP {
 	static const ASCIIChar * gen_not_found="No such world generator";
 
 
-	void WorldGeneratorContainer::Add (WorldGenerator generator, SByte dimension) {
+	void WorldContainer::Add (WorldGenerator generator, SByte dimension) {
 	
-		default_map[dimension]=std::move(generator);
+		default_generators[dimension]=std::move(generator);
 	
 	}
 	
 	
-	void WorldGeneratorContainer::Add (WorldGenerator generator, String type, SByte dimension) {
+	void WorldContainer::Add (WorldGenerator generator, String type, SByte dimension) {
 	
-		map[
+		generators[
 			Tuple<String,SByte>(
 				std::move(type),
 				dimension
@@ -43,20 +43,20 @@ namespace MCPP {
 	}
 	
 	
-	const WorldGenerator & WorldGeneratorContainer::operator () (String type, SByte dimension) const {
+	const WorldGenerator & WorldContainer::get_generator (SByte dimension) const {
 	
-		auto iter=map.find(
+		auto iter=generators.find(
 			Tuple<String,SByte>(
-				std::move(type),
+				type,
 				dimension
 			)
 		);
 		
-		if (iter==map.end()) {
+		if (iter==generators.end()) {
 		
-			auto default_iter=default_map.find(dimension);
+			auto default_iter=default_generators.find(dimension);
 			
-			if (default_iter==default_map.end()) throw std::runtime_error(gen_not_found);
+			if (default_iter==default_generators.end()) throw std::runtime_error(gen_not_found);
 			
 			return default_iter->second;
 		

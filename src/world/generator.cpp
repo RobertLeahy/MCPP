@@ -7,10 +7,7 @@ namespace MCPP {
 	void WorldContainer::generate (ColumnContainer & column, const ColumnID & id) const {
 	
 		//	Get the appropriate world generator
-		const WorldGenerator & generator=generators(
-			type,
-			id.Dimension
-		);
+		const WorldGenerator & generator=get_generator(id.Dimension);
 		
 		//	Calculate the start and end
 		//	X and Z coordinates so they

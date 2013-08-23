@@ -22,23 +22,23 @@ namespace MCPP {
 	}
 	
 	
-	bool ColumnID::DoesContain (const BlockID & other) const noexcept {
+	bool ColumnID::DoesContain (const BlockID & block) const noexcept {
 	
-		return other.IsContainedBy(*this);
+		return block.IsContainedBy(*this);
 	
 	}
 	
 	
 	Int32 ColumnID::GetStartX () const noexcept {
 	
-		return ((X>0) ? X : (X-1))*16;
+		return X*16;
 	
 	}
 	
 	
 	Int32 ColumnID::GetStartZ () const noexcept {
 	
-		return ((Z>0) ? Z : (Z-1))*16;
+		return Z*16;
 	
 	}
 	
