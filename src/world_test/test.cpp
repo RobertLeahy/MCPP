@@ -4,57 +4,91 @@
 
 Nullable<ThreadPool> pool;
 Nullable<WorldLock> lock;
-std::atomic<Word> num;
 Mutex console_lock;
 
 
 int main () {
 
-	pool.Construct(7);
+	pool.Construct(5);
 	lock.Construct(*pool);
-	num=0;
 	
-	for (Word i=0;i<7;++i) {
+	WorldLockRequest request(
+		ColumnID{
+			0,
+			0,
+			1
+		}
+	);
 	
-		pool->Enqueue([] () {
+	lock->Enqueue(
+		std::move(request),
+		[] (const void * handle) {
 		
-			Word thread_id=++num;
+			console_lock.Execute([] () {	StdOut << "Have the lock on 0,0,1" << Newline;	});
 			
-			for (;;) {
+			Thread::Sleep(2500);
 			
-				const void * handle;
+			console_lock.Execute([] () {	StdOut << "Releasing..." << Newline;	});
 			
-				if (thread_id==6) {
+			lock->Release(handle);
+		
+		}
+	);
+	
+	WorldLockRequest request2(
+		ColumnID{
+			1,
+			0,
+			1
+		}
+	);
+	
+	lock->Enqueue(
+		std::move(request),
+		[] (const void * handle) {
+		
+			console_lock.Execute([] () {	StdOut << "Have the lock on 1,0,1" << Newline;	});
 			
-					WorldLockRequest request(ColumnID{1,0,0});
-					
-					handle=lock->Acquire(std::move(request));
-			
-				} else if (thread_id==7) {
-				
-					WorldLockRequest request;
-					
-					handle=lock->Acquire(std::move(request));
-				
-				} else {
-			
-					WorldLockRequest request(ColumnID{0,0,0});
-					
-					handle=lock->Acquire(std::move(request));
-					
+			WorldLockRequest request(
+				ColumnID{
+					1,
+					1,
+					1
 				}
-				
-				console_lock.Execute([=] () {	StdOut << thread_id << Newline;	});
-				
-				Thread::Sleep(1000);
-				
-				lock->Release(handle);
+			);
 			
-			}
+			lock->Upgrade(
+				handle,
+				request,
+				[] (const void * handle) {
+				
+					console_lock.Execute([] () {	StdOut << "Have the lock on 1,1,1" << Newline;	});
+					
+					WorldLockRequest request(
+						ColumnID{
+							0,
+							0,
+							1
+						}
+					);
+					
+					lock->Upgrade(
+						handle,
+						request,
+						[] (const void * handle) {
+						
+							console_lock.Execute([] () {	StdOut << "Have the lock on 0,0,1" << Newline;	});
+							
+							lock->Release(handle);
+						
+						}
+					);
+				
+				}
+			);
 		
-		});
-	
-	}
+		}
+	);
 	
 	for (;;) Thread::Sleep(1000);
 

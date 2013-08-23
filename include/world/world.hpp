@@ -587,6 +587,21 @@ namespace MCPP {
 			 *		A reference to this object.
 			 */
 			WorldLockRequest & Add (ColumnID column);
+			/**
+			 *	Merges two lock requests so that this
+			 *	lock request requests exclusive access
+			 *	to all resources it originally requested,
+			 *	in addition to the resources requested by
+			 *	\em other.
+			 *
+			 *	\param [in] other
+			 *		The request with which to merge this
+			 *		request.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
+			WorldLockRequest & Merge (const WorldLockRequest & other);
 	
 	
 	};
@@ -649,8 +664,9 @@ namespace MCPP {
 			Vector<SmartPointer<WorldLockInfo>> pending;
 			
 			
-			inline void acquire (SmartPointer<WorldLockInfo>);
+			void acquire (SmartPointer<WorldLockInfo>);
 			inline void release (const void *);
+			void upgrade (const void *, const WorldLockRequest &, Nullable<std::function<void (const void *)>>);
 			
 			
 		public:
@@ -665,7 +681,28 @@ namespace MCPP {
 			
 				acquire(
 					SmartPointer<WorldLockInfo>::Make(
-						std::move(request),
+						std::bind(
+							std::forward<T>(callback),
+							std::placeholders::_1,
+							std::forward<Args>(args)...
+						),
+						std::move(request)
+					)
+				);
+			
+			}
+			template <typename T, typename... Args>
+			void Upgrade (
+				const void * handle,
+				const WorldLockRequest & request,
+				T && callback,
+				Args &&... args
+			) {
+			
+				upgrade(
+					handle,
+					request,
+					std::function<void (const void *)>(
 						std::bind(
 							std::forward<T>(callback),
 							std::placeholders::_1,
@@ -675,6 +712,7 @@ namespace MCPP {
 				);
 			
 			}
+			void Upgrade (const void * handle, const WorldLockRequest & request);
 			const void * Acquire (WorldLockRequest request);
 			void Release (const void * handle);
 	

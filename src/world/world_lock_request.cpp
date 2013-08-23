@@ -103,6 +103,19 @@ namespace MCPP {
 		return *this;
 	
 	}
+	
+	
+	WorldLockRequest & WorldLockRequest::Merge (const WorldLockRequest & other) {
+	
+		if (other.world) world=true;
+		
+		for (const auto & b : other.blocks) blocks.Add(b);
+		
+		for (const auto & c : other.columns) columns.Add(c);
+		
+		return *this;
+	
+	}
 
 
 }

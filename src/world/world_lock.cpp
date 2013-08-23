@@ -11,7 +11,7 @@ namespace MCPP {
 	WorldLock::WorldLock (ThreadPool & pool) noexcept : pool(pool) {	}
 	
 	
-	inline void WorldLock::acquire (SmartPointer<WorldLockInfo> info) {
+	void WorldLock::acquire (SmartPointer<WorldLockInfo> info) {
 	
 		lock.Acquire();
 		
@@ -210,6 +210,141 @@ namespace MCPP {
 	}
 	
 	
+	void WorldLock::upgrade (
+		const void * ptr,
+		const WorldLockRequest & request,
+		Nullable<std::function<void (const void *)>> callback
+	) {
+	
+		lock.Acquire();
+		
+		//	Attempt to find lock
+		
+		Nullable<Word> index;
+		
+		for (Word i=0;i<held.Count();++i)
+		if (reinterpret_cast<const WorldLockInfo *>(ptr)==static_cast<WorldLockInfo *>(held[i])) {
+		
+			index=i;
+			
+			break;
+		
+		}
+		
+		//	Abort if the pointer we
+		//	were passed is garbage
+		if (index.IsNull()) {
+		
+			lock.Release();
+			
+			return;
+		
+		}
+		
+		//	Upgrade
+		try {
+		
+			held[*index]->Request.Merge(request);
+		
+		} catch (...) {
+		
+			lock.Release();
+			
+			try {
+			
+				release(ptr);
+			
+			} catch (...) {	}
+			
+			throw;
+		
+		}
+		
+		//	Set new wait method
+		if (callback.IsNull()) held[*index]->Synchronous();
+		else held[*index]->Asynchronous(std::move(*callback));
+		
+		//	Test to make sure new lock
+		//	is compatible with currently
+		//	held locks
+		
+		bool can_acquire=true;
+		
+		for (Word i=0;i<held.Count();++i)
+		if (
+			(i!=*index) &&
+			held[i]->Request.DoesContendWith(held[*index]->Request)
+		) {
+		
+			can_acquire=false;
+			
+			break;
+		
+		}
+		
+		//	If we can acquire at once, fire
+		//	the callback (if necessary)
+		if (can_acquire) {
+		
+			try {
+			
+				held[*index]->Wake(pool);
+			
+			} catch (...) {
+			
+				lock.Release();
+				
+				try {
+				
+					release(ptr);
+				
+				} catch (...) {	}
+				
+				throw;
+			
+			}
+			
+			lock.Release();
+		
+		//	If we cannot acquire, put this lock
+		//	at the front of the pending queue and
+		//	wait (if necessary)
+		} else {
+		
+			auto wait=held[*index];
+		
+			try {
+			
+				pending.Insert(
+					wait,
+					0
+				);
+			
+			} catch (...) {
+			
+				lock.Release();
+				
+				try {
+				
+					release(ptr);
+				
+				} catch (...) {	}
+				
+				throw;
+			
+			}
+			
+			held.Delete(*index);
+			
+			lock.Release();
+			
+			wait->Wait();
+		
+		}
+	
+	}
+	
+	
 	const void * WorldLock::Acquire (WorldLockRequest request) {
 	
 		auto handle=SmartPointer<WorldLockInfo>::Make(std::move(request));
@@ -226,6 +361,17 @@ namespace MCPP {
 	void WorldLock::Release (const void * handle) {
 	
 		release(handle);
+	
+	}
+	
+	
+	void WorldLock::Upgrade (const void * handle, const WorldLockRequest & request) {
+	
+		upgrade(
+			handle,
+			request,
+			Nullable<std::function<void (const void *)>>()
+		);
 	
 	}
 
