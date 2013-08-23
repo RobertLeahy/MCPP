@@ -649,7 +649,11 @@ namespace MCPP {
 	 *	\endcond
 	 */
 	 
-	 
+	
+	/**
+	 *	Provides granular, fair, upgradeable
+	 *	locking on the Minecraft world.
+	 */
 	class WorldLock {
 	
 	
@@ -673,9 +677,46 @@ namespace MCPP {
 		
 		
 			WorldLock () = delete;
-			WorldLock (ThreadPool &) noexcept;
+			/**
+			 *	Creates a new WorldLock.
+			 *
+			 *	\param [in] pool
+			 *		The thread pool that the
+			 *		WorldLock will use for
+			 *		asynchronous callbacks.
+			 */
+			WorldLock (ThreadPool & pool) noexcept;
 			
 			
+			/**
+			 *	Enqueues an asynchronous callback
+			 *	to be executed as soon as a certain
+			 *	set of resources are available for
+			 *	exclusive access.
+			 *
+			 *	The asynchronous callback is passed
+			 *	a <em>const void *</em> handle representing
+			 *	the lock it holds as its first parameter,
+			 *	and then any supplied arguments after that
+			 *	in the same order they were provided.
+			 *
+			 *	\tparam T
+			 *		The type of callback to invoke.
+			 *	\tparam Args
+			 *		The types of arguments to forward
+			 *		through to the callback.
+			 *
+			 *	\param [in] request
+			 *		A request detailing the resources
+			 *		to which exclusive access is desired.
+			 *	\param [in] callback
+			 *		The asynchronous callback which shall
+			 *		be invoked when the resources detailed
+			 *		by \em request are available.
+			 *	\param [in] args
+			 *		The parameters which shall be forwarded
+			 *		through to \em callback.
+			 */
 			template <typename T, typename... Args>
 			void Enqueue (WorldLockRequest request, T && callback, Args &&... args) {
 			
@@ -691,6 +732,49 @@ namespace MCPP {
 				);
 			
 			}
+			/**
+			 *	Enqueues an asynchronous callback to be
+			 *	executed as soon as the lock specified
+			 *	by \em handle can be upgraded to include
+			 *	a certain set of resources in addition
+			 *	to the resources the lock already holds.
+			 *
+			 *	The asynchronous callback is passed a
+			 *	<em>const void *</em> handle representing
+			 *	the lock it holds as its first parameter,
+			 *	and then any supplied arguments after that
+			 *	in the same order they were provided.
+			 *
+			 *	\tparam T
+			 *		The type of callback to invoke.
+			 *	\tparam Args
+			 *		The types of arguments to forward
+			 *		through to the callback.
+			 *
+			 *	\param [in] handle
+			 *		A handle representing a currently
+			 *		held lock.  Passing a handle that
+			 *		does not represent a currently held
+			 *		lock results in undefined behaviour.
+			 *		This handle should not be used by
+			 *		the caller after this method completes,
+			 *		doing so results in undefined behaviour.
+			 *	\param [in] request
+			 *		A request detailing the resources
+			 *		to which exclusive access is desired.
+			 *		When \em callback is invoked the lock
+			 *		shall have exclusive access to these
+			 *		resources in addition to any resources
+			 *		the lock currently has exclusive access
+			 *		to.
+			 *	\param [in] callback
+			 *		The asynchronous callback which shall be
+			 *		invoked when the resources detailed by
+			 *		\em request are available.
+			 *	\param [in] args
+			 *		The parameters which shall be forwarded
+			 *		through to \em callback.
+			 */
 			template <typename T, typename... Args>
 			void Upgrade (
 				const void * handle,
@@ -712,8 +796,61 @@ namespace MCPP {
 				);
 			
 			}
+			/**
+			 *	Blocks until a given lock can be upgraded
+			 *	to include a certain set of resources in
+			 *	addition to the resources the lock already
+			 *	holds.
+			 *
+			 *	After this call returns \em handle may
+			 *	continue to be used to control the held
+			 *	lock.
+			 *
+			 *	\param [in] handle
+			 *		A handle representing a currently
+			 *		held lock.  Passing a handle that
+			 *		does not represent a currently held
+			 *		lock results in undefined behaviour.
+			 *		This handle should not be used by
+			 *		the caller after this method completes,
+			 *		doing so results in undefined behaviour.
+			 *	\param [in] request
+			 *		A request detailing the resources
+			 *		to which exclusive access is desired.
+			 *		When this function returns the caller
+			 *		shall have exclusive access to these
+			 *		resources in addition to any resources
+			 *		the lock currently has exclusive access
+			 *		to.
+			 */
 			void Upgrade (const void * handle, const WorldLockRequest & request);
+			/**
+			 *	Blocks until exclusive access to a certain
+			 *	set of resources can be acquired.
+			 *
+			 *	\param [in] request
+			 *		A request detailing the resources to
+			 *		which exclusive access is desired.
+			 *		When this function returns the caller
+			 *		shall have exclusive access to these
+			 *		resources.
+			 *
+			 *	\return
+			 *		An opaque handle which may be used to
+			 *		manipulate the acquired lock.
+			 */
 			const void * Acquire (WorldLockRequest request);
+			/**
+			 *	Releases a lock.
+			 *
+			 *	\param [in] handle
+			 *		The handle representing the lock which
+			 *		is to be released.  Passing a handle which
+			 *		does not represent a currently held lock
+			 *		results in undefined behaviour. Continuing
+			 *		to use this handle after this function
+			 *		returns results in undefined behaviour.
+			 */
 			void Release (const void * handle);
 	
 	
