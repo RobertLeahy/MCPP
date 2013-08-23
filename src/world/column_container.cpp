@@ -203,7 +203,7 @@ namespace MCPP {
 		Word size_loc=buffer.Count();
 		buffer.SetCount(size_loc+sizeof(Int32));
 		
-		//	Decompress
+		//	Compress
 		Deflate(
 			column.begin(),
 			column.end(),
