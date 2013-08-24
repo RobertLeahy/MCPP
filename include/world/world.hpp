@@ -556,6 +556,12 @@ namespace MCPP {
 		(
 			offsetof(
 				ColumnContainer,
+				Blocks
+			)==0
+		) &&
+		(
+			offsetof(
+				ColumnContainer,
 				Biomes
 			)==(16*16*16*16*sizeof(Block))
 		) &&
