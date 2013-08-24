@@ -10,6 +10,7 @@
 #include <functional>
 #include <unordered_map>
 #include <utility>
+#include <cstddef>
 
 
 namespace MCPP {
@@ -244,6 +245,12 @@ namespace MCPP {
 	/**
 	 *	\cond
 	 */
+	 
+	 
+	static_assert(
+		sizeof(Block)==(sizeof(UInt32)+sizeof(UInt16)+(sizeof(Byte)*2)),
+		"Block layout incorrect"
+	);
 	 
 	 
 	class BlockID;
@@ -524,8 +531,15 @@ namespace MCPP {
 		public:
 		
 		
+			//	The layout of the proceeding
+			//	three fields is identical to
+			//	the layout in which they will
+			//	be saved to the backing store,
+			//	this removes the need for any
+			//	sort of copying
 			Block Blocks [16*16*16*16];
 			Byte Biomes [16*16];
+			bool Populated;
 			
 			
 			//	Retrieves a 0x33 packet which represents
@@ -534,6 +548,31 @@ namespace MCPP {
 		
 	
 	};
+	
+	
+	static_assert(
+		(
+			offsetof(
+				ColumnContainer,
+				Biomes
+			)==(16*16*16*16*sizeof(Block))
+		) &&
+		(
+			offsetof(
+				ColumnContainer,
+				Populated
+			)==(
+				(16*16*16*16*sizeof(Block))+(16*16*sizeof(Byte))
+			)
+		) &&
+		(sizeof(bool)==sizeof(Byte)),
+		"ColumnContainer layout incorrect"
+	);
+	
+	
+	/**
+	 *	\endcond
+	 */
 	
 	
 	/**
