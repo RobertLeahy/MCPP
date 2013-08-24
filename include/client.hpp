@@ -390,6 +390,19 @@ namespace MCPP {
 			/**
 			 *	Sends data to the client.
 			 *
+			 *	\param [in] buffer
+			 *		A buffer of bytes to send to the
+			 *		client.
+			 *
+			 *	\return
+			 *		A send handle which can be used to
+			 *		monitor the progress of the asynchronous
+			 *		send operation.
+			 */
+			SmartPointer<SendHandle> Send (Vector<Byte> buffer);
+			/**
+			 *	Sends data to the client.
+			 *
 			 *	\param [in] packet
 			 *		The packet to send to the client.
 			 *

@@ -148,6 +148,21 @@ namespace MCPP {
 	}
 	
 	
+	SmartPointer<SendHandle> Client::Send (Vector<Byte> buffer) {
+	
+		return read([&] () {
+		
+			return conn->Send(
+				encryptor.IsNull()
+					?	std::move(buffer)
+					:	encryptor->Encrypt(std::move(buffer))
+			);
+			
+		});
+	
+	}
+	
+	
 	void Client::EnableEncryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
 	
 		write([&] () {	enable_encryption(key,iv);	});
