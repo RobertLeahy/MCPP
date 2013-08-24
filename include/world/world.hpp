@@ -523,12 +523,29 @@ namespace MCPP {
 	/**
 	 *	\cond
 	 */
+	 
+	 
+	enum class ColumnState : Word {
+	
+		Loading=0,
+		Generating=1,
+		Generated=2,
+		Populating=3,
+		Populated=4
+	
+	};
 	
 	
 	class ColumnContainer {
 	
 		
 		public:
+		
+		
+			ColumnContainer () = delete;
+			//	Creates a ColumnContainer with a given id
+			//	and in the loading state
+			ColumnContainer (ColumnID) noexcept;
 		
 		
 			//	The layout of the proceeding
@@ -544,7 +561,130 @@ namespace MCPP {
 			
 			//	Retrieves a 0x33 packet which represents
 			//	the contained column
-			Vector<Byte> ToChunkData (const ColumnID &) const;
+			Vector<Byte> ToChunkData () const;
+			//	Retrieves a 0x33 packet which unloads
+			//	the contained column from a client
+			Vector<Byte> GetUnload () const;
+			//	Checks the column's state.
+			//
+			//	If the column is in the required state, or
+			//	a state more advanced than that state,
+			//	returns true immediately.
+			//
+			//	If the column is not in the required state,
+			//	but is being processed, blocks until the
+			//	required amount of processing is done, and
+			//	then returns true.
+			//
+			//	If the column is not in the required state,
+			//	and is not being processed, returns false
+			//	at once -- the caller MUST do the required
+			//	processing on the column.
+			bool WaitUntil (ColumnState) noexcept;
+			//	Sets the columns state.
+			//
+			//	Wakes all pending threads and fires all
+			//	appropriate asynchronous callbacks using
+			//	the provided thread pool.
+			//
+			//	Returns true if processing is finished,
+			//	false if processing should continue.
+			bool SetState (ColumnState, ThreadPool &) noexcept;
+			//	Checks the column's state.
+			//
+			//	If the column is in the required state, or
+			//	a state more advanced than that state, calls
+			//	the provided callback at once.
+			//
+			//	If the column is not in the required state
+			//	the callback is enqueued and will be called
+			//	when the column transitions into the appropriate
+			//	state.
+			//
+			//	If the column is not being processed, false
+			//	is returned which means that the caller MUST
+			//	do the required processing on the column.
+			bool InvokeWhen (ColumnState, std::function<void ()>);
+			//	Retrieves the column's current state
+			ColumnState GetState () const noexcept;
+			//	Sends the column to all currently
+			//	added clients
+			//
+			//	Should be called with an exclusive lock
+			//	on this column (or the entire world) immediately
+			//	after calling SetState and setting the
+			//	column's state to Populated.
+			void Send ();
+			//	Adds a player to this column.
+			//
+			//	If true is returned an exclusive lock
+			//	on the column should be acquired and
+			//	the column data should be sent to
+			//	this client, otherwise the data will
+			//	be sent at some point in the future.
+			bool AddPlayer (SmartPointer<Client>);
+			//	Removes a player from this column.
+			//
+			//	If true is returned the client should
+			//	have this column unloaded.
+			bool RemovePlayer (const SmartPointer<Client> &) noexcept;
+			//	Expresses "interest" in the column.
+			//
+			//	So longer as interest has been expressed
+			//	in a column it cannot be unloaded
+			void Interested () noexcept;
+			//	Ends "interest" in the column
+			void EndInterest () noexcept;
+			//	Determines whether the column can be unloaded
+			//	at this time.
+			//
+			//	Only columns with no associated players and
+			//	no interest can be unloaded.
+			bool CanUnload () const noexcept;
+			//	Gets a pointer through which the column may
+			//	be saved alongside the size of the area
+			//	that pointer points to (in bytes).
+			Tuple<const Byte *,Word> Get () const noexcept;
+			
+			
+		private:
+		
+		
+			//	The column's ID -- it's X and Z
+			//	coordinates and the dimension in
+			//	which it resides
+			ColumnID id;
+			//	The column's current state
+			//
+			//	If this is not equal to target
+			//	that means that processing is
+			//	in progress
+			std::atomic<Word> curr;
+			//	Lock -- guards all non-public members
+			//	except curr (which is atomic)
+			mutable Mutex lock;
+			//	Condition variable -- used to wait
+			//	for changes in state (woken each
+			//	time the state is set)
+			CondVar wait;
+			//	The column's current target state,
+			//	if this is equal to curr it means
+			//	that the column is not being processed
+			ColumnState target;
+			//	Asynchronous callbacks waiting on a
+			//	change of state
+			Vector<Tuple<ColumnState,std::function<void ()>>> pending;
+			//	All clients who have or want this
+			//	column
+			std::unordered_set<SmartPointer<Client>> clients;
+			//	The "interest" count.
+			//
+			//	So long as there is "interest" in
+			//	a column, it will not be unloaded
+			std::atomic<Word> interest;
+			//	Whether column data has been sent
+			//	to clients or not
+			bool sent;
 		
 	
 	};

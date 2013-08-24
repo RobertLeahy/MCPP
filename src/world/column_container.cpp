@@ -6,7 +6,472 @@
 namespace MCPP {
 
 
-	Vector<Byte> ColumnContainer::ToChunkData (const ColumnID & id) const {
+	ColumnContainer::ColumnContainer (ColumnID id) noexcept : id(id), target(ColumnState::Loading), sent(false) {
+	
+		curr=static_cast<Word>(ColumnState::Loading);
+		interest=0;
+	
+	}
+
+
+	bool ColumnContainer::SetState (ColumnState target, ThreadPool & pool) noexcept {
+	
+		lock.Acquire();
+		
+		//	Set state to target
+		curr=static_cast<Word>(target);
+		
+		//	Find all pending asynchronous
+		//	tasks and enqueue them
+		for (Word i=0;i<pending.Count();) {
+		
+			if (static_cast<Word>(pending[i].Item<0>())<=static_cast<Word>(target)) {
+			
+				//	Enqueue callback
+				
+				try {
+				
+					pool.Enqueue(
+						std::move(
+							pending[i].Item<1>()
+						)
+					);
+				
+				//	If an exception is thrown, we
+				//	MUST wake up the blocked threads,
+				//	and then we can throw
+				} catch (...) {
+				
+					wait.WakeAll();
+					
+					lock.Release();
+					
+					throw;
+				
+				}
+				
+				//	Delete callback
+				pending.Delete(i);
+				
+				//	Avoid increment
+				continue;
+			
+			}
+			
+			++i;
+		
+		}
+		
+		//	Determine return value
+		//	(i.e. whether processing is
+		//	finished or not)
+		bool retr=target==this->target;
+		
+		//	Wake all threads waiting on the
+		//	condvar
+		wait.WakeAll();
+		
+		lock.Release();
+		
+		return retr;
+	
+	}
+
+
+	bool ColumnContainer::WaitUntil (ColumnState target) noexcept {
+	
+		//	Do not acquire lock, atomically check
+		//	current state
+		Word t=static_cast<Word>(target);
+		
+		Word c=static_cast<Word>(curr);
+		
+		//	If the current state is as much or more
+		//	than what we require, return at once
+		if (t<=c) return true;
+		
+		lock.Acquire();
+		
+		//	Reload in case state has
+		//	changed
+		c=static_cast<Word>(curr);
+		//	Recheck in case state has
+		//	changed
+		if (t<=c) {
+		
+			lock.Release();
+			
+			return true;
+		
+		}
+		
+		//	Load target state
+		Word tt=static_cast<Word>(this->target);
+		
+		//	Check to see if this column is
+		//	being processed
+		bool retr;
+		if (c==tt) {
+		
+			//	The current and target states are
+			//	identical, which means that no
+			//	processing is currently occurring
+			//
+			//	Therefore we must inform the caller
+			//	that they must do the processing
+			
+			//	Set the target
+			this->target=target;
+			
+			retr=false;
+		
+		} else {
+		
+			//	The column is currently being processed
+			
+			//	Is the level of processing we desire
+			//	more than what is currently planned?
+			//
+			//	If so update the target
+			if (t>tt) this->target=target;
+			
+			retr=true;
+			
+			//	Wait for processing to reach the
+			//	appropriate point
+			while (static_cast<Word>(curr)<t) wait.Sleep(lock);
+		
+		}
+		
+		lock.Release();
+		
+		return retr;
+	
+	}
+	
+	
+	bool ColumnContainer::InvokeWhen (ColumnState target, std::function<void ()> callback) {
+	
+		//	Do not lock, atomically check
+		//	current state
+		Word t=static_cast<Word>(target);
+		
+		Word c=static_cast<Word>(curr);
+		
+		//	If the current state is as much
+		//	or more than what we require
+		//	execute the callback at once
+		if (t<=c) {
+		
+			callback();
+			
+			return true;
+			
+		}
+		
+		lock.Acquire();
+		
+		//	Reload in case the state
+		//	changed
+		c=static_cast<Word>(curr);
+		//	Recheck in case the state
+		//	has changed
+		if (t<=c) {
+		
+			lock.Release();
+			
+			callback();
+			
+			return true;
+		
+		}
+		
+		//	We can't dispatch the callback presently,
+		//	it will have to be dispatched in the future
+		//	after some processing has been done
+		//
+		//	Put it into the pending queue to be dispatched
+		//	when the requested processing is done
+		try {
+		
+			pending.EmplaceBack(
+				target,
+				std::move(callback)
+			);
+		
+		} catch (...) {
+		
+			//	We're in a consistent state,
+			//	so we just release the lock and
+			//	rethrow
+			
+			lock.Release();
+			
+			throw;
+		
+		}
+		
+		Word tt=static_cast<Word>(this->target);
+		
+		//	Check to see if this column is
+		//	being processed
+		bool retr;
+		if (c==tt) {
+		
+			//	The column is not being processed
+			//	as the current and target states
+			//	are identical
+			//
+			//	Therefore we must inform the caller
+			//	that they should do the required
+			//	processing
+			
+			//	Update the target state
+			this->target=target;
+			
+			retr=false;
+		
+		} else {
+		
+			//	The column is currently being
+			//	processed
+		
+			//	Is the level of processing we
+			//	require greater than the level
+			//	of processing planned?
+			//
+			//	If so, update the target
+			if (t>tt) this->target=target;
+			
+			retr=true;
+		
+		}
+		
+		lock.Release();
+		
+		return retr;
+	
+	}
+	
+	
+	ColumnState ColumnContainer::GetState () const noexcept {
+	
+		return static_cast<ColumnState>(
+			static_cast<Word>(
+				curr
+			)
+		);
+	
+	}
+	
+	
+	void ColumnContainer::Send () {
+	
+		lock.Acquire();
+		
+		//	Do not perform a bulk send if
+		//	one has already been performed,
+		//	or if there are no clients to
+		//	send to
+		if (sent || (clients.size()==0)) {
+		
+			lock.Release();
+			
+			return;
+		
+		}
+		
+		sent=true;
+		
+		try {
+		
+			//	Prepare a buffer
+			Vector<Byte> buffer(ToChunkData());
+			
+			//	Number of clients sent to
+			Word count=0;
+			for (auto & c : clients) {
+			
+				//	Unordered set only allows const
+				//	iteration so that the keys of elements
+				//	are preserved, but a smart pointer's
+				//	hash is dependent only on the memory
+				//	address it points to, so it's fine
+				//	to make it modifiable and send through
+				//	it
+				auto & client=const_cast<SmartPointer<Client> &>(c);
+			
+				//	If this is the last client
+				//	we can just send the master
+				//	buffer
+				if ((++count)==clients.size()) {
+				
+					client->Send(std::move(buffer));
+				
+				//	Otherwise we need to create
+				//	a temporary buffer
+				} else {
+				
+					Vector<Byte> temp(buffer.Count());
+					temp.SetCount(buffer.Count());
+					
+					memcpy(
+						temp.begin(),
+						buffer.begin(),
+						buffer.Count()
+					);
+					
+					client->Send(std::move(temp));
+				
+				}
+			
+			}
+		
+		} catch (...) {
+		
+			lock.Release();
+			
+			throw;
+		
+		}
+		
+		lock.Release();
+	
+	}
+	
+	
+	bool ColumnContainer::AddPlayer (SmartPointer<Client> client) {
+	
+		lock.Acquire();
+		
+		bool retr=sent;
+		
+		try {
+		
+			if (!clients.insert(std::move(client)).second) retr=false;
+		
+		} catch (...) {
+		
+			lock.Release();
+			
+			throw;
+		
+		}
+		
+		lock.Release();
+		
+		return retr;
+	
+	}
+	
+	
+	bool ColumnContainer::RemovePlayer (const SmartPointer<Client> & client) noexcept {
+	
+		lock.Acquire();
+		
+		bool retr=sent;
+		
+		if (clients.erase(client)==0) retr=false;
+		
+		lock.Release();
+		
+		return retr;
+	
+	}
+	
+	
+	void ColumnContainer::Interested () noexcept {
+	
+		++interest;
+	
+	}
+	
+	
+	void ColumnContainer::EndInterest () noexcept {
+	
+		--interest;
+	
+	}
+	
+	
+	bool ColumnContainer::CanUnload () const noexcept {
+	
+		lock.Acquire();
+		
+		bool retr=(clients.size()==0) && (interest==0);
+		
+		lock.Release();
+		
+		return retr;
+	
+	}
+	
+	
+	Tuple<const Byte *,Word> ColumnContainer::Get () const noexcept {
+	
+		return Tuple<const Byte *,Word>(
+			reinterpret_cast<const Byte *>(this),
+			//	Size of Blocks field
+			(16*16*16*16*sizeof(Block))+
+			//	Size of Biomes field
+			(16*16*sizeof(Byte))+
+			//	Size of Populated field
+			sizeof(bool)
+		);
+	
+	}
+	
+	
+	Vector<Byte> ColumnContainer::GetUnload () const {
+	
+		//	Prepare a buffer
+		Word size=(
+			sizeof(Byte)+
+			sizeof(Int32)+
+			sizeof(Int32)+
+			sizeof(bool)+
+			sizeof(UInt16)+
+			sizeof(UInt16)+
+			sizeof(Int32)
+		);
+		
+		Vector<Byte> buffer(size);
+		
+		//	Populate the buffer with
+		//	the appropriate data
+		buffer.Add(0x33);
+		
+		PacketHelper<Int32>::ToBytes(
+			id.X,
+			buffer
+		);
+		PacketHelper<Int32>::ToBytes(
+			id.Z,
+			buffer
+		);
+		PacketHelper<bool>::ToBytes(
+			true,
+			buffer
+		);
+		PacketHelper<UInt16>::ToBytes(
+			0,
+			buffer
+		);
+		PacketHelper<UInt16>::ToBytes(
+			0,
+			buffer
+		);
+		PacketHelper<Int32>::ToBytes(
+			0,
+			buffer
+		);
+		
+		return buffer;
+	
+	}
+
+
+	Vector<Byte> ColumnContainer::ToChunkData () const {
 	
 		//	First we need to convert the sane
 		//	in memory format to the insane
