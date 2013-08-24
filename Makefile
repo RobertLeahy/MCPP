@@ -268,7 +268,7 @@ bin/mods/ban.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/ban/
 
 #	WORLD
 
-bin/mods/world.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o \
+bin/mods/world.dll: include/world/world.hpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o \
 src/world/block_id.cpp \
 src/world/column_container.cpp \
 src/world/column_id.cpp \
