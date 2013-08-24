@@ -75,7 +75,7 @@ namespace MCPP {
 			//	has not yet completed
 			void * result;
 			//	The function which shall be called
-			//	to clear up the result pointer
+			//	to clean up the result pointer
 			std::function<void (void *)> cleanup;
 			//	The amount of time the thread spent
 			//	queued and ready to run
