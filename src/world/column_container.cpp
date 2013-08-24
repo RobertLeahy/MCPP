@@ -154,6 +154,8 @@ namespace MCPP {
 		
 		//	Prepare the final buffer
 		size=(
+			//	Packet type
+			sizeof(Byte)+
 			//	X-coordinate of this chunk
 			sizeof(Int32)+
 			//	Z-coordinate of this chunk
@@ -175,6 +177,8 @@ namespace MCPP {
 		
 		//	Allocate sufficient memory
 		Vector<Byte> buffer(size);
+		
+		buffer.Add(0x33);
 		
 		PacketHelper<Int32>::ToBytes(
 			id.X,
