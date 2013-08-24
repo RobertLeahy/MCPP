@@ -550,6 +550,8 @@ namespace MCPP {
 	};
 	
 	
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Winvalid-offsetof"
 	static_assert(
 		(
 			offsetof(
@@ -568,6 +570,7 @@ namespace MCPP {
 		(sizeof(bool)==sizeof(Byte)),
 		"ColumnContainer layout incorrect"
 	);
+	#pragma GCC diagnostic pop
 	
 	
 	/**
