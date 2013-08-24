@@ -1040,6 +1040,8 @@ namespace MCPP {
 			
 			//	The world type
 			String type;
+			//	The world seed
+			UInt64 seed;
 		
 		
 			//	Contains loaded world generators
@@ -1060,7 +1062,13 @@ namespace MCPP {
 			
 			//	Generates a column
 			void generate (ColumnContainer &, const ColumnID &) const;
+			//	Fetches a generator for a given
+			//	dimension
 			const WorldGenerator & get_generator (SByte) const;
+			//	Sets the world's seed to a given string,
+			//	or to a randomly-generated number if the
+			//	string is null
+			void set_seed (Nullable<String>);
 		
 		
 		public:

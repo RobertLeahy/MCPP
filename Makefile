@@ -275,6 +275,7 @@ src/world/column_id.cpp \
 src/world/generator.cpp \
 src/world/generators.cpp \
 src/world/has_skylight.cpp \
+src/world/set_seed.cpp \
 src/world/world_generator.cpp \
 src/world/world_lock.cpp \
 src/world/world_lock_info.cpp \
@@ -286,6 +287,7 @@ src/world/world_lock_request.cpp
 	src/world/generator.cpp \
 	src/world/generators.cpp \
 	src/world/has_skylight.cpp \
+	src/world/set_seed.cpp \
 	src/world/world_generator.cpp \
 	src/world/world_lock.cpp \
 	src/world/world_lock_info.cpp \
