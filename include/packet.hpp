@@ -9,8 +9,6 @@
 #include <rleahylib/rleahylib.hpp>
 #include <metadata.hpp>
 #include <compression.hpp>
-#include <chunk.hpp>
-#include <column.hpp>
 #include <functional>
 #include <stdexcept>
 #include <utility>
@@ -1205,160 +1203,6 @@ namespace MCPP {
 	};
 	
 	
-	template <>
-	class PacketHelper<const Column *> {
-	
-	
-		public:
-		
-		
-			static const bool Trivial=false;
-			
-			
-			static Word Size (const Column * obj) {
-			
-				//	Deduce the number of bytes in
-				//	the column
-				
-				SafeWord size=0;
-				
-				//	If the column is null, we're just
-				//	telling the client to unload,
-				//	so there's actually no compressed
-				//	chunk data
-				if (obj!=nullptr) {
-				
-					//	This is the baseline, 16 chunks
-					//	which are 16x16x16, with 1 byte
-					//	array and two nibble arrays per
-					//	block, in addition to a 16x16
-					//	biome array
-					Word chunk_size=(16*16*16*16*2)+(16*16);
-					//	If the add array is present, that's
-					//	another nibble array
-					if (obj->Add) chunk_size+=16*16*16*16/2;
-					//	If the skylight array is present, that's
-					//	another nibble array
-					if (obj->Add) chunk_size+=16*16*16*16/2;
-					
-					//	Maximum size of the deflated column
-					//	data
-					size=DeflateBound(chunk_size);
-				
-				}
-
-				//	Ground-up continuous flag
-				size+=SafeWord(sizeof(bool));
-				//	Bitmask
-				size+=SafeWord(sizeof(UInt16));
-				//	Add bitmask
-				size+=SafeWord(sizeof(UInt16));
-				//	Compressed chunk data length
-				size+=SafeWord(sizeof(Int32));
-				
-				return Word(size);
-			
-			}
-			
-			
-			static void ToBytes (const Column * obj, Vector<Byte> & buffer) {
-			
-				//	If there's no chunk, send that
-				if (obj==nullptr) {
-				
-					PacketHelper<bool>::ToBytes(false,buffer);
-					PacketHelper<UInt16>::ToBytes(0,buffer);
-					PacketHelper<UInt16>::ToBytes(0,buffer);
-					PacketHelper<Int32>::ToBytes(0,buffer);
-				
-				//	If there is a chunk, serialize
-				//	it
-				} else {
-				
-					PacketHelper<bool>::ToBytes(true,buffer);
-					PacketHelper<UInt16>::ToBytes(
-						std::numeric_limits<UInt16>::max(),
-						buffer
-					);
-					PacketHelper<UInt16>::ToBytes(
-						(
-							obj->Add
-								?	std::numeric_limits<UInt16>::max()
-								:	0
-						),
-						buffer
-					);
-					
-					//	We need to insert the number of 
-					//	compressed bytes BEFORE the actual
-					//	compressed bytes themselves, which means
-					//	that we need to know how many bytes
-					//	we'll wind up with.
-					//
-					//	We can either create a buffer and then
-					//	copy it in (ineffecient), or write
-					//	out of order.
-					//
-					//	We'll do the latter.
-					
-					//	Save the count so we can return
-					//	to this position in the buffer later
-					Word count=buffer.Count();
-					
-					//	Push past the integer's position
-					buffer.SetCount(
-						buffer.Count()+sizeof(Int32)
-					);
-					
-					//	We need to know how many compressed
-					//	bytes we generated
-					Word start=buffer.Count();
-					
-					//	Compress
-					
-					//	We need to know how long the column
-					//	data is
-					Word len=(16*16*16*16*2)+(16*16);
-					if (obj->Add) len+=16*16*16*16/2;
-					if (obj->Skylight) len+=16*16*16*16/2;
-					
-					Deflate(
-						obj->Data,
-						&(obj->Data[len]),
-						&buffer
-					);
-					
-					Word end=buffer.Count();
-					
-					//	Go back to write the length
-					buffer.SetCount(count);
-					
-					PacketHelper<Int32>::ToBytes(
-						end-start,
-						buffer
-					);
-					
-					//	And back to the end
-					buffer.SetCount(end);
-				
-				}
-			
-			}
-			
-			
-			static bool FromBytes (const Byte **, const Byte *, const Column **) {
-			
-				//	Should never have to do this,
-				//	this data structure is server=>client
-				//	only.
-				throw std::runtime_error("Protocol error");
-			
-			}
-	
-	
-	};
-	
-	
 	template <typename... Args>
 	class PacketHelper<Tuple<Args...>> {
 	
@@ -1908,7 +1752,7 @@ namespace MCPP {
 	//	0x30
 	//	0x31
 	//	0x32
-	template <> class PacketTypeMap<0x33> : public PacketType<0x33,Int32,Int32,const Column *> { };
+	//	0x33
 	//	0x34
 	template <> class PacketTypeMap<0x35> : public PacketType<0x35,Int32,Byte,Int32,Int16,Byte> {	};
 	template <> class PacketTypeMap<0x36> : public PacketType<0x36,Int32,Int16,Int32,Byte,Byte,Int16> {	};

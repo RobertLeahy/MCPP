@@ -108,8 +108,6 @@ namespace MCPP {
 			virtual void InsertValue (const String & key, const String & value) override;
 			void WriteChatLog (const String & from, const Vector<String> & to, const String & message, const Nullable<String> & notes) override;
 			virtual InfoType GetInfo () const override;
-			virtual bool LoadColumn (Int32 x, Int32 z, SByte dimension, Column * column) override;
-			virtual void SaveColumn (Int32 x, Int32 z, SByte dimension, const Column & column, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) override;
 	
 	
 	};

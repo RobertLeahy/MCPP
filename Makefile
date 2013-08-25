@@ -62,7 +62,6 @@ obj/packet_router.o \
 obj/compression.o \
 obj/rsa_key.o \
 obj/aes_128_cfb_8.o \
-obj/chunk.o \
 obj/metadata.o \
 obj/client.o \
 obj/client_list.o \
@@ -77,7 +76,7 @@ obj/sha1.o \
 obj/new_delete.o \
 obj/noise.o \
 bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ obj/server.o obj/noise.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/chunk.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
+	$(GPP) -shared -o $@ obj/server.o obj/noise.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
 
 obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp
 	$(GPP) src/server.cpp -c -o $@
@@ -104,9 +103,6 @@ obj/nbt.o: src/nbt.cpp
 	$(GPP) $? -c -o $@
 	
 obj/compression.o: src/compression.cpp
-	$(GPP) $? -c -o $@
-	
-obj/chunk.o: src/chunk.cpp
 	$(GPP) $? -c -o $@
 	
 obj/metadata.o: src/metadata.cpp

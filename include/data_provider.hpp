@@ -8,7 +8,6 @@
 
 #include <functional>
 #include <rleahylib/rleahylib.hpp>
-#include <column.hpp>
 
 
 namespace MCPP {
@@ -209,10 +208,6 @@ namespace MCPP {
 			 *		to be created.
 			 */
 			virtual void InsertValue (const String & key, const String & value) = 0;
-			
-			
-			virtual bool LoadColumn (Int32 x, Int32 z, SByte dimension, Column * column) = 0;
-			virtual void SaveColumn (Int32 x, Int32 z, SByte dimension, const Column & column, ColumnSaveBegin callback_begin, ColumnSaveEnd callback_end) = 0;
 			
 			
 			/**
