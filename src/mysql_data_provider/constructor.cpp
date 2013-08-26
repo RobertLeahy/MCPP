@@ -99,6 +99,8 @@ namespace MCPP {
 		
 		timer.Stop();
 		connecting+=timer.ElapsedNanoseconds();
+		
+		if (reconnect) ++reconnects;
 	
 	}
 
