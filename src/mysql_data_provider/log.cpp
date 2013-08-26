@@ -48,7 +48,7 @@ namespace MCPP {
 			
 			for (const auto & str : to) {
 			
-				if (to_str->Size()==0) (*to_str) << ", ";
+				if (to_str->Size()!=0) (*to_str) << ", ";
 				
 				(*to_str) << str;
 			
