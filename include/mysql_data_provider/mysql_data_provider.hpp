@@ -94,11 +94,7 @@ namespace MCPP {
 			void Bind (MYSQL_BIND & bind) noexcept {
 			
 				bind.buffer_type=MYSQL_TYPE_STRING;
-				bind.buffer=reinterpret_cast<char *>(
-					static_cast<Byte *>(
-						buffer
-					)
-				);
+				bind.buffer=static_cast<Byte *>(buffer);
 				bind.buffer_length=buffer.Count();
 			
 			}
@@ -147,11 +143,7 @@ namespace MCPP {
 				
 				} else {
 				
-					bind.buffer=reinterpret_cast<char *>(
-						static_cast<Byte *>(
-							buffer
-						)
-					);
+					bind.buffer=static_cast<Byte *>(buffer);
 					bind.buffer_length=buffer.Count();
 				
 				}
