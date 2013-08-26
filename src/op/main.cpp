@@ -28,11 +28,7 @@ namespace MCPP {
 	
 		//	Build the op table
 		
-		for (auto & op : RunningServer->Data().GetValues(key)) {
-		
-			if (!op.IsNull()) ops.insert(op->ToLower());
-		
-		}
+		for (auto & op : RunningServer->Data().GetValues(key)) ops.insert(op.ToLower());
 	
 	}
 	

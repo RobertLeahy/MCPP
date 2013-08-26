@@ -80,13 +80,9 @@ namespace MCPP {
 		//	Loop and add to the set
 		for (auto & s : users) {
 		
-			if (!s.IsNull()) {
+			s.ToLower();
 			
-				s->ToLower();
-				
-				banned_users.insert(std::move(*s));
-			
-			}
+			banned_users.insert(std::move(s));
 		
 		}
 		
@@ -95,33 +91,28 @@ namespace MCPP {
 		
 		//	Loop
 		for (auto & ip : ips) {
-		
-			//	Only proceed if not null
-			if (!ip.IsNull()) {
 			
-				//	Attempt to parse the IP
-				//	from the string
-				IPAddress parsed;
-				try {
-				
-					parsed=IPAddress(*ip);
-				
-				//	Log if that fails
-				} catch (...) {
-				
-					RunningServer->WriteLog(
-						String::Format(
-							ip_format_log,
-							*ip
-						),
-						Service::LogType::Warning
-					);
-				
-				}
-				
-				banned_ips.insert(std::move(parsed));
+			//	Attempt to parse the IP
+			//	from the string
+			IPAddress parsed;
+			try {
+			
+				parsed=IPAddress(ip);
+			
+			//	Log if that fails
+			} catch (...) {
+			
+				RunningServer->WriteLog(
+					String::Format(
+						ip_format_log,
+						ip
+					),
+					Service::LogType::Warning
+				);
 			
 			}
+			
+			banned_ips.insert(std::move(parsed));
 		
 		}
 		
@@ -130,112 +121,107 @@ namespace MCPP {
 		
 		//	Loop
 		for (auto & range : ip_ranges) {
-		
-			//	Only proceed if not null
-			if (!range.IsNull()) {
 			
-				//	Attempt to match to extract
-				//	components
+			//	Attempt to match to extract
+			//	components
+			
+			auto match=range_regex.Match(range);
+			
+			if (match.Success()) {
+			
+				//	Get an integer from
+				//	the number of bits
+				Word mask_bits;
+				try {
 				
-				auto match=range_regex.Match(*range);
+					match[2].Value().ToInteger(&mask_bits);
 				
-				if (match.Success()) {
+				} catch (...) {
 				
-					//	Get an integer from
-					//	the number of bits
-					Word mask_bits;
-					try {
-					
-						match[2].Value().ToInteger(&mask_bits);
-					
-					} catch (...) {
-					
-						RunningServer->WriteLog(
-							String::Format(
-								overflow_log,
-								match[2].Value(),
-								*range
-							),
-							Service::LogType::Warning
-						);
-						
-						continue;
-					
-					}
-					
-					//	Now attempt to get an IP
-					IPAddress parsed;
-					try {
-					
-						parsed=IPAddress(match[1].Value());
-					
-					} catch (...) {
-					
-						RunningServer->WriteLog(
-							String::Format(
-								ip_range_format_log,
-								match[1].Value(),
-								*range
-							),
-							Service::LogType::Warning
-						);
-						
-						continue;
-					
-					}
-					
-					//	Is the bit mask at all sane?
-					Word bits_in_ip=parsed.IsV6() ? 128 : 32;
-					
-					if (mask_bits>bits_in_ip) {
-					
-						RunningServer->WriteLog(
-							String::Format(
-								too_many_bits,
-								mask_bits,
-								*range
-							),
-							Service::LogType::Warning
-						);
-						
-						continue;
-					
-					}
-					
-					//	Single IP ban
-					if (mask_bits==bits_in_ip) {
-					
-						banned_ips.insert(std::move(parsed));
-						
-						continue;
-					
-					}
-					
-					//	Everyone is banned
-					if (mask_bits==0) {
-					
-						RunningServer->WriteLog(
-							String::Format(
-								banned_everyone,
-								*range
-							),
-							Service::LogType::Warning
-						);
-						
-						//	We'll actually go ahead
-						//	and do this.
-					
-					}
-					
-					//	Create mask structure
-					IPAddressMask mask(make_mask(mask_bits,parsed.IsV6()));
-					
-					banned_ip_ranges.EmplaceBack(
-						std::move(parsed),
-						std::move(mask)
+					RunningServer->WriteLog(
+						String::Format(
+							overflow_log,
+							match[2].Value(),
+							range
+						),
+						Service::LogType::Warning
 					);
+					
+					continue;
 				
 				}
+				
+				//	Now attempt to get an IP
+				IPAddress parsed;
+				try {
+				
+					parsed=IPAddress(match[1].Value());
+				
+				} catch (...) {
+				
+					RunningServer->WriteLog(
+						String::Format(
+							ip_range_format_log,
+							match[1].Value(),
+							range
+						),
+						Service::LogType::Warning
+					);
+					
+					continue;
+				
+				}
+				
+				//	Is the bit mask at all sane?
+				Word bits_in_ip=parsed.IsV6() ? 128 : 32;
+				
+				if (mask_bits>bits_in_ip) {
+				
+					RunningServer->WriteLog(
+						String::Format(
+							too_many_bits,
+							mask_bits,
+							range
+						),
+						Service::LogType::Warning
+					);
+					
+					continue;
+				
+				}
+				
+				//	Single IP ban
+				if (mask_bits==bits_in_ip) {
+				
+					banned_ips.insert(std::move(parsed));
+					
+					continue;
+				
+				}
+				
+				//	Everyone is banned
+				if (mask_bits==0) {
+				
+					RunningServer->WriteLog(
+						String::Format(
+							banned_everyone,
+							range
+						),
+						Service::LogType::Warning
+					);
+					
+					//	We'll actually go ahead
+					//	and do this.
+				
+				}
+				
+				//	Create mask structure
+				IPAddressMask mask(make_mask(mask_bits,parsed.IsV6()));
+				
+				banned_ip_ranges.EmplaceBack(
+					std::move(parsed),
+					std::move(mask)
+				);
 			
 			}
 		
