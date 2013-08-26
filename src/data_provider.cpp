@@ -10,76 +10,35 @@ namespace MCPP {
 	DataProvider::~DataProvider () noexcept {	}
 	
 	
-	String DataProvider::GetLogType (Service::LogType type) {
+	static const String success("Success");
+	static const String error("Error");
+	static const String information("Information");
+	static const String warning("Warning");
+	static const String debug("Debug");
+	static const String security_success("Security Success");
+	static const String security_failure("Security Failure");
+	static const String critical("Critical");
+	static const String alert("Alert");
+	static const String emergency("Emergency");
 	
-		String type_str;
-		
+	
+	const String & DataProvider::GetLogType (Service::LogType type) noexcept {
+	
 		switch (type) {
 		
-			case Service::LogType::Success:
-			
-				type_str="Success";
-				
-				break;
-				
-			case Service::LogType::Error:
-			
-				type_str="Error";
-				
-				break;
-				
+			case Service::LogType::Success:return success;
+			case Service::LogType::Error:return error;
 			case Service::LogType::Information:
-			default:
-			
-				type_str="Information";
-				
-				break;
-				
-			case Service::LogType::Warning:
-			
-				type_str="Warning";
-				
-				break;
-				
-			case Service::LogType::Debug:
-			
-				type_str="Debug";
-				
-				break;
-				
-			case Service::LogType::SecuritySuccess:
-			
-				type_str="Security Success";
-				
-				break;
-				
-			case Service::LogType::SecurityFailure:
-			
-				type_str="Security Failure";
-				
-				break;
-				
-			case Service::LogType::Critical:
-			
-				type_str="Critical";
-				
-				break;
-				
-			case Service::LogType::Alert:
-			
-				type_str="Alert";
-				
-				break;
-				
-			case Service::LogType::Emergency:
-			
-				type_str="Emergency";
-				
-				break;
+			default:return information;
+			case Service::LogType::Warning:return warning;
+			case Service::LogType::Debug:return debug;
+			case Service::LogType::SecuritySuccess:return security_success;
+			case Service::LogType::SecurityFailure:return security_failure;
+			case Service::LogType::Critical:return critical;
+			case Service::LogType::Alert:return alert;
+			case Service::LogType::Emergency:return emergency;
 		
 		}
-		
-		return type_str;
 
 	}
 

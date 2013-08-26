@@ -25,7 +25,7 @@ namespace MCPP {
 		
 		
 			static DataProvider * GetDataProvider ();
-			static String GetLogType (Service::LogType type);
+			static const String & GetLogType (Service::LogType type) noexcept;
 		
 		
 			DataProvider (const DataProvider &) = delete;
