@@ -180,7 +180,8 @@ src/mysql_data_provider/factory.cpp \
 src/mysql_data_provider/binary.cpp \
 src/mysql_data_provider/log.cpp \
 src/mysql_data_provider/settings.cpp \
-src/mysql_data_provider/key_value.cpp
+src/mysql_data_provider/key_value.cpp \
+src/mysql_data_provider/info.cpp
 	$(GPP) -shared -o bin/data_providers/data_provider.dll \
 	obj/new_delete.o \
 	obj/data_provider.o \
@@ -192,7 +193,8 @@ src/mysql_data_provider/key_value.cpp
 	src/mysql_data_provider/binary.cpp \
 	src/mysql_data_provider/log.cpp \
 	src/mysql_data_provider/settings.cpp \
-	src/mysql_data_provider/key_value.cpp
+	src/mysql_data_provider/key_value.cpp \
+	src/mysql_data_provider/info.cpp
 	cmd /c "move bin\data_providers\data_provider.dll bin\data_providers\mysql_data_provider.dll"
 	
 obj/data_provider.o: src/data_provider.cpp include/data_provider.hpp

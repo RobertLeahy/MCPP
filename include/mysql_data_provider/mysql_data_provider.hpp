@@ -420,6 +420,9 @@ namespace MCPP {
 			virtual ~MySQLDataProvider () noexcept;
 			
 			
+			virtual Tuple<String,Vector<Tuple<String,String>>> GetInfo () override;
+			
+			
 			virtual void WriteLog (const String &, Service::LogType) override;
 			virtual void WriteChatLog (const String &, const Vector<String> &, const String &, const Nullable<String> &) override;
 			

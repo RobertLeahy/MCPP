@@ -37,6 +37,9 @@ namespace MCPP {
 			virtual ~DataProvider () noexcept;
 			
 			
+			virtual Tuple<String,Vector<Tuple<String,String>>> GetInfo () = 0;
+			
+			
 			virtual void WriteLog (const String &, Service::LogType) = 0;
 			virtual void WriteChatLog (const String &, const Vector<String> &, const String &, const Nullable<String> &) = 0;
 			
