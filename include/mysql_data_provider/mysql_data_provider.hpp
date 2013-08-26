@@ -289,6 +289,8 @@ namespace MCPP {
 			static void raise (MYSQL_STMT *);
 			//	Calls mysql_thread_init as necessary
 			static void thread_init ();
+			//	Calls mysql_thread_end as necessary
+			static void thread_end ();
 			//	Acquires a lock on the connection
 			template <typename T>
 			auto acquire (T && callback) -> typename std::enable_if<
@@ -318,11 +320,15 @@ namespace MCPP {
 				
 					lock.Release();
 					
+					thread_end();
+					
 					throw;
 				
 				}
 				
 				lock.Release();
+				
+				thread_end();
 			
 			}
 			template <typename T>
@@ -355,11 +361,15 @@ namespace MCPP {
 				
 					lock.Release();
 					
+					thread_end();
+					
 					throw;
 				
 				}
 				
 				lock.Release();
+				
+				thread_end();
 				
 				return *retr;
 			

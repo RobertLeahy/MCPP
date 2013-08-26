@@ -10,15 +10,14 @@ namespace MCPP {
 
 	void MySQLDataProvider::thread_init () {
 	
-		static thread_local bool init=false;
-		
-		if (!init) {
-		
-			if (mysql_thread_init()!=0) throw std::runtime_error(mysql_thread_init_failed);
-			
-			init=true;
-		
-		}
+		if (mysql_thread_init()!=0) throw std::runtime_error(mysql_thread_init_failed);
+	
+	}
+	
+	
+	void MySQLDataProvider::thread_end () {
+	
+		mysql_thread_end();
 	
 	}
 
