@@ -233,3 +233,4 @@ dep.txt
 *_old.*
 terrain.txt
 *_old
+*.ini

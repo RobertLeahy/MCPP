@@ -168,15 +168,35 @@ data_providers: bin/data_provider.dll
 bin/data_provider.dll: bin/data_providers/mysql_data_provider.dll
 	cmd /c "copy bin\data_providers\mysql_data_provider.dll bin\data_provider.dll"
 	
-bin/data_providers/mysql_data_provider.dll: obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o
-	$(GPP) -shared -o bin/data_providers/data_provider.dll obj/mysql_data_provider.o obj/data_provider.o bin/libmysql.dll bin/rleahy_lib.dll obj/thread_pool.o obj/thread_pool_handle.o obj/new_delete.o
+bin/data_providers/mysql_data_provider.dll: \
+include/mysql_data_provider/mysql_data_provider.hpp \
+bin/libmysql.dll \
+bin/rleahy_lib.dll \
+obj/new_delete.o \
+obj/data_provider.o \
+src/mysql_data_provider/constructor.cpp \
+src/mysql_data_provider/misc.cpp \
+src/mysql_data_provider/factory.cpp \
+src/mysql_data_provider/binary.cpp \
+src/mysql_data_provider/log.cpp \
+src/mysql_data_provider/settings.cpp \
+src/mysql_data_provider/key_value.cpp
+	$(GPP) -shared -o bin/data_providers/data_provider.dll \
+	obj/new_delete.o \
+	obj/data_provider.o \
+	bin/rleahy_lib.dll \
+	bin/libmysql.dll \
+	src/mysql_data_provider/constructor.cpp \
+	src/mysql_data_provider/misc.cpp \
+	src/mysql_data_provider/factory.cpp \
+	src/mysql_data_provider/binary.cpp \
+	src/mysql_data_provider/log.cpp \
+	src/mysql_data_provider/settings.cpp \
+	src/mysql_data_provider/key_value.cpp
 	cmd /c "move bin\data_providers\data_provider.dll bin\data_providers\mysql_data_provider.dll"
-
-obj/mysql_data_provider.o: src/mysql_data_provider.cpp src/login_info.cpp
-	$(GPP) src/mysql_data_provider.cpp -c -o $@
 	
-obj/data_provider.o: src/data_provider.cpp
-	$(GPP) $? -c -o $@
+obj/data_provider.o: src/data_provider.cpp include/data_provider.hpp
+	$(GPP) src/data_provider.cpp -c -o $@
 	
 
 #	THREAD POOL
@@ -371,3 +391,9 @@ world: bin/world_test.exe
 
 bin/world_test.exe: src/world_test/test.cpp include/world/world.hpp bin/mods/world.dll bin/rleahy_lib.dll obj/new_delete.o bin/mcpp.dll
 	$(GPP) -o $@ src/world_test/test.cpp bin/mods/world.dll bin/rleahy_lib.dll obj/new_delete.o bin/mcpp.dll
+	
+.PHONY: dp_test
+dp_test: bin/dp_test.exe
+
+bin/dp_test.exe: bin/data_provider.dll bin/rleahy_lib.dll obj/new_delete.o src/dp_test/test.cpp
+	$(GPP) -o $@ src/dp_test/test.cpp bin/data_provider.dll bin/rleahy_lib.dll obj/new_delete.o
