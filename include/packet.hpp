@@ -705,55 +705,25 @@ namespace MCPP {
 			
 			static Word Size (const String & obj) {
 			
-				//	Strings are UCS2 strings, so two bytes
-				//	per code point, and they're prepended
-				//	with a SIGNED 16 bit integer determining
-				//	their length
-				
-				//	Get number of characters
-				SafeWord num(obj.Size());
-				
-				//	Is this representable as a signed
-				//	16-bit integer?
-				if (Word(num)>static_cast<Word>(std::numeric_limits<Int16>::max())) throw std::overflow_error(
-					"String too long"
-				);
-				
-				//	Multiply by number of bytes
-				//	per UCS-2 code unit
-				num*=sizeof(UCS2CodeUnit);
-				
-				//	Add the size of the leading
-				//	16-bit signed integer
-				num+=SafeWord(sizeof(Int16));
-				
-				//	Return
-				return Word(num);
+				//	Unimplemented
+				return 0;
 			
 			}
 			
 			
 			static void ToBytes (const String & obj, Vector<Byte> & buffer) {
+			
+				//	Obtain the encoding
+				Vector<Byte> encoded(UTF16(true).Encode(obj));
 				
-				//	First thing into the stream
-				//	is a SIGNED 16-bit integer
-				//	representing the number of
-				//	characters in the string
+				//	Output length
 				PacketHelper<Int16>::ToBytes(
-					Int16(SafeWord(obj.Size())),
+					Int16(SafeWord(encoded.Count()/sizeof(UTF16CodeUnit))),
 					buffer
 				);
 				
-				//	Now each character will be
-				//	encoded and added to the
-				//	stream
-				for (CodePoint cp : obj.CodePoints()) UCS2(
-					true,	//	Big endian
-					InvalidCodePointAction::Replace,	//	Preserve invalid code points
-					'?',	//	Turn invalid code points into a question mark
-					CodePointOutOfRangeAction::Replace,	//	Preserve invalid code points
-					'?'	//	Turn invalid code points into a question mark				
-				).Encode(cp,&buffer);
+				//	Copy encoding into buffer
+				for (Byte b : encoded) buffer.Add(b);
 			
 			}
 			
@@ -767,8 +737,8 @@ namespace MCPP {
 				
 				//	Sanity check on the length
 				//	made necessary but the utter
-				//	stupidity of Notch in choosing
-				//	a signed type
+				//	stupidity of Java in disallowing
+				//	unsigned types
 				if (len<0) throw std::runtime_error("Protocol error");
 				
 				//	Check to see if the buffer is long
@@ -781,7 +751,7 @@ namespace MCPP {
 						)
 					)*
 					SafeWord(
-						sizeof(UCS2CodeUnit)
+						sizeof(UTF16CodeUnit)
 					)
 				);
 				
@@ -793,15 +763,7 @@ namespace MCPP {
 				) return false;
 				
 				//	Decode
-				new (ptr) String (
-					UCS2(
-						true,	//	Big endian
-						InvalidCodePointAction::Replace,	//	Preserve invalid code points
-						'?',	//	Turn invalid code points into a question mark
-						CodePointOutOfRangeAction::Replace,	//	Preserve invalid code points
-						'?'	//	Turn invalid code points into a question mark
-					).Decode(*begin,*begin+byte_len)
-				);
+				new (ptr) String (UTF16().Decode(*begin,*begin+byte_len));
 				
 				//	Advance pointer
 				*begin+=byte_len;
