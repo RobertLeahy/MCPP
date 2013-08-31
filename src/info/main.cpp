@@ -149,7 +149,7 @@ namespace MCPP {
 	}
 	
 	
-	bool InformationModule::Execute (SmartPointer<Client> client, const String & args_str) {
+	bool InformationModule::Execute (SmartPointer<Client> client, const String & args_str, ChatMessage & message) {
 	
 		//	If there's no client, do nothing
 		if (client.IsNull()) return true;
@@ -167,8 +167,6 @@ namespace MCPP {
 		if (ip==nullptr) return false;
 		
 		//	Prepare a chat message
-		ChatMessage message;
-		message.AddRecipients(std::move(client));
 		message	<< ChatStyle::Bold
 				<< ChatStyle::Yellow
 				<< info_banner
@@ -179,9 +177,6 @@ namespace MCPP {
 		//	Get rest of chat message from
 		//	provider
 		ip->Execute(message);
-		
-		//	Send message
-		Chat->Send(message);
 		
 		return true;
 	

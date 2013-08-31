@@ -72,7 +72,7 @@ namespace MCPP {
 			virtual const String & Summary () const noexcept override;
 			virtual const String & Help () const noexcept override;
 			virtual Vector<String> AutoComplete (const String &) const override;
-			virtual bool Execute (SmartPointer<Client>, const String &) override;
+			virtual bool Execute (SmartPointer<Client>, const String &, ChatMessage &) override;
 			 
 			 
 			/**

@@ -7,6 +7,7 @@
 
 
 #include <common.hpp>
+#include <chat/chat.hpp>
 
 
 namespace MCPP {
@@ -81,22 +82,27 @@ namespace MCPP {
 			 */
 			virtual Vector<String> AutoComplete (const String & args) const = 0;
 			/**
-			 *	Executes this command.
+			 *	Executes a command.
 			 *
 			 *	\param [in] client
-			 *		The client executing this command,
-			 *		or \em nullptr if no client is
-			 *		executing this command.
+			 *		The client issuing the command, or
+			 *		null if there is no specific client
+			 *		issuing this command.
 			 *	\param [in] args
 			 *		A string containing the arguments
 			 *		to this command.
+			 *	\param [in] message
+			 *		A chat message which the command shall
+			 *		populate it and which shall be passed
+			 *		back to the caller.
 			 *
 			 *	\return
 			 *		\em true if the command completed
-			 *		successfully, \em false if the syntax
-			 *		of \em args was invalid or incorrect.
+			 *		successfully, \em false if there was
+			 *		an error in the syntax of \em args.
+			 *		
 			 */
-			virtual bool Execute (SmartPointer<Client> client, const String & args) = 0;
+			virtual bool Execute (SmartPointer<Client> client, const String & args, ChatMessage & message) = 0;
 	
 	
 	};

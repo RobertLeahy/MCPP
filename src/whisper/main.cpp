@@ -1,21 +1,21 @@
-#include <common.hpp>
+#include <command/command.hpp>
 #include <chat/chat.hpp>
-#include <utility>
 
 
+static const Word priority=1;
 static const String name("Whisper Support");
-static const Word priority=2;
-static const Regex whisper_regex(
-	"^\\/w\\s+(\\w+)\\s+(.+)$",
-	RegexOptions()
-		.SetIgnoreCase()	//	The "w" shouldn't be case sensitive
-		.SetSingleline()	//	If the client for some reason sends
-							//	a bunch of newlines we want to match
-							//	that.
+static const String identifier("w");
+static const String summary("Sends a private message to another player.");
+static const String help(
+	"Syntax: /w <player name> <message>\n"
+	"Sends a private message to <player name>.\n"
+	"Note that this message will still be logged, so don't send anything you wouldn't want server administrators to read."
 );
+static const Regex whitespace("\\s");
+static const Regex parse("^([^\\s]+)\\s+(.+)$");
 
 
-class Whisper : public Module {
+class Whisper : public Module, public Command {
 
 
 	public:
@@ -37,67 +37,130 @@ class Whisper : public Module {
 		
 		virtual void Install () override {
 		
-			//	Extract previous handler
-			ChatHandler prev(std::move(Chat->Chat));
+			Commands->Add(this);
+		
+		}
+		
+		
+		virtual const String & Summary () const noexcept override {
+		
+			return summary;
+		
+		}
+		
+		
+		virtual const String & Help () const noexcept override {
+		
+			return help;
+		
+		}
+		
+		
+		virtual const String & Identifier () const noexcept override {
+		
+			return identifier;
+		
+		}
+		
+		
+		virtual bool Check (SmartPointer<Client> client) const override {
+		
+			//	Everyone can send whispers
+			return true;
+		
+		}
+		
+		
+		virtual Vector<String> AutoComplete (const String & args) const override {
+		
+			Vector<String> retr;
+		
+			//	Is there whitespace in the args
+			//	listing?
+			//
+			//	If so a username has been specified
+			//	and there's nothing we can do
+			if (whitespace.IsMatch(args)) return retr;
 			
-			//	Install our handler
-			Chat->Chat=[=] (SmartPointer<Client> client, const String & message) {
+			//	Create a regex to match only users
+			//	whose username begins with the
+			//	string we were passed
+			Regex regex(
+				String::Format(
+					"^{0}",
+					Regex::Escape(
+						args
+					)
+				),
+				//	Usernames are not case sensitive
+				RegexOptions().SetIgnoreCase()
+			);
 			
-				//	See if the regex matches
-				auto match=whisper_regex.Match(message);
+			RunningServer->Clients.Scan([&] (const SmartPointer<Client> & client) {
+			
+				//	Only authenticated users are valid
+				//	chat targets
+				if (
+					(client->GetState()==ClientState::Authenticated) &&
+					regex.IsMatch(client->GetUsername())
+				) {
 				
-				//	Proceed if the capture suceeded
-				if (match.Success()) {
-				
-					ChatMessage message(
-						client,
-						match[1].Value(),
-						match[2].Value()
-					);
-					
-					//	Send
-					if (Chat->Send(message).Count()==0) {
-					
-						//	Delivery success
-						
-						//	Send it back to the original
-						//	sender
-						message.Echo=true;
-						
-						Chat->Send(message);
-					
-					} else {
-					
-						//	Recipient does not exist
-						
-						ChatMessage error;
-						error.AddRecipients(client);
-						error.Message.EmplaceBack(ChatStyle::Red);
-						error.Message.EmplaceBack(ChatFormat::Label);
-						error.Message.EmplaceBack(ChatFormat::LabelSeparator);
-						error.Message.EmplaceBack(" User ");
-						error.Message.EmplaceBack(ChatStyle::Bold);
-						error.Message.EmplaceBack(match[1].Value());
-						error.Message.EmplaceBack(ChatFormat::Pop);
-						error.Message.EmplaceBack(" does not exist");
-						
-						//	Send
-						Chat->Send(error);
-					
-					}
-				
-				//	If the capture didn't succeed
-				//	chain
-				} else {
-				
-					if (prev) prev(
-						std::move(client),
-						message
+					retr.Add(
+						//	Normalize to lower case
+						client->GetUsername().ToLower()
 					);
 				
 				}
 			
-			};
+			});
+			
+			return retr;
+		
+		}
+		
+		
+		virtual bool Execute (SmartPointer<Client> client, const String & args, ChatMessage & message) override {
+		
+			//	Attempt to parse args
+			auto match=parse.Match(args);
+			
+			if (!match.Success()) return false;
+			
+			//	Prepare a message
+			ChatMessage whisper;
+			whisper.To.Add(match[1].Value());
+			whisper.From=std::move(client);
+			whisper << match[2].Value();
+			
+			//	Attempt to send
+			if (Chat->Send(whisper).Count()==0) {
+			
+				//	Delivery success -- could not be
+				//	delivered to zero recipients (meaning
+				//	intended recipient exists)
+				
+				//	Send it back to original sender
+				whisper.Echo=true;
+				
+				message=std::move(whisper);
+			
+			} else {
+			
+				//	Delivery failure -- could not be
+				//	delivered to at least one recipient
+				//	(meaning intended recipient does not
+				//	exist).
+				
+				//	Transmit error to caller
+				message	<< ChatStyle::Red
+						<< ChatStyle::Bold
+						<< "User \""
+						<< match[1].Value()
+						<< "\" does not exist";
+			
+			}
+			
+			return true;
 		
 		}
 
@@ -105,7 +168,7 @@ class Whisper : public Module {
 };
 
 
-static Nullable<Whisper> whisper;
+static Nullable<Whisper> module;
 
 
 extern "C" {
@@ -113,22 +176,16 @@ extern "C" {
 
 	Module * Load () {
 	
-		try {
+		if (module.IsNull()) module.Construct();
 		
-			if (whisper.IsNull()) whisper.Construct();
-			
-			return &(*whisper);
-		
-		} catch (...) {	}
-		
-		return nullptr;
+		return &(*module);
 	
 	}
 	
 	
 	void Unload () {
 	
-		whisper.Destroy();
+		module.Destroy();
 	
 	}
 

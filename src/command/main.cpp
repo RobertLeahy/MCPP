@@ -1,5 +1,4 @@
 #include <command/command.hpp>
-#include <chat/chat.hpp>
 #include <utility>
 #include <algorithm>
 
@@ -219,34 +218,6 @@ namespace MCPP {
 	}
 	
 	
-	CommandResult CommandModule::Execute (const String & id, const String & args) {
-	
-		auto * command=retrieve(id);
-		
-		if (command==nullptr) return CommandResult::DoesNotExist;
-		
-		return command->Execute(
-			SmartPointer<Client>(),
-			args
-		) ? CommandResult::Success : CommandResult::SyntaxError;
-	
-	}
-	
-	
-	CommandResult CommandModule::Execute (const String & command) {
-	
-		auto match=parse.Match(command);
-		
-		if (!match.Success()) return CommandResult::SyntaxError;
-		
-		return Execute(
-			match[1].Value(),
-			match[2].Value()
-		);
-	
-	}
-	
-	
 	void CommandModule::Add (Command * command) {
 	
 		if (command!=nullptr) commands.Add(command);
@@ -324,15 +295,26 @@ namespace MCPP {
 				}
 				
 				//	Execute command
+				ChatMessage message;
 				if (!command->Execute(
 					client,
-					(second.Count()==0) ? String() : second.Value()
+					(second.Count()==0) ? String() : second.Value(),
+					message
 				)) {
 				
 					//	Incorrect syntax
 					
 					incorrect_syntax(std::move(client),command);
 				
+				}
+				
+				//	Send if appropriate
+				if (message.Message.Count()!=0) {
+				
+					message.AddRecipients(std::move(client));
+				
+					Chat->Send(message);
+					
 				}
 			
 			//	NO, attempt to forward call through
