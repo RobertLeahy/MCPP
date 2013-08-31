@@ -423,14 +423,15 @@ namespace MCPP {
 					Packet packet;
 					packet.SetType<pt>();
 					auto & str=packet.Retrieve<pt,0>();
-					for (const auto * c : commands) {
+					for (const auto * c : commands)
+					if (c->Check(client)) {
 					
 						if (str.Size()!=0) str << GraphemeCluster('\0');
 						
 						str << "/" << c->Identifier();
 					
 					}
-					client->Send(packet);
+					if (str.Size()!=0) client->Send(packet);
 				
 				}
 			
