@@ -398,15 +398,15 @@ bin/chat_mods/basic_chat.dll \
 bin/command_mods/whisper.dll \
 bin/chat_mods/chat_login.dll \
 bin/chat_mods/chat_op.dll \
-bin/chat_mods/kick.dll \
+bin/command_mods/kick.dll \
 bin/mods/world.dll \
 bin/mods/player.dll \
 bin/chat_mods/command.dll \
-bin/command_mods/test.dll \
 bin/command_mods/info.dll \
 bin/info_mods/ban_info.dll \
 bin/info_mods/dp_info.dll \
-bin/info_mods/op_info.dll
+bin/info_mods/op_info.dll \
+bin/command_mods/op_command.dll
 
 
 #	PING SUPPORT
@@ -520,16 +520,6 @@ bin/chat_mods/basic_chat.dll: bin/mods/chat.dll src/basic_chat/main.cpp obj/new_
 bin/chat_mods/chat_login.dll: bin/mods/chat.dll src/chat_login/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
 	$(GPP) -shared -o $@ src/chat_login/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll
 	
-#	OP/DEOP THROUGH CHAT
-
-bin/chat_mods/chat_op.dll: bin/mods/chat.dll bin/mods/op.dll src/chat_op/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
-	$(GPP) -shared -o $@ bin/mods/chat.dll bin/mods/op.dll src/chat_op/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
-	
-#	KICKING THROUGH CHAT
-
-bin/chat_mods/kick.dll: bin/mods/chat.dll bin/mods/op.dll src/kick/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
-	$(GPP) -shared -o $@ bin/mods/chat.dll bin/mods/op.dll src/kick/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
-	
 	
 #	COMMANDS
 
@@ -570,8 +560,7 @@ include/command/command.hpp | \
 bin/mods/chat.dll \
 bin/chat_mods/command.dll \
 bin/mcpp.dll \
-bin/rleahy_lib.dll \
-bin/mods/op.dll
+bin/rleahy_lib.dll
 	$(GPP) -shared -o $@ \
 	bin/mods/chat.dll \
 	bin/chat_mods/command.dll \
@@ -579,6 +568,53 @@ bin/mods/op.dll
 	bin/mcpp.dll \
 	obj/new_delete.o \
 	src/whisper/main.cpp
+	
+#	OP/DEOP
+
+bin/command_mods/op_command.dll: \
+obj/new_delete.o \
+src/op/command.cpp \
+include/chat/chat.hpp \
+include/op/op.hpp \
+include/client.hpp \
+include/command/command.hpp | \
+bin/mods/chat.dll \
+bin/chat_mods/command.dll \
+bin/mcpp.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/chat_mods/command.dll \
+	bin/mods/op.dll \
+	bin/mcpp.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/op/command.cpp
+	
+	
+#	KICK
+
+bin/command_mods/kick.dll: \
+obj/new_delete.o \
+src/kick/main.cpp \
+include/chat/chat.hpp \
+include/packet.hpp \
+include/client.hpp \
+include/server.hpp \
+include/op/op.hpp \
+include/command/command.hpp | \
+bin/mods/chat.dll \
+bin/mods/op.dll \
+bin/chat_mods/command.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/mods/op.dll \
+	bin/chat_mods/command.dll \
+	bin/mcpp.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/kick/main.cpp
 	
 	
 #	INFORMATION SUB-MODULES
