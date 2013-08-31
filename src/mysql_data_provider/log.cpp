@@ -11,8 +11,8 @@ namespace MCPP {
 	void MySQLDataProvider::WriteLog (const String & log, Service::LogType type) {
 	
 		MySQLBind<String,String> param(
-			log,
-			DataProvider::GetLogType(type)
+			DataProvider::GetLogType(type),
+			log
 		);
 		
 		acquire([&] () {
