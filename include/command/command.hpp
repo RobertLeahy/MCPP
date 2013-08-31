@@ -7,8 +7,6 @@
 
 
 #include <common.hpp>
-#include <unordered_map>
-#include <functional>
 
 
 namespace MCPP {
