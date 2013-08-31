@@ -299,19 +299,19 @@ namespace MCPP {
 							output << "black";
 							break;
 						case ChatStyle::DarkBlue:
-							output << "dark blue";
+							output << "dark_blue";
 							break;
 						case ChatStyle::DarkGreen:
-							output << "dark green";
+							output << "dark_green";
 							break;
 						case ChatStyle::DarkCyan:
-							output << "dark cyan";
+							output << "dark_aqua";
 							break;
 						case ChatStyle::DarkRed:
-							output << "dark red";
+							output << "dark_red";
 							break;
 						case ChatStyle::Purple:
-							output << "purple";
+							output << "dark_purple";
 							break;
 						case ChatStyle::Gold:
 							output << "gold";
@@ -320,7 +320,7 @@ namespace MCPP {
 							output << "gray";
 							break;
 						case ChatStyle::DarkGrey:
-							output << "dark grey";
+							output << "dark_gray";
 							break;
 						case ChatStyle::Blue:
 							output << "blue";
@@ -329,13 +329,13 @@ namespace MCPP {
 							output << "green";
 							break;
 						case ChatStyle::Cyan:
-							output << "cyan";
+							output << "aqua";
 							break;
 						case ChatStyle::Red:
 							output << "red";
 							break;
 						case ChatStyle::Pink:
-							output << "pink";
+							output << "light_purple";
 							break;
 						case ChatStyle::Yellow:
 							output << "yellow";
