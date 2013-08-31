@@ -101,7 +101,7 @@ namespace MCPP {
 				
 			RunningServer->WriteLog(
 				log,
-				Service::LogType::Information
+				Service::LogType::Debug
 			);
 		
 		}
@@ -133,7 +133,7 @@ namespace MCPP {
 				
 			RunningServer->WriteLog(
 				log,
-				Service::LogType::Information
+				Service::LogType::Debug
 			);
 		
 		}
@@ -347,7 +347,7 @@ namespace MCPP {
 			
 			RunningServer->WriteLog(
 				log,
-				Service::LogType::Information
+				Service::LogType::Debug
 			);
 		
 		}

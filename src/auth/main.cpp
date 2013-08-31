@@ -463,7 +463,7 @@ class Authentication : public Module {
 							
 							RunningServer->WriteLog(
 								log,
-								Service::LogType::Information
+								Service::LogType::Debug
 							);
 						
 						}
@@ -516,7 +516,7 @@ class Authentication : public Module {
 										
 										RunningServer->WriteLog(
 											log,
-											Service::LogType::Information
+											Service::LogType::Debug
 										);
 									
 									}

@@ -126,7 +126,7 @@ class KeepAlive : public Module {
 								
 								RunningServer->WriteLog(
 									log,
-									Service::LogType::Information
+									Service::LogType::Debug
 								);
 							
 							}
@@ -186,7 +186,7 @@ class KeepAlive : public Module {
 						
 						RunningServer->WriteLog(
 							log,
-							Service::LogType::Information
+							Service::LogType::Debug
 						);
 					
 					}
