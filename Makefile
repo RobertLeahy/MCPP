@@ -1,4 +1,4 @@
-DEL=del /S /Q
+RMDIR=rmdir /S /Q
 
 
 INC_CURL=-I "G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/include"
@@ -6,7 +6,7 @@ INC_OPENSSL=-I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/in
 INC_ZLIB=-I "G:/Downloads/zlib128-dll/include/"
 INC_MYSQL=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
 OPTIMIZATION=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
-#OPTIMIZATION=-O3
+#OPTIMIZATION=-O3 -march=native
 OPTS_SHARED=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
 GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 
@@ -14,36 +14,48 @@ GPP=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe 
 #	DEFAULT
 
 .PHONY: all
-all: mods front_end
+all: mcpp mods front_end
 
 .PHONY: clean
 clean:
-	$(DEL) obj\*
-	
+	-$(RMDIR) obj
+
 .PHONY: cleanall
 cleanall: clean
-	$(DEL) bin\*
-
-
+	-$(RMDIR) bin
+	
+	
 #	LIBRARIES
 
-bin/libmysql.dll:
+bin/libmysql.dll: | bin
 	mysql.bat
 	
-bin/rleahy_lib.dll:
+bin/rleahy_lib.dll: | bin
 	rleahy_lib.bat
 	
-bin/ssleay32.dll:
+bin/ssleay32.dll: | bin
 	ssleay.bat
 	
-bin/libeay32.dll:
+bin/libeay32.dll: | bin
 	libeay.bat
 	
-bin/libcurl.dll:
+bin/libcurl.dll: | bin
 	curl.bat
 	
-bin/zlib1.dll:
+bin/zlib1.dll: | bin
 	zlib.bat
+	
+	
+#	DIRECTORIES
+
+bin:
+	mkdir bin
+
+obj:
+	mkdir obj
+	
+bin/data_providers: | bin
+	mkdir bin\data_providers
 	
 	
 #	MCPP MAIN LIBRARY
@@ -75,91 +87,252 @@ obj/thread_pool_handle.o \
 obj/sha1.o \
 obj/new_delete.o \
 obj/noise.o \
-bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll
-	$(GPP) -shared -o $@ obj/server.o obj/noise.o obj/new_delete.o obj/mod.o obj/nbt.o obj/network.o obj/packet.o obj/packet_factory.o obj/packet_router.o obj/compression.o obj/rsa_key.o obj/aes_128_cfb_8.o obj/metadata.o obj/client.o obj/client_list.o obj/url.o obj/http_handler.o obj/http_request.o obj/mod_loader.o obj/random.o obj/thread_pool.o obj/thread_pool_handle.o obj/sha1.o bin/ssleay32.dll bin/libeay32.dll bin/libcurl.dll bin/zlib1.dll bin/data_provider.dll bin/rleahy_lib.dll -lws2_32
+bin/ssleay32.dll \
+bin/libeay32.dll \
+bin/libcurl.dll \
+bin/zlib1.dll \
+bin/rleahy_lib.dll \
+include/data_provider.hpp | \
+bin \
+bin/data_provider.dll
+	$(GPP) -shared -o $@ obj/server.o \
+	obj/mod.o \
+	obj/nbt.o \
+	obj/network.o \
+	obj/packet.o \
+	obj/packet_factory.o \
+	obj/packet_router.o \
+	obj/compression.o \
+	obj/rsa_key.o \
+	obj/aes_128_cfb_8.o \
+	obj/metadata.o \
+	obj/client.o \
+	obj/client_list.o \
+	obj/url.o \
+	obj/http_handler.o \
+	obj/http_request.o \
+	obj/mod_loader.o \
+	obj/random.o \
+	obj/thread_pool.o \
+	obj/thread_pool_handle.o \
+	obj/sha1.o \
+	obj/new_delete.o \
+	obj/noise.o \
+	bin/ssleay32.dll \
+	bin/libeay32.dll \
+	bin/libcurl.dll \
+	bin/zlib1.dll \
+	bin/data_provider.dll \
+	bin/rleahy_lib.dll \
+	-lws2_32
+	
+obj/server.o: \
+src/server.cpp \
+src/server_getters_setters.cpp \
+src/server_setup.cpp \
+include/server.hpp \
+include/thread_pool.hpp \
+include/network.hpp \
+include/data_provider.hpp \
+include/event.hpp \
+include/typedefs.hpp \
+include/http_handler.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/server.cpp
+	
+obj/mod.o: \
+src/mod.cpp \
+include/mod.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/mod.cpp
+	
+obj/client.o: \
+src/client.cpp \
+include/server.hpp \
+include/network.hpp \
+include/packet.hpp \
+include/aes_128_cfb_8.hpp \
+include/client.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/client.cpp
+	
+obj/client_list.o: \
+src/client_list.cpp \
+include/network.hpp \
+include/packet.hpp \
+include/aes_128_cfb_8.hpp \
+include/client.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/client_list.cpp
+	
+obj/mod_loader.o: \
+src/mod_loader.cpp \
+include/mod.hpp \
+include/typedefs.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/mod_loader.cpp
+	
+obj/new_delete.o: \
+src/new_delete.cpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/new_delete.cpp
+	
 
-obj/server.o: src/server.cpp src/server_getters_setters.cpp src/server_setup.cpp
-	$(GPP) src/server.cpp -c -o $@
-
-obj/mod.o: src/mod.cpp
-	$(GPP) $? -c -o $@
-	
-obj/client.o: src/client.cpp
-	$(GPP) $? -c -o $@
-	
-obj/client_list.o: src/client_list.cpp
-	$(GPP) $? -c -o $@
-	
-obj/mod_loader.o: src/mod_loader.cpp
-	$(GPP) $? -c -o $@
-	
-obj/new_delete.o: src/new_delete.cpp
-	$(GPP) $? -c -o $@
-
-	
 #	MINECRAFT DATA FORMAT INTEROP
+
+obj/nbt.o: \
+src/nbt.cpp \
+src/tag.cpp \
+src/named_tag.cpp \
+include/nbt.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/nbt.cpp
 	
-obj/nbt.o: src/nbt.cpp
-	$(GPP) $? -c -o $@
+obj/compression.o: \
+src/compression.cpp \
+include/compression.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/compression.cpp
 	
-obj/compression.o: src/compression.cpp
-	$(GPP) $? -c -o $@
-	
-obj/metadata.o: src/metadata.cpp
-	$(GPP) $? -c -o $@
-	
+obj/metadata.o: \
+include/metadata.hpp \
+src/metadata.cpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/metadata.cpp
+
 	
 #	NETWORK STACK
 
-.PHONY: network_stack
-network_stack: obj/network.o bin/test.exe
-
-obj/network.o: src/network_windows.cpp include/network.hpp include/thread_pool.hpp src/network.cpp
-	$(GPP) src/network.cpp -c -o $@
+obj/network.o: \
+src/network_windows.cpp \
+src/network.cpp \
+include/thread_pool.hpp \
+include/network.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/network.cpp
 	
 
 #	MINECRAFT COMMUNICATIONS
-	
-obj/packet.o: src/packet.cpp src/protocol_analysis.cpp
-	$(GPP) src/packet.cpp -c -o $@
-	
-obj/packet_factory.o: src/packet_factory.cpp
-	$(GPP) $? -c -o $@
-	
-obj/packet_router.o: src/packet_router.cpp
-	$(GPP) $? -c -o $@
-	
-obj/rsa_key.o: src/rsa_key.cpp
-	$(GPP) $? -c -o $@
-	
-obj/aes_128_cfb_8.o: src/aes_128_cfb_8.cpp
-	$(GPP) $? -c -o $@
-	
-obj/sha1.o: src/sha1.cpp
-	$(GPP) $? -c -o $@
-	
 
+obj/packet.o: \
+src/packet.cpp \
+src/protocol_analysis.cpp \
+include/metadata.hpp \
+include/packet.hpp \
+include/compression.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/packet.cpp
+	
+obj/packet_factory.o: \
+src/packet_factory.cpp \
+include/packet.hpp \
+include/metadata.hpp \
+include/compression.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/packet_factory.cpp
+	
+obj/packet_router.o: \
+src/packet_router.cpp \
+include/packet.hpp \
+include/metadata.hpp \
+include/compression.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/packet_router.cpp
+	
+obj/rsa_key.o: \
+src/rsa_key.cpp \
+include/rsa_key.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/rsa_key.cpp
+	
+obj/aes_128_cfb_8.o: \
+src/aes_128_cfb_8.cpp \
+include/aes_128_cfb_8.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/aes_128_cfb_8.cpp
+	
+obj/sha1.o: \
+src/sha1.cpp \
+include/sha1.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/sha1.cpp
+	
+	
 #	HTTP
 
-obj/url.o: src/url.cpp
-	$(GPP) $? -c -o $@
+obj/url.o: \
+src/url.cpp \
+include/url.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/url.cpp
 	
-obj/http_handler.o: src/http_handler.cpp src/http_handler_callbacks.cpp
-	$(GPP) src/http_handler.cpp -c -o $@
+obj/http_handler.o: \
+src/http_handler.cpp \
+src/http_handler_callbacks.cpp \
+include/http_handler.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/http_handler.cpp
 	
-obj/http_request.o: src/http_request.cpp
-	$(GPP) $? -c -o $@
+obj/http_request.o: \
+src/http_request.cpp \
+include/http_handler.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/http_request.cpp
 	
 	
 #	RANDOM NUMBER GENERATION
 
-obj/random.o: src/random.cpp
-	$(GPP) $? -c -o $@
+obj/random.o: \
+src/random.cpp \
+include/random.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/random.cpp
 	
-obj/noise.o: src/noise.cpp include/noise.hpp include/random.hpp include/fma.hpp
-	$(GPP) src/noise.cpp -c -o $@
+obj/noise.o: \
+src/noise.cpp \
+include/noise.hpp \
+include/random.hpp \
+include/fma.hpp
+	$(GPP) -c -o $@ src/noise.cpp
+	
+	
+#	THREAD POOL
 
-
+obj/thread_pool.o: \
+src/thread_pool.cpp \
+include/thread_pool.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/thread_pool.cpp
+	
+obj/thread_pool_handle.o: \
+src/thread_pool_handle.cpp \
+include/thread_pool.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/thread_pool_handle.cpp
+	
+	
 #	DATA PROVIDERS
 
 .PHONY: data_providers
@@ -170,6 +343,7 @@ bin/data_provider.dll: bin/data_providers/mysql_data_provider.dll
 	
 bin/data_providers/mysql_data_provider.dll: \
 include/mysql_data_provider/mysql_data_provider.hpp \
+include/data_provider.hpp \
 bin/libmysql.dll \
 bin/rleahy_lib.dll \
 obj/new_delete.o \
@@ -181,7 +355,10 @@ src/mysql_data_provider/binary.cpp \
 src/mysql_data_provider/log.cpp \
 src/mysql_data_provider/settings.cpp \
 src/mysql_data_provider/key_value.cpp \
-src/mysql_data_provider/info.cpp
+src/mysql_data_provider/info.cpp | \
+obj \
+bin \
+bin/data_providers
 	$(GPP) -shared -o bin/data_providers/data_provider.dll \
 	obj/new_delete.o \
 	obj/data_provider.o \
@@ -197,20 +374,12 @@ src/mysql_data_provider/info.cpp
 	src/mysql_data_provider/info.cpp
 	cmd /c "move bin\data_providers\data_provider.dll bin\data_providers\mysql_data_provider.dll"
 	
-obj/data_provider.o: src/data_provider.cpp include/data_provider.hpp
-	$(GPP) src/data_provider.cpp -c -o $@
-	
-
-#	THREAD POOL
-
-.PHONY: thread_pool
-thread_pool: obj/thread_pool.o obj/thread_pool_handle.o
-
-obj/thread_pool.o: src/thread_pool.cpp
-	$(GPP) $? -c -o $@
-	
-obj/thread_pool_handle.o: src/thread_pool_handle.cpp
-	$(GPP) $? -c -o $@
+obj/data_provider.o: \
+src/data_provider.cpp \
+include/data_provider.hpp \
+bin/rleahy_lib.dll | \
+obj
+	$(GPP) -c -o $@ src/data_provider.cpp
 	
 	
 #	MODULES
@@ -379,23 +548,11 @@ front_end: bin/server.exe bin/mcpp.exe
 bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
 	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
 	
-bin/mcpp.exe: src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
-	$(GPP) -o $@ src/interactive_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll obj/new_delete.o
-
-.PHONY: simplex
-simplex: bin/simplex_test.exe
-
-bin/simplex_test.exe: src/simplex_test/test_topdown_oo.cpp src/simplex_test/terrain_generator.cpp include/noise.hpp include/random.hpp bin/mcpp.dll bin/rleahy_lib.dll
-	$(GPP) -o $@ src/simplex_test/test_topdown_oo.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
 	
-.PHONY: world
-world: bin/world_test.exe
+#	SERVER FRONT-END
 
-bin/world_test.exe: src/world_test/test.cpp include/world/world.hpp bin/mods/world.dll bin/rleahy_lib.dll obj/new_delete.o bin/mcpp.dll
-	$(GPP) -o $@ src/world_test/test.cpp bin/mods/world.dll bin/rleahy_lib.dll obj/new_delete.o bin/mcpp.dll
-	
-.PHONY: dp_test
-dp_test: bin/dp_test.exe
+.PHONY: front_end
+front_end: bin/server.exe
 
-bin/dp_test.exe: bin/data_provider.dll bin/rleahy_lib.dll obj/new_delete.o src/dp_test/test.cpp
-	$(GPP) -o $@ src/dp_test/test.cpp bin/data_provider.dll bin/rleahy_lib.dll obj/new_delete.o
+bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
