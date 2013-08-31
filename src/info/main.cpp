@@ -1,488 +1,241 @@
-#include <common.hpp>
-#include <chat/chat.hpp>
+#include <info/info.hpp>
 #include <op/op.hpp>
 #include <utility>
 #include <algorithm>
-#include <system_error>
-#include <cstring>
 
 
-#ifdef ENVIRONMENT_WINDOWS
-#include "windows.cpp"
-#else
-#include "posix.cpp"
-#endif
+namespace MCPP {
 
 
-static const Word priority=2;
-static const String name("Chat Information Provider");
-static const Regex info_regex(
-	"^\\/info\\s+(\\w+)$",
-	RegexOptions().SetIgnoreCase()
-);
-static const String pool_arg("pool");
-static const String client_arg("clients");
-static const String ops_arg("ops");
-static const String dp_arg("dp");
-static const String os_arg("os");
-static const String mcpp_arg("mcpp");
-static const String info_banner("====INFORMATION====");
-static const String info_separator(", ");
-static const String yes("Yes");
-static const String no("No");
-static const String not_an_op_error(" You must be an operator to issue that command");
-
-
-//	THREAD POOL INFO
-static const String pool_banner("MAIN SERVER THREAD POOL:");
-static const String pool_stats("Pool Information");
-static const String pool_running("Running");
-static const String pool_queued("Queued");
-static const String pool_scheduled("Scheduled");
-static const String worker_template("Worker ID {0} Information");
-static const String worker_executed("Tasks Executed");
-static const String worker_failed("Tasks Failed");
-static const String worker_running("Running");
-static const String worker_running_template("{0}ns");
-static const String worker_avg("Average Task");
-
-
-//	CLIENT INFO
-static const String clients_banner("CONNECTED CLIENTS:");
-static const String client_template("{0}:{1}");
-static const String client_authenticated("Authenticated");
-static const String client_username("Username");
-static const String client_connected("Connected For");
-static const String client_sent("Bytes Sent");
-static const String client_received("Bytes Received");
-static const String client_latency_template("{0}ms");
-static const String client_latency("Latency");
-
-
-//	OPS INFO
-static const String ops_banner("SERVER OPERATORS:");
-
-
-//	DATA PROVIDER INFO
-static const String dp_banner("DATA PROVIDER:");
-
-
-//	OS INFO
-static const String os_banner("OPERATING SYSTEM:");
-
-
-//	MINECRAFT++ INFO
-static const String mcpp_banner("MINECRAFT++:");
-static const String compiled_by_template("Compiled by {0} on {1}");
-
-
-class Info : public Module {
-
-
-	private:
+	static const String name("Information Provider");
+	static const String identifier("info");
+	static const String summary("Provides information about various server internals.");
+	static const Word priority=1;
+	static const String info_banner="====INFORMATION====";
+	static const String log_prepend("Information Provider: ");
+	static const String mods_dir("info_mods");
 	
 	
-		static ChatMessage dp_info () {
-		
-			ChatMessage message;
-			
-			//	Get data about the data provider
-			auto info=RunningServer->Data().GetInfo();
-			
-			//	Sort the key/value pairs
-			std::sort(
-				info.Item<1>().begin(),
-				info.Item<1>().end(),
-				[] (const Tuple<String,String> & a, const Tuple<String,String> & b) {
-			
-					return a.Item<0>()<b.Item<0>();
-					
-				}
-			);
-			
-			message	<<	ChatStyle::Bold
-					<<	ChatStyle::Yellow
-					<<	info_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					<<	dp_banner
-					<<	Newline
-					<<	info.Item<0>()
-					<<	":"
-					<<	ChatFormat::Pop;
-					
-			for (const auto & t : info.Item<1>()) {
-			
-				message	<<	Newline
-						<<	ChatStyle::Bold
-						<<	t.Item<0>()
-						<<	": "
-						<<	ChatFormat::Pop
-						<<	t.Item<1>();
-			
-			}
-			
-			return message;
-		
-		}
+	static String help;
+	static Nullable<ModuleLoader> mods;
 	
 	
-		static ChatMessage pool_info () {
-		
-			//	Get data about the thread pool
-			auto info=RunningServer->Pool().GetInfo();
-			
-			ChatMessage message;
-			message	<<	ChatStyle::Bold
-					<<	ChatStyle::Yellow
-					<<	info_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					//	THREAD POOL STATISTICS
-					<<	pool_stats
-					<<	": "
-					<<	ChatFormat::Pop
-					//	Running tasks
-					<<	pool_running
-					<<	": "
-					<<	info.Running
-					<<	info_separator
-					//	Queued tasks
-					<<	pool_queued
-					<<	": "
-					<<	info.Queued
-					<<	info_separator
-					//	Scheduled tasks
-					<<	pool_scheduled
-					<<	": "
-					<<	info.Scheduled;
-					
-			//	Worker stats
-			for (Word i=0;i<info.WorkerInfo.Count();++i) {
-			
-				auto & w=info.WorkerInfo[i];
-				
-				message	<<	Newline
-						<<	ChatStyle::Bold
-						<<	String::Format(
-								worker_template,
-								i
-							)
-						<<	": "
-						<<	ChatFormat::Pop
-						//	Tasks executed
-						<<	worker_executed
-						<<	": "
-						<<	w.TaskCount
-						<<	info_separator
-						//	Tasks failed
-						<<	worker_failed
-						<<	": "
-						<<	w.Failed
-						<<	info_separator
-						//	Time spent running
-						<<	worker_running
-						<<	": "
-						<<	String::Format(
-								worker_running_template,
-								w.Running
-							)
-						<<	info_separator
-						//	Average time per task
-						<<	worker_avg
-						<<	": "
-						<<	String::Format(
-								worker_running_template,
-								w.Running/w.TaskCount
-							);
-			
-			}
-			
-			return message;
-		
-		}
-		
-		
-		static ChatMessage os_info () {
-		
-			ChatMessage message;
-			message <<	ChatStyle::Bold
-					<<	ChatStyle::Yellow
-					<<	info_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					<<	os_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					<<	get_os_string();
-					
-			return message;
-		
-		}
-		
-		
-		static ChatMessage mcpp_info () {
-		
-			ChatMessage message;
-			message <<	ChatStyle::Bold
-					<<	ChatStyle::Yellow
-					<<	info_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					<<	mcpp_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					<<	String::Format(
-							compiled_by_template,
-							RunningServer->CompiledWith(),
-							RunningServer->BuildDate()
-						);
-						
-			return message;
-		
-		}
-		
-		
-		static inline String zero_pad (String pad, Word num) {
-		
-			while (pad.Count()<num) pad=String("0")+pad;
-			
-			return pad;
-		
-		}
-		
-		
-		static inline String connected_format (Word milliseconds) {
-		
-			String time;
-			time
-				//	Hours
-				<<	zero_pad(
-						String(milliseconds/(1000*60*60)),
-						2
-					)
-				<<	":"
-				//	Minutes
-				<<	zero_pad(
-						String((milliseconds%(1000*60*60))/(1000*60)),
-						2
-					)
-				<<	":"
-				//	Seconds
-				<<	zero_pad(
-						String((milliseconds%(1000*60))/1000),
-						2
-					)
-				<<	"."
-				//	Milliseconds
-				<<	zero_pad(
-						String(milliseconds%1000),
-						3
-					);
-					
-			return time;
-		
-		}
-		
-		
-		static ChatMessage client_info () {
-		
-			ChatMessage message;
-			message	<<	ChatStyle::Bold
-					<<	ChatStyle::Yellow
-					<<	info_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					<<	clients_banner
-					<<	ChatFormat::Pop;
-					
-			RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
-			
-				auto state=client->GetState();
-				
-				message	<<	Newline
-						<<	ChatStyle::Bold
-						<<	String::Format(
-								client_template,
-								client->IP(),
-								client->Port()
-							)
-						<<	": "
-						<<	ChatFormat::Pop
-						//	Authenticated?
-						<<	client_authenticated
-						<<	": "
-						<<	((state==ClientState::Authenticated) ? yes : no)
-						<<	info_separator
-						//	Time connected
-						<<	client_connected
-						<<	": "
-						<<	connected_format(client->Connected())
-						<<	info_separator
-						//	Latency
-						<<	client_latency
-						<<	": "
-						<<	String::Format(
-								client_latency_template,
-								static_cast<Word>(client->Ping)
-							)
-						<<	info_separator
-						//	Bytes sent
-						<<	client_sent
-						<<	": "
-						<<	client->Sent()
-						<<	info_separator
-						//	Bytes received
-						<<	client_received
-						<<	": "
-						<<	client->Received();
-			
-			});
-			
-			return message;
-		
-		}
-		
-		
-		static ChatMessage ops_info () {
-		
-			//	Get the ops list
-			auto ops=Ops->List();
-			
-			//	Sort it
-			std::sort(ops.begin(),ops.end());
-			
-			//	Build it
-			ChatMessage message;
-			message	<<	ChatStyle::Bold
-					<<	ChatStyle::Yellow
-					<<	info_banner
-					<<	ChatFormat::Pop
-					<<	Newline
-					<<	ops_banner
-					<<	ChatFormat::Pop;
-					
-			for (auto & s : ops) message << Newline << s;
-			
-			return message;
-		
-		}
-
-
-	public:
+	static const Regex split("\\s+");
 	
 	
-		virtual Word Priority () const noexcept override {
-		
-			return priority;
-		
-		}
-		
-		
-		virtual const String & Name () const noexcept override {
-		
-			return name;
-		
-		}
-		
-		
-		virtual void Install () override {
-		
-			//	Grab previous handler for
-			//	chaining
-			ChatHandler prev(std::move(Chat->Chat));
+	InformationModule::InformationModule () {
+	
+		//	Fire up mod loader
+		mods.Construct(
+			Path::Combine(
+				Path::GetPath(
+					File::GetCurrentExecutableFileName()
+				),
+				mods_dir
+			),
+			[] (const String & message, Service::LogType type) {
 			
-			//	Install ourselves
-			Chat->Chat=[=] (SmartPointer<Client> client, const String & message) {
-			
-				//	Attempt to match against our
-				//	regex
-				auto match=info_regex.Match(message);
+				String log(log_prepend);
+				log << message;
 				
-				//	If there's a match, attempt to
-				//	handle this
-				if (match.Success()) {
-				
-					String username(client->GetUsername());
-				
-					//	The user has to be an operator
-					//	to issue these commands
-					if (!Ops->IsOp(username)) {
-					
-						ChatMessage message;
-						message.AddRecipients(client);
-						message	<<	ChatStyle::Red
-								<<	ChatFormat::Label
-								<<	ChatFormat::LabelSeparator
-								<<	not_an_op_error;
-								
-						Chat->Send(message);
-					
-						return;
-					
-					}
-				
-					//	Get the argument
-					String arg=match[1].Value().ToLower();
-					
-					Nullable<ChatMessage> message;
-					
-					//	Thread pool information
-					if (arg==pool_arg) {
-					
-						message=pool_info();
-					
-					//	Client information
-					} else if (arg==client_arg) {
-					
-						message=client_info();
-					
-					//	Ops information
-					} else if (arg==ops_arg) {
-					
-						message=ops_info();
-					
-					} else if (arg==dp_arg) {
-					
-						message=dp_info();
-					
-					} else if (arg==os_arg) {
-					
-						message=os_info();
-					
-					} else if (arg==mcpp_arg) {
-					
-						message=mcpp_info();
-					
-					}
-					
-					if (!message.IsNull()) {
-					
-						message->AddRecipients(client);
-						
-						Chat->Send(*message);
-						
-						return;
-					
-					}
-				
-				}
-			
-				//	Chain if applicable
-				if (prev) prev(
-					std::move(client),
-					message
+				RunningServer->WriteLog(
+					log,
+					type
 				);
 			
-			};
+			}
+		);
+	
+	}
+	
+	
+	InformationModule::~InformationModule () noexcept {
+	
+		mods->Unload();
+	
+	}
+	
+	
+	Word InformationModule::Priority () const noexcept {
+	
+		return priority;
+	
+	}
+	
+	
+	const String & InformationModule::Name () const noexcept {
+	
+		return name;
+	
+	}
+	
+	
+	const String & InformationModule::Identifier () const noexcept {
+	
+		return identifier;
+	
+	}
+	
+	
+	const String & InformationModule::Help () const noexcept {
+	
+		return help;
+	
+	}
+	
+	
+	const String & InformationModule::Summary () const noexcept {
+	
+		return summary;
+	
+	}
+	
+	
+	bool InformationModule::Check (SmartPointer<Client> client) const {
+	
+		return Ops->IsOp(client->GetUsername());
+	
+	}
+	
+	
+	Vector<InformationProvider *> InformationModule::retrieve (const Regex & regex) {
+	
+		Vector<InformationProvider *> retr;
+		
+		for (auto * ip : providers)
+		if (regex.IsMatch(ip->Identifier()))
+		retr.Add(ip);
+		
+		return retr;
+	
+	}
+	
+	
+	InformationProvider * InformationModule::retrieve (const String & name) {
+	
+		for (auto * ip : providers)
+		if (name==ip->Identifier())
+		return ip;
+		
+		return nullptr;
+	
+	}
+	
+	
+	Vector<String> InformationModule::AutoComplete (const String & args_str) const {
+	
+		Vector<String> retr;
+		
+		auto args=split.Split(args_str);
+		
+		if (args.Count()<=1)
+		for (auto * ip : (
+			(args.Count()==0)
+				?	providers
+				:	const_cast<InformationModule *>(this)->retrieve(
+						Regex(
+							String::Format(
+								"^{0}",
+								Regex::Escape(
+									args[0]
+								)
+							)
+						)
+					)
+		)) retr.Add(ip->Identifier());
+		
+		return retr;
+	
+	}
+	
+	
+	bool InformationModule::Execute (SmartPointer<Client> client, const String & args_str) {
+	
+		//	If there's no client, do nothing
+		if (client.IsNull()) return true;
+		
+		auto args=split.Split(args_str);
+		
+		//	If there's no argument, or more
+		//	than one, that's a syntax error
+		if (args.Count()!=1) return false;
+		
+		//	Attempt to retrieve the appropriate
+		//	information provider.  If there
+		//	isn't one, that's a syntax error
+		auto * ip=retrieve(args[0]);
+		if (ip==nullptr) return false;
+		
+		//	Prepare a chat message
+		ChatMessage message;
+		message.AddRecipients(std::move(client));
+		message	<< ChatStyle::Bold
+				<< ChatStyle::Yellow
+				<< info_banner
+				<< ChatFormat::Pop
+				<< ChatFormat::Pop
+				<< Newline;
+				
+		//	Get rest of chat message from
+		//	provider
+		ip->Execute(message);
+		
+		//	Send message
+		Chat->Send(message);
+		
+		return true;
+	
+	}
+	
+	
+	void InformationModule::Install () {
+	
+		//	Get mods
+		mods->Load();
+		
+		//	Install ourselves into the command
+		//	module
+		Commands->Add(this);
+		
+		//	Install mods
+		mods->Install();
+		
+		//	Sort commands so they appear
+		//	in alphabetical order in
+		//	calls to help
+		std::sort(
+			providers.begin(),
+			providers.end(),
+			[] (const InformationProvider * a, const InformationProvider * b) {
+			
+				return a->Identifier()<b->Identifier();
+			
+			}
+		);
+		
+		//	Build help
+		for (const auto * ip : providers) {
+		
+			if (help.Size()!=0) help << Newline;
+			
+			help << "/info " << ip->Identifier() << " - " << ip->Help();
 		
 		}
+	
+	}
+	
+	
+	void InformationModule::Add (InformationProvider * provider) {
+	
+		if (provider!=nullptr) providers.Add(provider);
+	
+	}
+	
+	
+	Nullable<InformationModule> Information;
 
 
-};
-
-
-static Module * mod_ptr=nullptr;
+}
 
 
 extern "C" {
@@ -490,26 +243,37 @@ extern "C" {
 
 	Module * Load () {
 	
-		if (mod_ptr==nullptr) try {
+		try {
 		
-			mod_ptr=new Info();
+			if (Information.IsNull()) {
+			
+				mods.Destroy();
+				
+				Information.Construct();
+			
+			}
+			
+			return &(*Information);
 		
 		} catch (...) {	}
 		
-		return mod_ptr;
+		return nullptr;
 	
 	}
 	
 	
 	void Unload () {
 	
-		if (mod_ptr!=nullptr) {
+		Information.Destroy();
 		
-			delete mod_ptr;
-			
-			mod_ptr=nullptr;
-		
-		}
+		if (!mods.IsNull()) mods->Unload();
+	
+	}
+	
+	
+	void Cleanup () {
+	
+		mods.Destroy();
 	
 	}
 
