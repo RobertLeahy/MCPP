@@ -402,7 +402,9 @@ bin/chat_mods/info.dll \
 bin/chat_mods/chat_op.dll \
 bin/chat_mods/kick.dll \
 bin/mods/world.dll \
-bin/mods/player.dll
+bin/mods/player.dll \
+bin/chat_mods/command.dll \
+bin/command_mods/test.dll
 
 
 #	PING SUPPORT
@@ -490,6 +492,19 @@ bin/mods/player.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/player
 #	CHAT SUB-MODULES
 
 
+#	COMMAND HANDLING
+
+bin/chat_mods/command.dll: \
+src/command/main.cpp \
+obj/new_delete.o \
+include/chat/chat.hpp \
+bin/mcpp.dll | \
+bin/rleahy_lib.dll \
+bin/chat_mods \
+bin/mods/chat.dll
+	$(GPP) -shared -o $@ src/command/main.cpp obj/new_delete.o bin/mcpp.dll bin/rleahy_lib.dll bin/mods/chat.dll
+
+
 #	GLOBAL CHAT
 
 bin/chat_mods/basic_chat.dll: bin/mods/chat.dll src/basic_chat/main.cpp obj/new_delete.o bin/rleahy_lib.dll bin/mcpp.dll
@@ -540,13 +555,23 @@ bin/chat_mods/world_info.dll: bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll
 	$(GPP) -shared -o $@ bin/mods/world.dll bin/rleahy_lib.dll bin/mcpp.dll bin/mods/chat.dll bin/mods/op.dll obj/new_delete.o src/world_info/main.cpp
 	
 	
-#	SERVER FRONT-END
+#	COMMANDS
 
-.PHONY: front_end
-front_end: bin/server.exe bin/mcpp.exe
 
-bin/server.exe: src/test_front_end/main.cpp src/test_front_end/test.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
-	$(GPP) -o $@ src/test_front_end/main.cpp bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o
+bin/command_mods/test.dll: \
+obj/new_delete.o \
+src/command_test/main.cpp | \
+bin/mods/chat.dll \
+bin/chat_mods/command.dll \
+bin/mcpp.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/chat_mods/command.dll \
+	bin/mcpp.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/command_test/main.cpp
 	
 	
 #	SERVER FRONT-END
