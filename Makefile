@@ -397,7 +397,6 @@ bin/mods/ban.dll \
 bin/chat_mods/basic_chat.dll \
 bin/command_mods/whisper.dll \
 bin/chat_mods/chat_login.dll \
-bin/chat_mods/chat_op.dll \
 bin/command_mods/kick.dll \
 bin/mods/world.dll \
 bin/mods/player.dll \
@@ -406,7 +405,8 @@ bin/command_mods/info.dll \
 bin/info_mods/ban_info.dll \
 bin/info_mods/dp_info.dll \
 bin/info_mods/op_info.dll \
-bin/command_mods/op_command.dll
+bin/command_mods/op_command.dll \
+bin/info_mods/clients_info.dll
 
 
 #	PING SUPPORT
@@ -682,6 +682,27 @@ bin/command_mods/info.dll
 	bin/mods/op.dll \
 	obj/new_delete.o \
 	src/op/info.cpp
+	
+#	CLIENTS INFORMATION
+
+bin/info_mods/clients_info.dll: \
+obj/new_delete.o \
+src/info/clients.cpp \
+include/info/info.hpp \
+include/chat/chat.hpp \
+include/client.hpp \
+include/server.hpp | \
+bin/mods/chat.dll \
+bin/mcpp.dll \
+bin/command_mods/info.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/mcpp.dll \
+	bin/command_mods/info.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/info/clients.cpp
 	
 	
 #	SERVER FRONT-END
