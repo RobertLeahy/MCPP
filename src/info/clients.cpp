@@ -78,8 +78,7 @@ class ClientsInfo : public Module, public InformationProvider {
 		
 		virtual void Execute (ChatMessage & message) const override {
 		
-			message	<< ChatStyle::Yellow
-					<< ChatStyle::Bold
+			message	<< ChatStyle::Bold
 					<< clients_banner
 					<< ChatFormat::Pop
 					<< ChatFormat::Pop;
