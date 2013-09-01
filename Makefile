@@ -406,7 +406,10 @@ bin/info_mods/ban_info.dll \
 bin/info_mods/dp_info.dll \
 bin/info_mods/op_info.dll \
 bin/command_mods/op_command.dll \
-bin/info_mods/clients_info.dll
+bin/info_mods/clients_info.dll \
+bin/info_mods/pool_info.dll \
+bin/info_mods/os_info.dll \
+bin/info_mods/mcpp_info.dll
 
 
 #	PING SUPPORT
@@ -703,6 +706,66 @@ bin/rleahy_lib.dll
 	bin/rleahy_lib.dll \
 	obj/new_delete.o \
 	src/info/clients.cpp
+	
+#	POOL INFORMATION
+
+bin/info_mods/pool_info.dll: \
+obj/new_delete.o \
+src/info/pool.cpp \
+include/info/info.hpp \
+include/chat/chat.hpp \
+include/server.hpp \
+include/thread_pool.hpp | \
+bin/mods/chat.dll \
+bin/mcpp.dll \
+bin/command_mods/info.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/mcpp.dll \
+	bin/command_mods/info.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/info/pool.cpp
+	
+#	OPERATING SYSTEM INFORMATION
+
+bin/info_mods/os_info.dll: \
+obj/new_delete.o \
+src/info/os.cpp \
+include/info/info.hpp \
+include/chat/chat.hpp | \
+bin/mods/chat.dll \
+bin/mcpp.dll \
+bin/command_mods/info.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/mcpp.dll \
+	bin/command_mods/info.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/info/os.cpp
+	
+#	MCPP INFORMATION
+
+bin/info_mods/mcpp_info.dll: \
+obj/new_delete.o \
+src/info/mcpp.cpp \
+include/info/info.hpp \
+include/chat/chat.hpp \
+include/server.hpp | \
+bin/mods/chat.dll \
+bin/mcpp.dll \
+bin/command_mods/info.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/mcpp.dll \
+	bin/command_mods/info.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/info/mcpp.cpp
 	
 	
 #	SERVER FRONT-END
