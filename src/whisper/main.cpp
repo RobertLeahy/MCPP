@@ -9,7 +9,7 @@ static const String summary("Sends a private message to another player.");
 static const String help(
 	"Syntax: /w <player name> <message>\n"
 	"Sends a private message to <player name>.\n"
-	"Note that this message will still be logged, so don't send anything you wouldn't want server administrators to read."
+	"Note that this message will still be logged."
 );
 static const Regex whitespace("\\s");
 static const Regex parse("^([^\\s]+)\\s+(.+)$");
@@ -127,10 +127,11 @@ class Whisper : public Module, public Command {
 			if (!match.Success()) return false;
 			
 			//	Prepare a message
-			ChatMessage whisper;
-			whisper.To.Add(match[1].Value());
-			whisper.From=std::move(client);
-			whisper << match[2].Value();
+			ChatMessage whisper(
+				std::move(client),
+				match[1].Value(),
+				match[2].Value()
+			);
 			
 			//	Attempt to send
 			if (Chat->Send(whisper).Count()==0) {
