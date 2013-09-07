@@ -11,9 +11,16 @@ namespace MCPP {
 	static const String mods_dir("command_mods");
 	static const String log_prepend("Command Support: ");
 	static const String help_command("help");
-	static const Regex parse("^([^\\s]+)(?:\\s+(.*))?$");
-	static const Regex is_command("^\\/(.*)$");
+	static const Regex parse(
+		"^([^\\s]+)(?:\\s+(.*))?$",
+		RegexOptions().SetSingleline()
+	);
+	static const Regex is_command(
+		"^\\/(.*)$",
+		RegexOptions().SetSingleline()
+	);
 	static const Regex contains_whitespace("\\s");
+	static const String protocol_error("Protocol error");
 	
 	
 	static Nullable<ModuleLoader> mods;
@@ -334,6 +341,22 @@ namespace MCPP {
 		RunningServer->Router[0xCB]=[=] (SmartPointer<Client> client, Packet packet) {
 		
 			typedef PacketTypeMap<0xCB> pt;
+			
+			//	Make sure client is authenticated
+			if (client->GetState()!=ClientState::Authenticated) {
+			
+				//	Chain through if possible
+				if (complete) complete(
+					std::move(client),
+					std::move(packet)
+				);
+				//	Nothing to chain through to, kill the
+				//	client
+				else client->Disconnect(protocol_error);
+				
+				return;
+			
+			}
 			
 			//	Is this a command?
 			auto match=is_command.Match(
