@@ -1,85 +1,71 @@
 #include <world/world.hpp>
-#include <stdexcept>
 
 
 namespace MCPP {
 
 
-	static const ASCIIChar * release_error="One or more locks could not be released";
-
-
-	WorldLock::WorldLock (ThreadPool & pool) noexcept : pool(pool) {	}
+	WorldLock::WorldLock (ThreadPool & pool, std::function<void ()> panic) noexcept : count(0), pool(pool), panic(std::move(panic)) {	}
 	
 	
-	void WorldLock::acquire (SmartPointer<WorldLockInfo> info) {
+	void WorldLock::acquire (std::function<void (bool)> callback) {
 	
+		//	Which thread is this?
+		auto id=Thread::ID();
+		
 		lock.Acquire();
 		
-		//	See if we can acquire by
-		//	checking to see if this lock
-		//	contends
+		if (
+			//	We can acquire immediately
+			//	because no thread currently
+			//	holds the lock
+			(count==0) ||
+			//	We can acquire recursively because
+			//	this thread currently holds the
+			//	lock
+			(
+				!this->id.IsNull() &&
+				(*(this->id)==id)
+			)
+		) {
 		
-		bool can_acquire=true;
-		
-		for (const auto & i : held)
-		if (i->Request.DoesContendWith(info->Request)) {
-		
-			can_acquire=false;
+			//	Acquire
 			
-			break;
-		
-		}
-		
-		if (can_acquire)
-		for (const auto & i : pending)
-		if (i->Request.DoesContendWith(info->Request)) {
-		
-			can_acquire=false;
-			
-			break;
-		
-		}
-		
-		if (can_acquire) {
-		
-			try {
-			
-				//	Attempt to insert into
-				//	list of held locks
-				held.Add(info);
-				
-				try {
-				
-					//	Attempt to dispatch async
-					//	callback if it exists
-					info->Wake(pool);
-				
-				} catch (...) {
-				
-					held.Delete(held.Count()-1);
-					
-					throw;
-				
-				}
-			
-			} catch (...) {
-			
-				lock.Release();
-				
-				throw;
-			
-			}
+			this->id.Construct(id);
+			++count;
 			
 			lock.Release();
+			
+			//	If this lock is asynchronous
+			//	invoke the callback at once
+			if (callback) try {
+			
+				callback(
+					//	We've already set the
+					//	thread, no need for the
+					//	callback to acquire the
+					//	lock and do so again
+					false
+				);
+				
+			//	Had this callback actually been
+			//	invoked asynchronously -- i.e.
+			//	at some time later -- the caller
+			//	would not receive exceptions from
+			//	it, so we simply eat them
+			} catch (...) {	}
 		
 		} else {
 		
+			//	Enqueue or block
+			
+			bool sync=!callback;
+			
 			try {
 			
-				//	Attempt to insert into list
-				//	of pending locks
-				pending.Add(info);
-			
+				//	Add to list of pending
+				//	tasks/threads
+				list.Add(std::move(callback));
+				
 			} catch (...) {
 			
 				lock.Release();
@@ -88,290 +74,155 @@ namespace MCPP {
 			
 			}
 			
-			lock.Release();
+			if (sync) {
 			
-			//	Wait (if necessary) for lock
-			//	to be acquired
-			info->Wait();
+				//	If synchronous, wait until
+				//	we can acquire
+			
+				while (count!=0) wait.Sleep(lock);
+				
+				//	Acquire
+				this->id.Construct(id);
+				++count;
+			
+			}
+			
+			lock.Release();
 		
 		}
 	
 	}
 	
 	
-	inline void WorldLock::release (const void * ptr) {
+	void WorldLock::Acquire () {
+	
+		acquire(std::function<void (bool)>());
+	
+	}
+	
+	
+	void WorldLock::Release () {
+	
+		auto id=Thread::ID();
 	
 		lock.Acquire();
 		
-		//	Attempt to find lock
+		if (
+			//	Is the lock held?
+			!this->id.IsNull() &&
+			//	Do we hold it?
+			(*(this->id)==id) &&
+			//	Are we releasing or just
+			//	winding back through recursively-
+			//	acquired locks?
+			((--count)==0)
+		) {
 		
-		bool found=false;
-		
-		for (Word i=0;i<held.Count();++i)
-		if (reinterpret_cast<const WorldLockInfo *>(ptr)==static_cast<WorldLockInfo *>(held[i])) {
-		
-			//	Remove the lock
-			held.Delete(i);
-		
-			found=true;
+			//	Actually releasing
 			
-			break;
-		
-		}
-		
-		//	Return if the pointer is
-		//	bogus
-		if (!found) {
-		
-			lock.Release();
-		
-			return;
+			//	Make sure we null this out,
+			//	otherwise if this thread reenters
+			//	the lock before an asynchronous
+			//	callback takes ownership of it,
+			//	two threads could have the lock
+			this->id.Destroy();
 			
-		}
-		
-		//	Attempt to acquire pending
-		//	locks
-		bool error=false;
-		for (Word i=0;i<pending.Count();) {
-		
-			bool can_acquire=true;
-		
-			//	Check with all held locks to
-			//	see if this lock contends
-			for (const auto & h : held)
-			if (h->Request.DoesContendWith(pending[i]->Request)) {
+			if (list.Count()!=0) {
 			
-				can_acquire=false;
+				//	There are waiting tasks/threads
 				
-				break;
-			
-			}
-			
-			//	Check with all preceding pending
-			//	locks to see if this lock contends
-			//	(this avoids starvation)
-			if (can_acquire)
-			for (Word n=0;n<i;++n)
-			if (pending[n]->Request.DoesContendWith(pending[i]->Request)) {
-			
-				can_acquire=false;
+				auto callback=std::move(list[0]);
+				list.Delete(0);
 				
-				break;
-			
-			}
-			
-			if (!can_acquire) {
-			
-				++i;
-				
-				continue;
-			
-			}
-			
-			//	Can acquire
-			
-			//	Remove from pending
-			auto curr=std::move(pending[i]);
-			pending.Delete(i);
-			
-			//	Attempt to add to list of
-			//	held locks
-			try {
-			
-				held.Add(curr);
-				
-				//	Attempt to awaken waiting
-				//	thread/dispatch async
-				//	callback
-				try {
-				
-					curr->Wake(pool);
-				
-				} catch (...) {
-				
-					held.Delete(held.Count()-1);
+				if (callback) {
 					
-					throw;
+					//	Dispatch an asynchronous task
+					
+					//	Acquire the lock on behalf
+					//	of the callback we're about
+					//	to dispatch
+					++count;
+					
+					try {
+					
+						pool.Enqueue(
+							std::move(callback),
+							//	We don't know which thread
+							//	will run the callback, so it
+							//	must set its own thread ID
+							//	when it begins executing
+							true
+						);
+					
+					} catch (...) {
+					
+						lock.Release();
+					
+						panic();
+						
+						throw;
+					
+					}
+					
+				} else {
+				
+					//	Release a waiting thread
+					
+					wait.Wake();
 				
 				}
-			
-			} catch (...) {
-			
-				error=true;
 			
 			}
 		
 		}
 		
 		lock.Release();
-		
-		if (error) throw std::runtime_error(release_error);
 	
 	}
 	
 	
-	void WorldLock::upgrade (
-		const void * ptr,
-		const WorldLockRequest & request,
-		Nullable<std::function<void (const void *)>> callback
-	) {
+	bool WorldLock::Transfer () noexcept {
+	
+		auto id=Thread::ID();
 	
 		lock.Acquire();
 		
-		//	Attempt to find lock
-		
-		Nullable<Word> index;
-		
-		for (Word i=0;i<held.Count();++i)
-		if (reinterpret_cast<const WorldLockInfo *>(ptr)==static_cast<WorldLockInfo *>(held[i])) {
-		
-			index=i;
-			
-			break;
-		
-		}
-		
-		//	Abort if the pointer we
-		//	were passed is garbage
-		if (index.IsNull()) {
-		
-			lock.Release();
-			
-			return;
-		
-		}
-		
-		//	Upgrade
-		try {
-		
-			held[*index]->Request.Merge(request);
-		
-		} catch (...) {
-		
-			lock.Release();
-			
-			try {
-			
-				release(ptr);
-			
-			} catch (...) {	}
-			
-			throw;
-		
-		}
-		
-		//	Set new wait method
-		if (callback.IsNull()) held[*index]->Synchronous();
-		else held[*index]->Asynchronous(std::move(*callback));
-		
-		//	Test to make sure new lock
-		//	is compatible with currently
-		//	held locks
-		
-		bool can_acquire=true;
-		
-		for (Word i=0;i<held.Count();++i)
+		bool retr=false;
+		//	Are we holding the lock?
 		if (
-			(i!=*index) &&
-			held[i]->Request.DoesContendWith(held[*index]->Request)
+			!this->id.IsNull() &&
+			(*(this->id)==id)
 		) {
 		
-			can_acquire=false;
+			//	YES, release and transfer
+			//	out
 			
-			break;
+			retr=true;
+			
+			this->id.Destroy();
+			
+			//	When we transfer out, we lose
+			//	all layers of recursion
+			count=1;
 		
 		}
 		
-		//	If we can acquire at once, fire
-		//	the callback (if necessary)
-		if (can_acquire) {
-		
-			try {
-			
-				held[*index]->Wake(pool);
-			
-			} catch (...) {
-			
-				lock.Release();
-				
-				try {
-				
-					release(ptr);
-				
-				} catch (...) {	}
-				
-				throw;
-			
-			}
-			
-			lock.Release();
-		
-		//	If we cannot acquire, put this lock
-		//	at the front of the pending queue and
-		//	wait (if necessary)
-		} else {
-		
-			auto wait=held[*index];
-		
-			try {
-			
-				pending.Insert(
-					wait,
-					0
-				);
-			
-			} catch (...) {
-			
-				lock.Release();
-				
-				try {
-				
-					release(ptr);
-				
-				} catch (...) {	}
-				
-				throw;
-			
-			}
-			
-			held.Delete(*index);
-			
-			lock.Release();
-			
-			wait->Wait();
-		
-		}
-	
-	}
-	
-	
-	const void * WorldLock::Acquire (WorldLockRequest request) {
-	
-		auto handle=SmartPointer<WorldLockInfo>::Make(std::move(request));
-		
-		const void * retr=static_cast<WorldLockInfo *>(handle);
-		
-		acquire(std::move(handle));
+		lock.Release();
 		
 		return retr;
 	
 	}
 	
 	
-	void WorldLock::Release (const void * handle) {
+	void WorldLock::Resume () noexcept {
 	
-		release(handle);
-	
-	}
-	
-	
-	void WorldLock::Upgrade (const void * handle, const WorldLockRequest & request) {
-	
-		upgrade(
-			handle,
-			request,
-			Nullable<std::function<void (const void *)>>()
-		);
+		auto id=Thread::ID();
+		
+		lock.Acquire();
+		
+		this->id.Construct(id);
+		
+		lock.Release();
 	
 	}
 

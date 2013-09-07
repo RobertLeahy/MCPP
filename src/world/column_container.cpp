@@ -6,7 +6,14 @@
 namespace MCPP {
 
 
-	ColumnContainer::ColumnContainer (ColumnID id) noexcept : id(id), target(ColumnState::Loading), sent(false) {
+	ColumnID ColumnContainer::ID () const noexcept {
+	
+		return id;
+	
+	}
+
+
+	ColumnContainer::ColumnContainer (ColumnID id) noexcept : Populated(false), id(id), target(ColumnState::Loading), sent(false), dirty(false) {
 	
 		curr=static_cast<Word>(ColumnState::Loading);
 		interest=0;
@@ -17,6 +24,12 @@ namespace MCPP {
 	bool ColumnContainer::SetState (ColumnState target, ThreadPool & pool) noexcept {
 	
 		lock.Acquire();
+		
+		//	Now dirty
+		dirty=true;
+		
+		//	Set populated flag if appropriate
+		if (target==ColumnState::Populated) Populated=true;
 		
 		//	Set state to target
 		curr=static_cast<Word>(target);
@@ -340,42 +353,54 @@ namespace MCPP {
 	}
 	
 	
-	bool ColumnContainer::AddPlayer (SmartPointer<Client> client) {
+	void ColumnContainer::AddPlayer (SmartPointer<Client> client) {
 	
-		lock.Acquire();
+		lock.Execute([&] () {
 		
-		bool retr=sent;
-		
-		try {
-		
-			if (!clients.insert(std::move(client)).second) retr=false;
-		
-		} catch (...) {
-		
-			lock.Release();
+			//	If the client is already added,
+			//	abort
+			if (!clients.insert(client).second) return;
 			
-			throw;
+			//	Send if necessary
+			if (sent) {
+			
+				try {
+				
+					client->Send(ToChunkData());
+				
+				} catch (...) {
+				
+					//	Keep it atomic by
+					//	undoing the addition
+					clients.erase(client);
+					
+					throw;
+				
+				}
+			
+			}
 		
-		}
-		
-		lock.Release();
-		
-		return retr;
+		});
 	
 	}
 	
 	
-	bool ColumnContainer::RemovePlayer (const SmartPointer<Client> & client) noexcept {
+	void ColumnContainer::RemovePlayer (SmartPointer<Client> client) {
 	
-		lock.Acquire();
+		lock.Execute([&] () {
 		
-		bool retr=sent;
+			//	Send only if:
+			//
+			//	A.	The client had been added
+			//		to this column.
+			//	B.	This column had been sent
+			//		to clients
+			if (
+				(clients.erase(client)!=0) &&
+				sent
+			) client->Send(GetUnload());
 		
-		if (clients.erase(client)==0) retr=false;
-		
-		lock.Release();
-		
-		return retr;
+		});
 	
 	}
 	
@@ -396,28 +421,7 @@ namespace MCPP {
 	
 	bool ColumnContainer::CanUnload () const noexcept {
 	
-		lock.Acquire();
-		
-		bool retr=(clients.size()==0) && (interest==0);
-		
-		lock.Release();
-		
-		return retr;
-	
-	}
-	
-	
-	Tuple<const Byte *,Word> ColumnContainer::Get () const noexcept {
-	
-		return Tuple<const Byte *,Word>(
-			reinterpret_cast<const Byte *>(this),
-			//	Size of Blocks field
-			(16*16*16*16*sizeof(Block))+
-			//	Size of Biomes field
-			(16*16*sizeof(Byte))+
-			//	Size of Populated field
-			sizeof(bool)
-		);
+		return (clients.size()==0) && (interest==0);
 	
 	}
 	
@@ -694,6 +698,106 @@ namespace MCPP {
 		buffer.SetCount(final_size);
 		
 		return buffer;
+	
+	}
+	
+	
+	void ColumnContainer::SetBlock (BlockID id, Block block) {
+	
+		//	Get offset within this column
+		auto offset=id.GetOffset();
+		
+		//	Prepare a packet
+		typedef PacketTypeMap<0x35> pt;
+		Packet packet;
+		packet.SetType<pt>();
+		packet.Retrieve<pt,0>()=id.X;
+		packet.Retrieve<pt,1>()=id.Y;
+		packet.Retrieve<pt,2>()=id.Z;
+		packet.Retrieve<pt,3>()=block.GetType();
+		packet.Retrieve<pt,4>()=block.GetMetadata();
+		
+		lock.Execute([&] () {
+		
+			//	Assign block
+			Blocks[offset]=block;
+			
+			//	Now dirty
+			dirty=true;
+			
+			//	If we've sent this column to players,
+			//	send a packet
+			if (sent) for (auto & client : clients) const_cast<SmartPointer<Client> &>(client)->Send(packet);
+		
+		});
+	
+	}
+	
+	
+	Block ColumnContainer::GetBlock (BlockID id) const noexcept {
+	
+		//	Get offset within this column
+		auto offset=id.GetOffset();
+		
+		//	Retrieve the appropriate block
+		return lock.Execute([&] () {	return Blocks[offset];	});
+	
+	}
+	
+	
+	void ColumnContainer::Acquire () const noexcept {
+	
+		lock.Acquire();
+	
+	}
+	
+	
+	void ColumnContainer::Release () const noexcept {
+	
+		lock.Release();
+	
+	}
+	
+	
+	bool ColumnContainer::Dirty () const noexcept {
+	
+		return dirty;
+	
+	}
+	
+	
+	void ColumnContainer::CompleteSave () noexcept {
+	
+		dirty=false;
+	
+	}
+	
+	
+	static const String to_str_temp("X={0}, Z={1}, Dimension={2}");
+	
+	
+	String ColumnContainer::ToString () const {
+	
+		return String::Format(
+			to_str_temp,
+			id.X,
+			id.Z,
+			id.Dimension
+		);
+	
+	}
+	
+	
+	Word ColumnContainer::Size () const noexcept {
+	
+		return sizeof(Biomes)+sizeof(Blocks)+sizeof(Populated);
+	
+	}
+	
+	
+	void * ColumnContainer::Get () noexcept {
+	
+		return this;
 	
 	}
 

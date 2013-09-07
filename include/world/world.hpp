@@ -474,6 +474,18 @@ namespace MCPP {
 			
 			
 			/**
+			 *	Retrieves the block's offset within
+			 *	its containing column.
+			 *
+			 *	\return
+			 *		The rank of this block within
+			 *		the contiguous memory of its
+			 *		column.
+			 */
+			Word GetOffset () const noexcept;
+			
+			
+			/**
 			 *	Checks to see if a certain column
 			 *	contains this block.
 			 *
@@ -488,6 +500,76 @@ namespace MCPP {
 	
 	
 	};
+	
+	
+}
+
+
+/**
+ *	\cond
+ */
+ 
+ 
+namespace std {
+
+
+	template <>
+	struct hash<BlockID> {
+	
+	
+		public:
+		
+		
+			size_t operator () (const BlockID & subject) const noexcept {
+			
+				union {
+					UInt32 u_x;
+					Int32 x;
+				};
+				
+				x=subject.X;
+				
+				union {
+					UInt32 u_z;
+					Int32 z;
+				};
+				
+				z=subject.Z;
+				
+				union {
+					Byte u_d;
+					SByte d;
+				};
+				
+				d=subject.Dimension;
+				
+				size_t retr=23;
+				retr*=31;
+				retr+=u_x;
+				retr*=31;
+				retr+=subject.Y;
+				retr*=31;
+				retr+=u_z;
+				retr*=31;
+				retr+=u_d;
+				
+				return retr;
+			
+			}
+	
+	
+	};
+
+
+}
+
+
+/**
+ *	\endcond
+ */
+ 
+ 
+namespace MCPP {
 	
 	
 	/**
@@ -559,6 +641,8 @@ namespace MCPP {
 			bool Populated;
 			
 			
+			//	Retrieves the ID of this column
+			ColumnID ID () const noexcept;
 			//	Retrieves a 0x33 packet which represents
 			//	the contained column
 			Vector<Byte> ToChunkData () const;
@@ -610,24 +694,13 @@ namespace MCPP {
 			//	Sends the column to all currently
 			//	added clients
 			//
-			//	Should be called with an exclusive lock
-			//	on this column (or the entire world) immediately
-			//	after calling SetState and setting the
-			//	column's state to Populated.
+			//	Should be called once the column becomes
+			//	populated
 			void Send ();
 			//	Adds a player to this column.
-			//
-			//	If true is returned an exclusive lock
-			//	on the column should be acquired and
-			//	the column data should be sent to
-			//	this client, otherwise the data will
-			//	be sent at some point in the future.
-			bool AddPlayer (SmartPointer<Client>);
+			void AddPlayer (SmartPointer<Client>);
 			//	Removes a player from this column.
-			//
-			//	If true is returned the client should
-			//	have this column unloaded.
-			bool RemovePlayer (const SmartPointer<Client> &) noexcept;
+			void RemovePlayer (SmartPointer<Client>);
 			//	Expresses "interest" in the column.
 			//
 			//	So longer as interest has been expressed
@@ -640,17 +713,43 @@ namespace MCPP {
 			//
 			//	Only columns with no associated players and
 			//	no interest can be unloaded.
+			//
+			//	Not thread safe.
 			bool CanUnload () const noexcept;
-			//	Gets a pointer through which the column may
-			//	be saved alongside the size of the area
-			//	that pointer points to (in bytes).
-			Tuple<const Byte *,Word> Get () const noexcept;
+			//	Sets a block within this column, sending
+			//	the appropriate packet
+			void SetBlock (BlockID, Block);
+			//	Gets a block within this column
+			Block GetBlock (BlockID) const noexcept;
+			//	Acquires the column's internal lock
+			void Acquire () const noexcept;
+			//	Release the column's internal lock
+			void Release () const noexcept;
+			//	Determines whether or not the column
+			//	is "dirty".
+			//
+			//	Not thread safe
+			bool Dirty () const noexcept;
+			//	Completes a save operation by
+			//	clearing the "dirty" flag.
+			//
+			//	Not thread safe.
+			void CompleteSave () noexcept;
+			//	Gets a string which represents
+			//	the co-ordinates of this column
+			String ToString () const;
+			//	Gets the size of the area of this
+			//	column which should be saved
+			Word Size () const noexcept;
+			//	Gets a pointer through which this
+			//	column may be loaded or saved
+			void * Get () noexcept;
 			
 			
 		private:
 		
 		
-			//	The column's ID -- it's X and Z
+			//	The column's ID -- its X and Z
 			//	coordinates and the dimension in
 			//	which it resides
 			ColumnID id;
@@ -685,6 +784,9 @@ namespace MCPP {
 			//	Whether column data has been sent
 			//	to clients or not
 			bool sent;
+			//	Whether this column has been modified
+			//	since it was last saved
+			bool dirty;
 		
 	
 	};
@@ -719,410 +821,146 @@ namespace MCPP {
 	#pragma GCC diagnostic pop
 	
 	
-	/**
-	 *	\endcond
-	 */
-	
-	
-	/**
-	 *	Represents a request for exclusive
-	 *	access to certain elements of the
-	 *	world.
-	 */
-	class WorldLockRequest {
-	
-	
-		private:
-		
-		
-			bool world;
-			Vector<BlockID> blocks;
-			Vector<ColumnID> columns;
-			
-			
-		public:
-		
-		
-			/**
-			 *	Creates a new world lock
-			 *	request which requests
-			 *	exclusive access to the
-			 *	entire world.
-			 */
-			WorldLockRequest () noexcept;
-			/**
-			 *	Creates a new world lock
-			 *	request which requests
-			 *	exclusive access to a certain
-			 *	block.
-			 *
-			 *	\param [in] block
-			 *		The block to which exclusive
-			 *		access is desired.
-			 */
-			WorldLockRequest (BlockID block);
-			/**
-			 *	Creates a new world lock
-			 *	request which requests
-			 *	exclusive access to a certain
-			 *	column.
-			 *
-			 *	\param [in] column
-			 *		The column to which exclusive
-			 *		access is desired.
-			 */
-			WorldLockRequest (ColumnID column);
-			/**
-			 *	Creates a new world lock request
-			 *	which requests exclusive access
-			 *	to certain blocks.
-			 *
-			 *	\param [in] blocks
-			 *		The blocks to which exclusive
-			 *		access is desired.
-			 */
-			WorldLockRequest (Vector<BlockID> blocks) noexcept;
-			/**
-			 *	Creates a new world lock request
-			 *	which requests exclusive access to
-			 *	certain columns.
-			 *
-			 *	\param [in] columns
-			 *		The columns to which exclusive
-			 *		access is desired.
-			 */
-			WorldLockRequest (Vector<ColumnID> columns) noexcept;
-			
-			
-			/**
-			 *	Determines whether or not this
-			 *	lock request is empty, i.e.\ whether
-			 *	or not it does not request a lock
-			 *	on anything.
-			 *
-			 *	\return
-			 *		\em true if this lock does not
-			 *		request exclusive access to any
-			 *		elements of the world, \em false
-			 *		otherwise.
-			 */
-			bool IsEmpty () const noexcept;
-			/**
-			 *	Determines whether or not this lock
-			 *	request contends with some other
-			 *	lock request, i.e.\ whether or not
-			 *	both of them can be held simultaneously.
-			 *
-			 *	\return
-			 *		\em false if the locks contend,
-			 *		i.e.\ may not be held simultaneously.
-			 *		\em true otherwise.
-			 */
-			bool DoesContendWith (const WorldLockRequest & other) const noexcept;
-			
-			
-			/**
-			 *	Adds a block to the world lock
-			 *	request.
-			 *
-			 *	\param [in] block
-			 *		The block to add.
-			 *
-			 *	\return
-			 *		A reference to this object.
-			 */
-			WorldLockRequest & Add (BlockID block);
-			/**
-			 *	Adds a column to the world lock
-			 *	request.
-			 *
-			 *	\param [in] column
-			 *		The column to add.
-			 *
-			 *	\return
-			 *		A reference to this object.
-			 */
-			WorldLockRequest & Add (ColumnID column);
-			/**
-			 *	Merges two lock requests so that this
-			 *	lock request requests exclusive access
-			 *	to all resources it originally requested,
-			 *	in addition to the resources requested by
-			 *	\em other.
-			 *
-			 *	\param [in] other
-			 *		The request with which to merge this
-			 *		request.
-			 *
-			 *	\return
-			 *		A reference to this object.
-			 */
-			WorldLockRequest & Merge (const WorldLockRequest & other);
-	
-	
-	};
-	
-	
-	/**
-	 *	\cond
-	 */
-	
-	
-	class WorldLockInfo {
-	
-	
-		private:
-		
-		
-			Mutex lock;
-			CondVar wait;
-			bool sync;
-			bool wake;
-			std::function<void (const void *)> callback;
+	template <typename T>
+	class bind_wrapper {
 	
 	
 		public:
 		
 		
-			WorldLockRequest Request;
+			T bound;
 			
 			
-			WorldLockInfo () = delete;
-			WorldLockInfo (WorldLockRequest) noexcept;
-			WorldLockInfo (std::function<void (const void *)>, WorldLockRequest) noexcept;
+			template <typename... Args>
+			void operator () (Args &&... args) const noexcept(noexcept(bound(std::forward<Args>(args)...))) {
 			
+				bound(std::forward<Args>(args)...);
 			
-			void Asynchronous (std::function<void (const void *)>) noexcept;
-			void Synchronous () noexcept;
-			void Wait () noexcept;
-			void Wake (ThreadPool &);
+			}
 	
 	
 	};
-	
-	
-	/**
-	 *	\endcond
-	 */
 	 
-	
-	/**
-	 *	Provides granular, fair, upgradeable
-	 *	locking on the Minecraft world.
-	 */
+	 
 	class WorldLock {
 	
 	
 		private:
 		
 		
-			ThreadPool & pool;
-		
-		
+			//	ID of the thread that currently
+			//	holds the lock
+			Nullable<decltype(Thread::ID())> id;
+			//	Recursion count, if zero
+			//	the lock is not held
+			Word count;
+			//	Guards against unsynchronized
+			//	access
 			Mutex lock;
-			Vector<SmartPointer<WorldLockInfo>> held;
-			Vector<SmartPointer<WorldLockInfo>> pending;
+			//	Synchronous calls wait here
+			CondVar wait;
+			//	Asynchronous calls are stored
+			//	here.  The lock decides whether
+			//	to wake the condvar or dispatch
+			//	an asynchronous callback by
+			//	checking for empty callbacks,
+			//	which denote that a synchronous
+			//	call was next in line
+			Vector<std::function<void (bool)>> list;
+			//	The thread pool that shall be
+			//	used for asynchronous callbacks
+			ThreadPool & pool;
+			//	The panic callback
+			std::function<void ()> panic;
 			
 			
-			void acquire (SmartPointer<WorldLockInfo>);
-			inline void release (const void *);
-			void upgrade (const void *, const WorldLockRequest &, Nullable<std::function<void (const void *)>>);
+			void acquire (std::function<void (bool)>);
 			
 			
 		public:
-		
-		
+			
+			
 			WorldLock () = delete;
-			/**
-			 *	Creates a new WorldLock.
-			 *
-			 *	\param [in] pool
-			 *		The thread pool that the
-			 *		WorldLock will use for
-			 *		asynchronous callbacks.
-			 */
-			WorldLock (ThreadPool & pool) noexcept;
+			WorldLock (
+				ThreadPool & pool,
+				std::function<void ()> panic
+			) noexcept;
 			
 			
-			/**
-			 *	Enqueues an asynchronous callback
-			 *	to be executed as soon as a certain
-			 *	set of resources are available for
-			 *	exclusive access.
-			 *
-			 *	The asynchronous callback is passed
-			 *	a <em>const void *</em> handle representing
-			 *	the lock it holds as its first parameter,
-			 *	and then any supplied arguments after that
-			 *	in the same order they were provided.
-			 *
-			 *	\tparam T
-			 *		The type of callback to invoke.
-			 *	\tparam Args
-			 *		The types of arguments to forward
-			 *		through to the callback.
-			 *
-			 *	\param [in] request
-			 *		A request detailing the resources
-			 *		to which exclusive access is desired.
-			 *	\param [in] callback
-			 *		The asynchronous callback which shall
-			 *		be invoked when the resources detailed
-			 *		by \em request are available.
-			 *	\param [in] args
-			 *		The parameters which shall be forwarded
-			 *		through to \em callback.
-			 */
+			void Acquire ();
 			template <typename T, typename... Args>
-			void Enqueue (WorldLockRequest request, T && callback, Args &&... args) {
+			void Acquire (T && callback, Args &&... args) {
 			
+				auto bound=std::bind(
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
+				);
+				
+				//	If you try and bind bound
+				//	expressions into a new bound
+				//	expression weird stuff happens,
+				//	so I just make this garbage
+				//	intermediary object.
+				//
+				//	If we had capture-by-move
+				//	this wouldn't be an issue,
+				//	but we'll have to wait for C++14
+				//	for that...
+				bind_wrapper<decltype(bound)> wrapped{std::move(bound)};
+				
 				acquire(
-					SmartPointer<WorldLockInfo>::Make(
-						std::bind(
-							std::forward<T>(callback),
-							std::placeholders::_1,
-							std::forward<Args>(args)...
-						),
-						std::move(request)
+					std::bind(
+						[this] (decltype(wrapped) callback, bool set_thread) mutable {
+						
+							if (set_thread) {
+							
+								lock.Acquire();
+								id.Construct(Thread::ID());
+								lock.Release();
+							
+							}
+							
+							try {
+							
+								callback();
+							
+							} catch (...) {	}
+							
+							try {
+							
+								Release();
+							
+							} catch (...) {	}
+						
+						},
+						std::move(wrapped),
+						std::placeholders::_1
 					)
 				);
 			
 			}
-			/**
-			 *	Enqueues an asynchronous callback to be
-			 *	executed as soon as the lock specified
-			 *	by \em handle can be upgraded to include
-			 *	a certain set of resources in addition
-			 *	to the resources the lock already holds.
-			 *
-			 *	The asynchronous callback is passed a
-			 *	<em>const void *</em> handle representing
-			 *	the lock it holds as its first parameter,
-			 *	and then any supplied arguments after that
-			 *	in the same order they were provided.
-			 *
-			 *	\tparam T
-			 *		The type of callback to invoke.
-			 *	\tparam Args
-			 *		The types of arguments to forward
-			 *		through to the callback.
-			 *
-			 *	\param [in] handle
-			 *		A handle representing a currently
-			 *		held lock.  Passing a handle that
-			 *		does not represent a currently held
-			 *		lock results in undefined behaviour.
-			 *		This handle should not be used by
-			 *		the caller after this method completes,
-			 *		doing so results in undefined behaviour.
-			 *	\param [in] request
-			 *		A request detailing the resources
-			 *		to which exclusive access is desired.
-			 *		When \em callback is invoked the lock
-			 *		shall have exclusive access to these
-			 *		resources in addition to any resources
-			 *		the lock currently has exclusive access
-			 *		to.
-			 *	\param [in] callback
-			 *		The asynchronous callback which shall be
-			 *		invoked when the resources detailed by
-			 *		\em request are available.
-			 *	\param [in] args
-			 *		The parameters which shall be forwarded
-			 *		through to \em callback.
-			 */
-			template <typename T, typename... Args>
-			void Upgrade (
-				const void * handle,
-				const WorldLockRequest & request,
-				T && callback,
-				Args &&... args
-			) {
-			
-				upgrade(
-					handle,
-					request,
-					std::function<void (const void *)>(
-						std::bind(
-							std::forward<T>(callback),
-							std::placeholders::_1,
-							std::forward<Args>(args)...
-						)
-					)
-				);
-			
-			}
-			/**
-			 *	Blocks until a given lock can be upgraded
-			 *	to include a certain set of resources in
-			 *	addition to the resources the lock already
-			 *	holds.
-			 *
-			 *	After this call returns \em handle may
-			 *	continue to be used to control the held
-			 *	lock.
-			 *
-			 *	\param [in] handle
-			 *		A handle representing a currently
-			 *		held lock.  Passing a handle that
-			 *		does not represent a currently held
-			 *		lock results in undefined behaviour.
-			 *		This handle should not be used by
-			 *		the caller after this method completes,
-			 *		doing so results in undefined behaviour.
-			 *	\param [in] request
-			 *		A request detailing the resources
-			 *		to which exclusive access is desired.
-			 *		When this function returns the caller
-			 *		shall have exclusive access to these
-			 *		resources in addition to any resources
-			 *		the lock currently has exclusive access
-			 *		to.
-			 */
-			void Upgrade (const void * handle, const WorldLockRequest & request);
-			/**
-			 *	Blocks until exclusive access to a certain
-			 *	set of resources can be acquired.
-			 *
-			 *	\param [in] request
-			 *		A request detailing the resources to
-			 *		which exclusive access is desired.
-			 *		When this function returns the caller
-			 *		shall have exclusive access to these
-			 *		resources.
-			 *
-			 *	\return
-			 *		An opaque handle which may be used to
-			 *		manipulate the acquired lock.
-			 */
-			const void * Acquire (WorldLockRequest request);
-			/**
-			 *	Releases a lock.
-			 *
-			 *	\param [in] handle
-			 *		The handle representing the lock which
-			 *		is to be released.  Passing a handle which
-			 *		does not represent a currently held lock
-			 *		results in undefined behaviour. Continuing
-			 *		to use this handle after this function
-			 *		returns results in undefined behaviour.
-			 */
-			void Release (const void * handle);
+			void Release ();
+			bool Transfer () noexcept;
+			void Resume () noexcept;
 	
 	
 	};
 	
 	
 	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
 	 *	Provides an interface through which a
 	 *	world generator may be accessed.
 	 *
-	 *	A "world generator" is a pair of a
-	 *	block generator, which places individual
-	 *	blocks when given a block ID, and a
-	 *	biome generator, which returns a biome
-	 *	value when given an X,Z coordinate
-	 *	pair.
+	 *	A "world generator" encapsulates the
+	 *	concept of a block generator, which accepts
+	 *	a set of input coordinates and yields a block,
+	 *	and a "biome generator", which takes a set
+	 *	of input coordinates and yields a biome.
 	 */
 	class WorldGenerator {
 	
@@ -1131,56 +969,8 @@ namespace MCPP {
 		
 		
 			/**
-			 *	The type of a block generator callback.
-			 */
-			typedef std::function<Block (const BlockID &)> Generator;
-			/**
-			 *	The type of a biome generator callback.
-			 */
-			typedef std::function<Byte (Int32, Int32, SByte)> BiomeGenerator;
-	
-	
-		private:
-		
-		
-			Generator generator;
-			BiomeGenerator biome_generator;
-		
-		
-		public:
-		
-		
-			/**
-			 *	Creates a new WorldGenerator.
-			 *
-			 *	\param [in] generator
-			 *		The block generator.
-			 *	\param [in] biome_generator
-			 *		The biome generator.
-			 */
-			WorldGenerator (Generator generator, BiomeGenerator biome_generator) noexcept;
-			
-			
-			WorldGenerator () = default;
-			WorldGenerator (WorldGenerator &&) = default;
-			WorldGenerator (const WorldGenerator &) = default;
-			WorldGenerator & operator = (WorldGenerator &&) = default;
-			WorldGenerator & operator = (const WorldGenerator &) = default;
-			
-			
-			/**
-			 *	Determines whether this object
-			 *	contains a valid block
-			 *	generator/biome generator pair.
-			 *
-			 *	\return
-			 *		\em true if this object contains
-			 *		two invocable targets, \em false
-			 *		otherwise.
-			 */
-			operator bool () const noexcept;
-			/**
-			 *	Invokes the block generator.
+			 *	When overriden in a derived class,
+			 *	invokes the block generator.
 			 *
 			 *	\param [in] id
 			 *		The ID of the block which shall
@@ -1189,9 +979,10 @@ namespace MCPP {
 			 *	\return
 			 *		The block given by \em id.
 			 */
-			Block operator () (const BlockID & id) const;
+			virtual Block operator () (const BlockID & id) const = 0;
 			/**
-			 *	Invokes the biome generator.
+			 *	When overriden in a derived class,
+			 *	invokes the biome generator.
 			 *
 			 *	\param [in] x
 			 *		The x-coordinate of the
@@ -1208,7 +999,7 @@ namespace MCPP {
 			 *		of the column specified by
 			 *		\em x, \em z.
 			 */
-			Byte operator () (Int32 x, Int32 z, SByte dimension) const;
+			virtual Byte operator () (Int32 x, Int32 z, SByte dimension) const = 0;
 	
 	
 	};
@@ -1218,10 +1009,16 @@ namespace MCPP {
 	 *	Contains and manages the Minecraft world
 	 *	as a collection of columns.
 	 */
-	class WorldContainer {
+	class WorldContainer : public Module {
 	
 	
 		private:
+		
+		
+			//	The key that all components shall
+			//	use to determine whether or not they
+			//	perform verbose logging
+			static const String verbose;
 		
 		
 			//	SETTINGS
@@ -1230,6 +1027,46 @@ namespace MCPP {
 			String type;
 			//	The world seed
 			UInt64 seed;
+			//	How often (in milliseconds)
+			//	maintenance should be performed
+			Word maintenance_interval;
+			
+			
+			//	STATISTICS
+			
+			//	Number of times maintenance has
+			//	been performed
+			std::atomic<Word> maintenances;
+			//	Number of nanoseconds that have been
+			//	spent in maintenance
+			std::atomic<UInt64> maintenance_time;
+			//	Number of columns that have been
+			//	unloaded
+			std::atomic<Word> unloaded;
+			//	Number of columns that have been
+			//	loaded
+			std::atomic<Word> loaded;
+			//	Number of nanoseconds spent loading
+			//	columns
+			std::atomic<UInt64> load_time;
+			//	Number of times a column has been
+			//	saved
+			std::atomic<Word> saved;
+			//	Number of nanoseconds spent saving
+			//	columns
+			std::atomic<UInt64> save_time;
+			//	Number of times a column has been
+			//	generated
+			std::atomic<Word> generated;
+			//	Number of nanoseconds spent generating
+			//	columns
+			std::atomic<UInt64> generate_time;
+			//	Number of times a column has been
+			//	populated
+			std::atomic<Word> populated;
+			//	Number of nanoseconds spent populating
+			//	columns
+			std::atomic<UInt64> populate_time;
 		
 		
 			//	Contains loaded world generators
@@ -1238,18 +1075,67 @@ namespace MCPP {
 					String,
 					SByte
 				>,
-				WorldGenerator
+				const WorldGenerator *
 			> generators;
 			std::unordered_map<
 				SByte,
-				WorldGenerator
+				const WorldGenerator *
 			> default_generators;
+			
+			
+			//	Contains loaded world populators
+			std::unordered_map<
+				SByte,
+				Vector<std::function<void (ColumnID)>>
+			> populators;
+			
+			
+			//	Contains the world
+			std::unordered_map<
+				ColumnID,
+				SmartPointer<ColumnContainer>
+			> world;
+			Mutex lock;
+			
+			
+			//	World lock
+			Nullable<WorldLock> wlock;
+			
+			
+			//	Which threads are currently
+			//	populating?
+			std::unordered_set<
+				decltype(Thread::ID())
+			> populating;
+			mutable RWLock populating_lock;
 		
 		
 			//	PRIVATE METHODS
 			
+			//	WORLD PROCESSING
+			
 			//	Generates a column
-			void generate (ColumnContainer &, const ColumnID &) const;
+			void generate (ColumnContainer &);
+			//	Processes a column up until
+			//	a certain satisfactory point
+			void process (ColumnContainer &);
+			//	Loads a column from the backing
+			//	store (or attempts to).
+			//
+			//	Returns the state the column is
+			//	in after being loaded.
+			ColumnState load (ColumnContainer &);
+			//	Populates a column
+			void populate (ColumnContainer &);
+			//	Does maintenance work -- scans and
+			//	saves all columns, unloads columns
+			//	that are inactive.
+			//
+			//	Should be invoked periodically.
+			void maintenance ();
+			
+			//	GET/SET
+			
 			//	Fetches a generator for a given
 			//	dimension
 			const WorldGenerator & get_generator (SByte) const;
@@ -1257,16 +1143,176 @@ namespace MCPP {
 			//	or to a randomly-generated number if the
 			//	string is null
 			void set_seed (Nullable<String>);
+			//	Retrieves a column, creating it if it
+			//	doesn't exist
+			SmartPointer<ColumnContainer> get_column (ColumnID);
+			
+			//	EVENT HANDLING
+			
+			//	Determines whether a given block can
+			//	replace another block at a given set
+			//	of coordinates
+			bool can_set (BlockID, Block, Block) noexcept;
+			//	Fires the event for a given block replacing
+			//	another block at a given set of coordinates
+			void on_set (BlockID, Block, Block);
+			//	Initializes all event arrays be default
+			//	constructing them
+			void init_events () noexcept;
+			//	Destroys all event arrays
+			void destroy_events () noexcept;
+			
+			//	IS POPULATING?
+			
+			bool is_populating () const noexcept;
+			inline void start_populating ();
+			inline void stop_populating () noexcept;
+			
+			//	MISC
+
+			//	Retrieves the key that will be associated
+			//	with a given column in the backing
+			//	store
+			String key (ColumnID) const;
+			String key (const ColumnContainer &) const;
 		
 		
 		public:
 		
 		
-			void Add (WorldGenerator generator, SByte dimension);
-			void Add (WorldGenerator generator, String type, SByte dimension);
+			//	EVENTS
+		
+		
+			Event<void (BlockID, Block, Block)> OnSet;
+			Event<void (BlockID, Block, Block)> OnReplace [4096];
+			Event<void (BlockID, Block, Block)> OnPlace [4096];
+			
+			
+			Event<bool (BlockID, Block, Block)> CanSet;
+			Event<bool (BlockID, Block, Block)> CanReplace [4096];
+			Event<bool (BlockID, Block, Block)> CanPlace [4096];
+		
+		
+			WorldContainer ();
+			~WorldContainer () noexcept;
+			virtual const String & Name () const noexcept override;
+			virtual Word Priority () const noexcept override;
+			virtual void Install () override;
+		
+		
+			void Add (const WorldGenerator * generator, SByte dimension);
+			void Add (const WorldGenerator * generator, String type, SByte dimension);
+			
+			
+			void Begin ();
+			template <typename T, typename... Args>
+			void Begin (T && callback, Args &&... args) {
+			
+				//	Acquire asynchronously
+				wlock->Acquire(
+					std::forward<T>(callback),
+					std::forward<Args>(callback)...
+				);
+			
+			}
+			void End ();
+			
+			
+			Block GetBlock (BlockID id);
+			template <typename T, typename... Args>
+			void GetBlock (BlockID id, T && callback, Args &&... args) {
+			
+				auto bound=std::bind(
+					std::forward<T>(callback),
+					std::placeholders::_1,
+					std::placeholders::_2,
+					std::forward<Args>(args)...
+				);
+				
+				//	Work around limitations of binding
+				//	bound functions
+				bind_wrapper<decltype(bound)> wrapper{std::move(bound)};
+				
+				//	Get the column the desired block resides
+				//	in
+				auto column=get_column(id.GetContaining());
+				
+				//	If this thread holds a lock,
+				//	we need to move it, unless
+				//	this thread is populating, in
+				//	which case it needs to keep
+				//	its lock
+				bool resume=!is_populating() && wlock->Transfer();
+				
+				try {
+				
+					if (!(
+						//	Enqueue
+						column->InvokeWhen(
+							ColumnState::Populated,
+							std::bind(
+								[this,resume] (BlockID id, decltype(column) column, decltype(wrapper) callback) mutable {
+									
+									if (resume) wlock->Resume();
+									
+									try {
+									
+										callback(
+											id,
+											column->GetBlock(id)
+										);
+									
+									} catch (...) {	}
+									
+									//	Don't leak interest
+									column->EndInterest();
+									//	Don't leak lock
+									if (resume) try {
+									
+										wlock->Release();
+										
+									} catch (...) {	}
+									
+								},
+								id,
+								column,
+								std::move(wrapper)
+							)
+						) ||
+						//	If we're populating, we'll
+						//	end up at ColumnState::Populated
+						//	anyway, so don't process
+						is_populating()
+					)) process(*column);
+				
+				} catch (...) {
+				
+					column->EndInterest();
+					
+					//	Make sure the lock gets
+					//	restored
+					if (resume) wlock->Resume();
+					
+					throw;
+				
+				}
+				
+				//	We don't release interest here,
+				//	it's done inside the callback
+			
+			}
+			
+			
+			bool SetBlock (BlockID id, Block block);
 	
 	
 	};
+	
+	
+	/**
+	 *	The single valid instance of WorldContainer.
+	 */
+	extern Nullable<WorldContainer> World;
 	 
 
 }

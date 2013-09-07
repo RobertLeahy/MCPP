@@ -4,7 +4,9 @@
 namespace MCPP {
 
 
-	void WorldContainer::generate (ColumnContainer & column, const ColumnID & id) const {
+	void WorldContainer::generate (ColumnContainer & column) {
+	
+		auto id=column.ID();
 	
 		//	Get the appropriate world generator
 		const WorldGenerator & generator=get_generator(id.Dimension);
@@ -21,9 +23,9 @@ namespace MCPP {
 		//	This block will be passed through
 		//	to the generator
 		BlockID block{
-			start_x,
 			0,
-			start_z,
+			0,
+			0,
 			id.Dimension
 		};
 		
@@ -35,26 +37,31 @@ namespace MCPP {
 		//	Iterate for each block in the column
 		//	and set it using the block generator
 		for (
-			offset=0;
-			block.X<=end_x;
-			++block.X
-		) for (
-			block.Z=start_z;
-			block.Z<=end_z;
-			++block.Z
-		) for (
-			block.Y=0;
+			offset=0,block.Y=0;
 			;
 			++block.Y
 		) {
 		
-			//	Invoke the generator
-			column.Blocks[offset++]=generator(block);
+			for (
+				block.Z=start_z;
+				block.Z<=end_z;
+				++block.Z
+			)
+			for (
+				block.X=start_x;
+				block.X<=end_x;
+				++block.X
+			) {
 			
+				//	Invoke the generator
+				column.Blocks[offset++]=generator(block);
+			
+			}
+		
 			//	Break condition (can't be
-			//	checked in the for loop
-			//	due to limited range of
-			//	byte type)
+			//	checked in the for loop due
+			//	to limited range of byte
+			//	type)
 			if (block.Y==255) break;
 		
 		}

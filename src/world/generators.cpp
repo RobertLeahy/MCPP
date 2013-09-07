@@ -24,14 +24,18 @@ namespace MCPP {
 	static const ASCIIChar * gen_not_found="No such world generator";
 
 
-	void WorldContainer::Add (WorldGenerator generator, SByte dimension) {
+	void WorldContainer::Add (const WorldGenerator * generator, SByte dimension) {
+	
+		if (generator==nullptr) return;
 	
 		default_generators[dimension]=std::move(generator);
 	
 	}
 	
 	
-	void WorldContainer::Add (WorldGenerator generator, String type, SByte dimension) {
+	void WorldContainer::Add (const WorldGenerator * generator, String type, SByte dimension) {
+	
+		if (generator==nullptr) return;
 	
 		generators[
 			Tuple<String,SByte>(
@@ -58,11 +62,11 @@ namespace MCPP {
 			
 			if (default_iter==default_generators.end()) throw std::runtime_error(gen_not_found);
 			
-			return default_iter->second;
+			return *(default_iter->second);
 		
 		}
 		
-		return iter->second;
+		return *(iter->second);
 	
 	}
 
