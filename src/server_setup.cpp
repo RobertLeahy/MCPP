@@ -4,6 +4,9 @@ static const String startup_prepend("Startup: ");
 
 inline void Server::server_startup () {
 
+	//	Get a data provider
+	data=DataProvider::GetDataProvider();
+
 	//	Log callback for components
 	MCPP::LogType log(
 		[=] (const String & message, Service::LogType type) -> void {	WriteLog(message,type);	}
@@ -33,9 +36,6 @@ inline void Server::server_startup () {
 	Clients.Clear();
 	//	Clear routes for same reason
 	Router.Clear();
-
-	//	Get a data provider
-	data=DataProvider::GetDataProvider();
 	
 	//	Grab settings
 	

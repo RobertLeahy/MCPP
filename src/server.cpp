@@ -245,6 +245,8 @@ namespace MCPP {
 					
 					cleanup_events();
 					
+					mods.Destroy();
+					
 					throw;
 				
 				}
@@ -330,6 +332,9 @@ namespace MCPP {
 			//	that might have module resources
 			//	loaded into them
 			cleanup_events();
+			
+			//	Kill all modules
+			mods.Destroy();
 			
 			//	Clean up data provider
 			delete data;
