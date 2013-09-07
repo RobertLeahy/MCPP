@@ -38,6 +38,9 @@ namespace MCPP {
 			 *	Checks to see if a given user is
 			 *	permitted to execute a command.
 			 *
+			 *	Default implementation allows every
+			 *	user to execute a command.
+			 *
 			 *	\param [in] client
 			 *		The client to check.
 			 *
@@ -46,7 +49,7 @@ namespace MCPP {
 			 *		to execute this command, \em false
 			 *		otherwise.
 			 */
-			virtual bool Check (SmartPointer<Client> client) const = 0;
+			virtual bool Check (SmartPointer<Client> client) const;
 			/**
 			 *	Retrieves a summary of this command's
 			 *	functionality.
@@ -71,6 +74,8 @@ namespace MCPP {
 			 *	Retrieves possible autocompletions
 			 *	for this command.
 			 *
+			 *	Default implementation is no autocompletes.
+			 *
 			 *	\param [in] args
 			 *		A string containing the arguments
 			 *		to autocomplete.
@@ -80,7 +85,7 @@ namespace MCPP {
 			 *		possible autocompletions for the
 			 *		last word in \em args.
 			 */
-			virtual Vector<String> AutoComplete (const String & args) const = 0;
+			virtual Vector<String> AutoComplete (const String & args) const;
 			/**
 			 *	Executes a command.
 			 *

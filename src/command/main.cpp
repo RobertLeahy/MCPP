@@ -449,6 +449,20 @@ namespace MCPP {
 	
 	
 	Nullable<CommandModule> Commands;
+	
+	
+	bool Command::Check (SmartPointer<Client>) const {
+	
+		return true;
+	
+	}
+	
+	
+	Vector<String> Command::AutoComplete (const String &) const {
+	
+		return Vector<String>();
+	
+	}
 
 
 }
