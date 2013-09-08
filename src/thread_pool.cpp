@@ -62,16 +62,16 @@ namespace MCPP {
 		
 		//	BEGIN
 		
-		//	The current task
-		Tuple<
-			SmartPointer<ThreadPoolHandle>,
-			std::function<void ()>
-		> curr;
-		
 		//	Enter worker loop
 		try {
 		
 			for (;;) {
+			
+				//	The current task
+				Tuple<
+					SmartPointer<ThreadPoolHandle>,
+					std::function<void ()>
+				> curr;
 			
 				//	Lock queue
 				queue_lock.Acquire();

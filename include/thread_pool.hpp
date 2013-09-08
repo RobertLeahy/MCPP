@@ -484,7 +484,7 @@ namespace MCPP {
 				//	If we capture the smart pointer
 				//	itself then we'll have that
 				//	object with a reference to itself
-				//	so it'll never get clean up
+				//	so it'll never get cleaned up
 				void ** ptr=&(handle->result);
 				
 				//	Build a function that wraps that
@@ -504,7 +504,21 @@ namespace MCPP {
 					//	only requirement is move constructibility,
 					//	which is required to return from
 					//	a function anyway.
-					new (*ptr) return_type (bound());
+					try {
+					
+						new (*ptr) return_type (bound());
+						
+					} catch (...) {
+					
+						Memory::Free(*ptr);
+						
+						//	Prevent cleanup code from
+						//	dangerously firing
+						*ptr=nullptr;
+						
+						throw;
+					
+					}
 				
 				};
 			
