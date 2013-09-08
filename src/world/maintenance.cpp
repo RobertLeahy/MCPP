@@ -101,6 +101,13 @@ namespace MCPP {
 				Service::LogType::Debug
 			);
 			
+			//	Prepare for the next maintenance
+			//	cycle
+			RunningServer->Pool().Enqueue(
+				maintenance_interval,
+				[this] () {	maintenance();	}
+			);
+			
 		//	If something goes wrong during maintenance
 		//	we panic and kill the server.
 		} catch (...) {
@@ -121,13 +128,6 @@ namespace MCPP {
 			throw;
 		
 		}
-		
-		//	Prepare for the next maintenance
-		//	cycle
-		RunningServer->Pool().Enqueue(
-			maintenance_interval,
-			[this] () {	maintenance();	}
-		);
 	
 	}
 
