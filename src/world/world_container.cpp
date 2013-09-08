@@ -9,6 +9,13 @@ namespace MCPP {
 	static const String mods_dir("world_mods");
 	static const String log_prepend("World Support: ");
 	const String WorldContainer::verbose("world");
+	static const String default_world_type("DEFAULT");
+	static const Word default_maintenance_interval=5*60*1000;	//	5 minutes
+	static const String seed_key("seed");
+	static const String maintenance_interval_key("maintenance_interval");
+	static const String type_key("world_type");
+	static const String log_type("Set world type to \"{0}\"");
+	
 	
 	
 	static Nullable<ModuleLoader> mods;
@@ -92,10 +99,48 @@ namespace MCPP {
 		//	Get mods
 		mods->Load();
 		
+		//	Get settings
 		
+		//	Seed
+		auto seed=RunningServer->Data().GetSetting(
+			seed_key
+		);
+		set_seed(seed);
+		if (seed.IsNull()) RunningServer->Data().SetSetting(
+			seed_key,
+			String(this->seed)
+		);
+		
+		//	Time per maintenance cycle
+		auto maintenance_interval=RunningServer->Data().GetSetting(
+			maintenance_interval_key
+		);
+		if (
+			maintenance_interval.IsNull() ||
+			!maintenance_interval->ToInteger(&(this->maintenance_interval))
+		) this->maintenance_interval=default_maintenance_interval;
+		
+		//	World type
+		auto type=RunningServer->Data().GetSetting(
+			type_key
+		);
+		this->type=type.IsNull() ? default_world_type : *type;
+		RunningServer->WriteLog(
+			String::Format(
+				log_type,
+				this->type
+			),
+			Service::LogType::Information
+		);
 		
 		//	Install mods
 		mods->Install();
+		
+		//	Begin maintenance
+		RunningServer->Pool().Enqueue(
+			this->maintenance_interval,
+			[this] () {	maintenance();	}
+		);
 	
 	}
 	

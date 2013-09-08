@@ -4,7 +4,14 @@
 namespace MCPP {
 
 
+	static const String log_new_seed("Generated new seed - {0}");
+	static const String log_str_seed("Set seed to \"{0}\" => {1}");
+	static const String log_int_seed("Set seed to {0}");
+
+
 	void WorldContainer::set_seed (Nullable<String> material) {
+	
+		String log;
 	
 		//	If there is no material, use the
 		//	cryptographically secure PRNG to
@@ -12,13 +19,27 @@ namespace MCPP {
 		if (material.IsNull()) {
 		
 			seed=CryptoRandom<UInt64>();
+			
+			log=String::Format(
+				log_new_seed,
+				seed
+			);
 		
 		//	Otherwise figure out how to translate
 		//	the string
 		//
 		//	Attempt to parse an integer from the
 		//	string
-		} else if (!material->ToInteger(&seed)) {
+		} else if (material->ToInteger(&seed)) {
+		
+			//	Generate log string
+			
+			log=String::Format(
+				log_int_seed,
+				seed
+			);
+		
+		} else {
 		
 			//	That didn't work...
 			
@@ -35,8 +56,20 @@ namespace MCPP {
 				seed^=cp;
 			
 			}
+			
+			log=String::Format(
+				log_str_seed,
+				*material,
+				seed
+			);
 		
 		}
+		
+		//	Write to log
+		RunningServer->WriteLog(
+			log,
+			Service::LogType::Information
+		);
 	
 	}
 

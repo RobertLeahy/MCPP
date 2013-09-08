@@ -477,6 +477,7 @@ src/world/has_skylight.cpp \
 src/world/key.cpp \
 src/world/load.cpp \
 src/world/maintenance.cpp \
+src/world/save.cpp \
 src/world/set_seed.cpp \
 src/world/populator.cpp \
 src/world/process.cpp \
@@ -503,6 +504,7 @@ bin/mcpp.dll
 	src/world/key.cpp \
 	src/world/load.cpp \
 	src/world/maintenance.cpp \
+	src/world/save.cpp \
 	src/world/set_seed.cpp \
 	src/world/populator.cpp \
 	src/world/process.cpp \

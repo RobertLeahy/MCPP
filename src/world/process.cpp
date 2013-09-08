@@ -10,6 +10,7 @@ namespace MCPP {
 	static const String end_load_miss("Attempted to load {0} but it was not present - took {1}ns");
 	static const String end_generate("Generated {0} - took {1}ns");
 	static const String end_populate("Populated {0} - took {1}ns");
+	static const String processing_error("Error while processing {0}");
 
 
 	void WorldContainer::process (ColumnContainer & column) {
@@ -22,10 +23,13 @@ namespace MCPP {
 			//	Are we logging debug information?
 			bool is_verbose=RunningServer->IsVerbose(verbose);
 			
+			bool dirty;
 			//	Process at least once -- this function
 			//	would not be called if processing did
 			//	not need to be performed
 			do {
+			
+				dirty=true;
 			
 				//	Branch based on the column's current
 				//	state
@@ -36,6 +40,10 @@ namespace MCPP {
 					case ColumnState::Loading:{
 					
 						Timer timer(Timer::CreateAndStart());
+						
+						//	Loading does not change the column's
+						//	logical state
+						dirty=false;
 						
 						//	Load from backing store
 						curr=load(column);
@@ -63,7 +71,7 @@ namespace MCPP {
 											end_load,
 											column.ToString(),
 											(curr==ColumnState::Populated) ? populated_str : generated_str,
-											column.Size(),
+											ColumnContainer::Size,
 											elapsed
 										)
 							),
@@ -110,6 +118,9 @@ namespace MCPP {
 						//	No processing needed at this
 						//	stage, just advance
 						curr=ColumnState::Populating;
+						//	This does not change the column's
+						//	logical state
+						dirty=false;
 						break;
 					
 					
@@ -168,6 +179,7 @@ namespace MCPP {
 			
 			} while (!column.SetState(
 				curr,
+				dirty,
 				RunningServer->Pool()
 			));
 		
@@ -175,6 +187,20 @@ namespace MCPP {
 		//	in an inconsistent state and
 		//	is therefore irrecoverable
 		} catch (...) {
+		
+			try {
+			
+				RunningServer->WriteLog(
+					String::Format(
+						processing_error,
+						column.ToString()
+					),
+					Service::LogType::Error
+				);
+			
+			//	We're already panicking,
+			//	can't do anything about this
+			} catch (...) {	}
 		
 			RunningServer->Panic();
 		

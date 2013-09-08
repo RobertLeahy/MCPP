@@ -7,7 +7,7 @@ namespace MCPP {
 	ColumnState WorldContainer::load (ColumnContainer & column) {
 		
 		//	Attempt to retrieve data
-		Word len=column.Size();
+		Word len=ColumnContainer::Size;
 		if (!(
 			//	Make sure data is actually loaded
 			//	from the backing store.
@@ -23,7 +23,7 @@ namespace MCPP {
 			//	from the backing store is a sane
 			//	length, if it's not consider
 			//	any loaded data bogus.
-			(len==column.Size())
+			(len==ColumnContainer::Size)
 		)) return ColumnState::Generating;
 		
 		//	The column was loaded, but what

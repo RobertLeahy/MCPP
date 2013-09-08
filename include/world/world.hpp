@@ -641,6 +641,13 @@ namespace MCPP {
 			bool Populated;
 			
 			
+			//	The size of the memory region
+			//	within each column container
+			//	which should be saved and
+			//	loaded
+			static constexpr Word Size=sizeof(Populated)+sizeof(Blocks)+sizeof(Biomes);
+			
+			
 			//	Retrieves the ID of this column
 			ColumnID ID () const noexcept;
 			//	Retrieves a 0x33 packet which represents
@@ -671,9 +678,15 @@ namespace MCPP {
 			//	appropriate asynchronous callbacks using
 			//	the provided thread pool.
 			//
+			//	If the dirty flag is set to false, the
+			//	column will not consider itself to be
+			//	changed by this state change (for example
+			//	when loading a column its logical state
+			//	does not change).
+			//
 			//	Returns true if processing is finished,
 			//	false if processing should continue.
-			bool SetState (ColumnState, ThreadPool &) noexcept;
+			bool SetState (ColumnState, bool, ThreadPool &) noexcept;
 			//	Checks the column's state.
 			//
 			//	If the column is in the required state, or
@@ -730,17 +743,11 @@ namespace MCPP {
 			//
 			//	Not thread safe
 			bool Dirty () const noexcept;
-			//	Completes a save operation by
-			//	clearing the "dirty" flag.
-			//
-			//	Not thread safe.
-			void CompleteSave () noexcept;
+			//	Clears the "dirty" flag.
+			void Clean () noexcept;
 			//	Gets a string which represents
 			//	the co-ordinates of this column
 			String ToString () const;
-			//	Gets the size of the area of this
-			//	column which should be saved
-			Word Size () const noexcept;
 			//	Gets a pointer through which this
 			//	column may be loaded or saved
 			void * Get () noexcept;
@@ -1108,6 +1115,13 @@ namespace MCPP {
 				decltype(Thread::ID())
 			> populating;
 			mutable RWLock populating_lock;
+			
+			
+			//	Only one thread is allowed to
+			//	perform maintenance on the world
+			//	at any one time, to avoid race
+			//	conditions while saving
+			Mutex maintenance_lock;
 		
 		
 			//	PRIVATE METHODS
@@ -1133,6 +1147,14 @@ namespace MCPP {
 			//
 			//	Should be invoked periodically.
 			void maintenance ();
+			//	Saves a column
+			//
+			//	The maintenance lock must be held
+			//	before calling this function
+			//
+			//	Returns whether or not the column
+			//	was actually saved
+			bool save (ColumnContainer &);
 			
 			//	GET/SET
 			

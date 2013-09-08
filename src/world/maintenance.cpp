@@ -4,10 +4,9 @@
 namespace MCPP {
 
 
-	static const String maintenance_error("Error in world maintenance");
+	static const String maintenance_error("Error during world maintenance");
 	static const String end_maintenance("Finished world maintenance, took {0}ns, saved {1}, unloaded {2}");
-	static const String end_save("Saved column {0} - {1} bytes in {2}ns");
-	static const String unload("Unloading column {0}");
+	static const String unload("Unloaded column {0}");
 
 
 	void WorldContainer::maintenance () {
@@ -31,96 +30,61 @@ namespace MCPP {
 			//	up clogging the thread pool
 			//	waiting for synchronous I/O.
 			Vector<SmartPointer<ColumnContainer>> columns;
-			lock.Execute([&] () {	for (auto & pair : world) columns.Add(pair.second);	});
+			lock.Execute([&] () {
 			
-			//	Loop and perform maintenance on
-			//	each column
-			for (auto & column : columns) {
+				columns=Vector<SmartPointer<ColumnContainer>>(world.size());
 			
-				//	Get the key which will be associated
-				//	with this column in the backing store
-				String k(key(*column));
+				for (auto & pair : world) columns.Add(pair.second);
 				
-				//	Lock so the column is no longer
-				//	modified
-				column->Acquire();
+			});
+			
+			maintenance_lock.Execute([&] () {
+			
+				//	Loop and perform maintenance on
+				//	each column
+				for (auto & column : columns) {
 				
-				try {
-				
-					//	Save if necessary
-					if (column->Dirty()) {
+					//	Save
+					if (save(*column)) ++this_saved;
 					
-						Timer timer(Timer::CreateAndStart());
+					//	See if we can unload
 					
-						RunningServer->Data().SaveBinary(
-							k,
-							column->Get(),
-							column->Size()
-						);
+					bool unloaded=false;
+					
+					column->Acquire();
+					
+					if (column->CanUnload()) {
+					
+						//	We can unload
 						
-						column->CompleteSave();
+						unloaded=true;
 						
-						auto elapsed=timer.ElapsedNanoseconds();
-						save_time+=elapsed;
-						++saved;
-						++this_saved;
+						lock.Execute([&] () {	world.erase(column->ID());	});
 						
-						//	Log if applicable
+					}
+					
+					column->Release();
+					
+					if (unloaded) {
+						
+						++unloaded;
+						++this_unloaded;
+						
+						//	TODO: Fire event
+						
 						if (is_verbose) RunningServer->WriteLog(
 							String::Format(
-								end_save,
-								column->ToString(),
-								column->Size(),
-								elapsed
+								unload,
+								column->ToString()
 							),
 							Service::LogType::Debug
 						);
-					
+						
 					}
-					
-					//	See if we can unload this
-					//	column
-					//
-					//	It is safe to acquire this lock
-					//	because no other task tries to
-					//	acquire column locks while holding
-					//	the world lock, they merely increment
-					//	the interest count (atomic) and move
-					//	on
-					lock.Execute([&] () {
-					
-						if (column->CanUnload()) {
-						
-							world.erase(column->ID());
-							
-							++unloaded;
-							++this_unloaded;
-							
-							//	TODO: Fire event
-							
-							if (is_verbose) RunningServer->WriteLog(
-								String::Format(
-									unload,
-									column->ToString()
-								),
-								Service::LogType::Debug
-							);
-						
-						}
-					
-					});
-				
-				} catch (...) {
-				
-					column->Release();
-					
-					throw;
 				
 				}
 				
-				column->Release();
-			
-			}
+			});
 			
 			auto elapsed=timer.ElapsedNanoseconds();
 			maintenance_time+=elapsed;
@@ -141,16 +105,29 @@ namespace MCPP {
 		//	we panic and kill the server.
 		} catch (...) {
 		
-			RunningServer->WriteLog(
-				maintenance_error,
-				Service::LogType::Error
-			);
+			try {
+		
+				RunningServer->WriteLog(
+					maintenance_error,
+					Service::LogType::Error
+				);
+				
+			//	We don't care if this fails,
+			//	we're panicking anyway
+			} catch (...) {	}
 			
 			RunningServer->Panic();
 			
 			throw;
 		
 		}
+		
+		//	Prepare for the next maintenance
+		//	cycle
+		RunningServer->Pool().Enqueue(
+			maintenance_interval,
+			[this] () {	maintenance();	}
+		);
 	
 	}
 

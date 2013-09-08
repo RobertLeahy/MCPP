@@ -6,6 +6,9 @@
 namespace MCPP {
 
 
+	constexpr Word ColumnContainer::Size;
+
+
 	ColumnID ColumnContainer::ID () const noexcept {
 	
 		return id;
@@ -21,12 +24,12 @@ namespace MCPP {
 	}
 
 
-	bool ColumnContainer::SetState (ColumnState target, ThreadPool & pool) noexcept {
+	bool ColumnContainer::SetState (ColumnState target, bool dirty, ThreadPool & pool) noexcept {
 	
 		lock.Acquire();
 		
-		//	Now dirty
-		dirty=true;
+		//	Set dirty flag appropriately
+		this->dirty=dirty;
 		
 		//	Set populated flag if appropriate
 		if (target==ColumnState::Populated) Populated=true;
@@ -766,7 +769,7 @@ namespace MCPP {
 	}
 	
 	
-	void ColumnContainer::CompleteSave () noexcept {
+	void ColumnContainer::Clean () noexcept {
 	
 		dirty=false;
 	
@@ -784,13 +787,6 @@ namespace MCPP {
 			id.Z,
 			id.Dimension
 		);
-	
-	}
-	
-	
-	Word ColumnContainer::Size () const noexcept {
-	
-		return sizeof(Biomes)+sizeof(Blocks)+sizeof(Populated);
 	
 	}
 	
