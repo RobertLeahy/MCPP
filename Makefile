@@ -87,6 +87,7 @@ obj/thread_pool_handle.o \
 obj/sha1.o \
 obj/new_delete.o \
 obj/noise.o \
+obj/multi_scope_guard.o \
 bin/ssleay32.dll \
 bin/libeay32.dll \
 bin/libcurl.dll \
@@ -118,6 +119,7 @@ bin/data_provider.dll
 	obj/sha1.o \
 	obj/new_delete.o \
 	obj/noise.o \
+	obj/multi_scope_guard.o \
 	bin/ssleay32.dll \
 	bin/libeay32.dll \
 	bin/libcurl.dll \
@@ -331,6 +333,16 @@ include/thread_pool.hpp \
 bin/rleahy_lib.dll | \
 obj
 	$(GPP) -c -o $@ src/thread_pool_handle.cpp
+	
+	
+#	MULTI SCOPE GUARD
+
+obj/multi_scope_guard.o: \
+include/multi_scope_guard.hpp \
+src/multi_scope_guard.cpp | \
+bin/rleahy_lib.dll \
+obj
+	$(GPP) -c -o $@ src/multi_scope_guard.cpp
 	
 	
 #	DATA PROVIDERS
