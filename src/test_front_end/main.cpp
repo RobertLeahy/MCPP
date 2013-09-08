@@ -14,55 +14,7 @@ static Mutex lock;
 static CondVar wait;
 static bool stop;
 static const Word timeout=50;
-static UInt128 tick=0;
-static Mutex tick_lock;
-static CondVar tick_wait;
-static bool tick_stop;
 static Nullable<ThreadPool> console_write;
-
-
-void tick_thread_func () {
-
-	Packet packet;
-	packet.SetType<PacketTypeMap<0x04>>();
-	
-	for (;;) {
-	
-		if (tick_lock.Execute([] () {
-		
-			if (tick_stop) return tick_stop;
-		
-			tick_wait.Sleep(tick_lock,timeout);
-			
-			return tick_stop;
-		
-		})) break;
-		
-		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
-		
-			packet.Retrieve<Int64>(0)=static_cast<Int64>(++tick);
-			packet.Retrieve<Int64>(1)=static_cast<Int64>(tick);
-		
-			if (client->GetState()==ClientState::Authenticated) {
-			
-				map_lock.Execute([&] () {
-				
-					auto iter=map.find(client->GetConn());
-					
-					if (
-						(iter!=map.end()) &&
-						(iter->second)
-					) client->Send(packet);
-				
-				});
-			
-			}
-		
-		});
-	
-	}
-
-}
 
 
 void thread_func () {
@@ -184,7 +136,6 @@ int Main (const Vector<const String> & args) {
 	});
 	
 	Thread t(thread_func);
-	Thread t1(tick_thread_func);
 
 	RunningServer->StartInteractive(args);
 	
@@ -234,16 +185,6 @@ int Main (const Vector<const String> & args) {
 	});
 	
 	t.Join();
-	
-	tick_lock.Execute([] () {
-	
-		tick_stop=true;
-		
-		tick_wait.WakeAll();
-	
-	});
-	
-	t1.Join();
 	
 	RunningServer.Destroy();
 	

@@ -411,7 +411,9 @@ bin/info_mods/pool_info.dll \
 bin/info_mods/os_info.dll \
 bin/info_mods/mcpp_info.dll \
 bin/command_mods/shutdown.dll \
-bin/world_mods/test_generator.dll
+bin/world_mods/test_generator.dll \
+bin/mods/time.dll \
+bin/command_mods/display_time.dll
 
 
 #	PING SUPPORT
@@ -474,6 +476,7 @@ src/world/generators.cpp \
 src/world/get_block.cpp \
 src/world/get_column.cpp \
 src/world/has_skylight.cpp \
+src/world/interest.cpp \
 src/world/key.cpp \
 src/world/load.cpp \
 src/world/maintenance.cpp \
@@ -501,6 +504,7 @@ bin/mcpp.dll
 	src/world/get_block.cpp \
 	src/world/get_column.cpp \
 	src/world/has_skylight.cpp \
+	src/world/interest.cpp \
 	src/world/key.cpp \
 	src/world/load.cpp \
 	src/world/maintenance.cpp \
@@ -517,6 +521,27 @@ bin/mcpp.dll
 
 bin/mods/player.dll: bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/player/player_position.cpp include/player/player.hpp include/world/world.hpp bin/mods/world.dll
 	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o src/player/player_position.cpp bin/mods/world.dll
+	
+	
+#	TIME
+
+bin/mods/time.dll: \
+obj/new_delete.o \
+include/packet.hpp \
+include/server.hpp \
+include/mod.hpp \
+include/time/time.hpp \
+include/data_provider.hpp \
+include/client.hpp \
+include/thread_pool.hpp \
+src/time/main.cpp | \
+bin/mcpp.dll \
+bin/rleahy_lib.dll
+	$(GPP) -shared -o $@ \
+	bin/mcpp.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/time/main.cpp	
 	
 
 #	CHAT SUB-MODULES
@@ -640,6 +665,28 @@ bin/mcpp.dll
 	bin/rleahy_lib.dll \
 	obj/new_delete.o \
 	src/kick/main.cpp
+	
+	
+#	DISPLAY TIME
+bin/command_mods/display_time.dll: \
+obj/new_delete.o \
+src/time/display.cpp \
+include/chat/chat.hpp \
+include/time/time.hpp \
+include/command/command.hpp | \
+bin/mods/chat.dll \
+bin/chat_mods/command.dll \
+bin/mods/time.dll \
+bin/rleahy_lib.dll \
+bin/mcpp.dll
+	$(GPP) -shared -o $@ \
+	bin/mods/chat.dll \
+	bin/chat_mods/command.dll \
+	bin/mods/time.dll \
+	bin/mcpp.dll \
+	bin/rleahy_lib.dll \
+	obj/new_delete.o \
+	src/time/display.cpp
 	
 	
 #	SHUTDOWN/RESTART
