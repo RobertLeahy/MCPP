@@ -663,9 +663,18 @@ namespace MCPP {
 				
 				try {
 				
-					scheduled.EmplaceBack(
+					//	When shall we schedule this
+					//	callback for?
+					UInt64 when=timer.ElapsedNanoseconds()+(static_cast<UInt64>(milliseconds)*1000000);
+					//	Find insertion point
+					Word i;
+					for (i=0;i<scheduled.Count();++i) if (when<scheduled[i].Item<1>()) break;
+				
+					//	Insert
+					scheduled.Emplace(
+						i,
 						handle,
-						timer.ElapsedNanoseconds()+(static_cast<UInt64>(milliseconds)*1000000),
+						when,
 						wrap(
 							handle,
 							std::forward<T>(func),
