@@ -645,7 +645,7 @@ namespace MCPP {
 			template <typename T, typename... Args>
 			SmartPointer<ThreadPoolHandle> Enqueue (Word milliseconds, T && func, Args &&... args) {
 			
-				//	If it's less than a milliseconds away
+				//	If it's less than a millisecond away
 				//	just enqueue it
 				if (milliseconds==0) return Enqueue(
 					std::forward<T>(func),

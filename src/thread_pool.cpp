@@ -78,8 +78,8 @@ namespace MCPP {
 				
 				try {
 				
-					UInt64 time=timer.ElapsedNanoseconds();
-					for (;;) {
+					auto time=timer.ElapsedNanoseconds();
+					for (;;time=timer.ElapsedNanoseconds()) {
 					
 						//	Break out immediately if
 						//	there are things to be done
@@ -89,11 +89,21 @@ namespace MCPP {
 							(queue.Count()!=0)
 						) break;
 					
-						//	Time 'till next scheduled task
-						UInt64 next;
-						if (scheduled.Count()!=0) {
+						if (scheduled.Count()==0) {
+					
+							//	There are no scheduled tasks,
+							//	wait until we are woken up
 							
-							next=(
+							queue_wait.Sleep(queue_lock);
+							
+						} else {
+							
+							//	There is a scheduled task at some
+							//	point in the future, wait until
+							//	woken up or until that time arrives,
+							//	whichever come first
+							
+							UInt64 next=(
 								//	Next scheduled task is in the future
 								(scheduled[0].Item<1>()>time)
 									?	scheduled[0].Item<1>()-time
@@ -104,18 +114,14 @@ namespace MCPP {
 							//	callback is less than a millisecond
 							//	away
 							if (next<1000000) break;
+							
+							//	Sleep
+							queue_wait.Sleep(
+								queue_lock,
+								static_cast<Word>(next/1000000)
+							);
 						
 						}
-						
-						//	Sleep until woken up
-						if (scheduled.Count()==0) queue_wait.Sleep(queue_lock);
-						//	Sleep until it's time to execute
-						//	the next scheduled task, or
-						//	until we're woken up
-						else queue_wait.Sleep(
-							queue_lock,
-							static_cast<Word>(next/1000000)
-						);
 						
 					}
 					
