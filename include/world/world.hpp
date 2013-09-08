@@ -1240,6 +1240,10 @@ namespace MCPP {
 			void End ();
 			
 			
+			void Interested (ColumnID id, bool prepare=true);
+			void EndInterest (ColumnID id) noexcept;
+			
+			
 			Block GetBlock (BlockID id);
 			template <typename T, typename... Args>
 			void GetBlock (BlockID id, T && callback, Args &&... args) {
