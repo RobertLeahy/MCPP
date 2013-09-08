@@ -1,8 +1,12 @@
 #include <rleahylib/rleahylib.hpp>
 #include <mod.hpp>
 #include <server.hpp>
+#include <multi_scope_guard.hpp>
 #include <atomic>
 #include <functional>
+#include <limits>
+#include <utility>
+#include <type_traits>
 
 
 namespace MCPP {
@@ -46,10 +50,40 @@ namespace MCPP {
 	class TimeModule : public Module {
 	
 	
+		template <typename T>
+		class bind_wrapper {
+		
+		
+			public:
+			
+			
+				T callback;
+				
+				
+				inline void operator () () const noexcept(noexcept(callback())) {
+				
+					callback();
+				
+				}
+		
+		
+		};
+	
+	
 		private:
 		
 		
 			mutable Mutex lock;
+			
+			
+			//	Time since last tick
+			Timer timer;
+			//	Number of ticks
+			std::atomic<Word> ticks;
+			//	Time spent ticking
+			std::atomic<UInt64> tick_time;
+			//	Time spent executing ticks
+			std::atomic<UInt64> executing;
 			
 			
 			//	Age of the world
@@ -66,6 +100,39 @@ namespace MCPP {
 			//	Number if milliseconds per
 			//	tick
 			Word tick_length;
+			//	Threshold above which a tick
+			//	is considered "too long"
+			Word threshold;
+			//	The percentage which is used
+			//	to derive the threshold
+			Word threshold_percentage;
+			
+			
+			//	Tasks to be executed every
+			//	tick
+			Vector<
+				Tuple<
+					//	Callback
+					std::function<void (MultiScopeGuard)>,
+					//	Whether the next tick should
+					//	wait for this task to finish
+					bool
+				>
+			> callbacks;
+			//	Tasks to be executed at a certain
+			//	point in time
+			Vector<
+				Tuple<
+					//	Tick on which this task should
+					//	be executed
+					Word,
+					//	Callback
+					std::function<void (MultiScopeGuard)>,
+					//	Whether the next tick should
+					//	wait for this task to finish
+					bool
+				>
+			> scheduled_callbacks;
 			
 			
 			void tick ();
@@ -73,6 +140,80 @@ namespace MCPP {
 			LunarPhase get_lunar_phase () const noexcept;
 			UInt64 get_time (bool) const noexcept;
 			TimeOfDay get_time_of_day () const noexcept;
+			
+			
+			template <typename T, typename... Args>
+			auto binder (T && callback, Args &&... args) -> decltype(
+				std::bind(
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
+				)
+			) {
+			
+				return std::bind(
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
+				);
+			
+			}
+			
+			
+			template <typename T>
+			bind_wrapper<T> inner_wrapper (T && bound) {
+			
+				return bind_wrapper<T>{std::forward<T>(bound)};
+			
+			}
+			
+			
+			template <typename T>
+			static void callback (MultiScopeGuard, T callback) {
+			
+				callback();
+			
+			}
+			
+			
+			template <typename T>
+			auto outer_wrapper (T && wrapped) -> decltype(
+				std::bind(
+					callback<typename std::decay<T>::type>,
+					std::placeholders::_1,
+					std::move(wrapped)
+				)
+			) {
+			
+				return std::bind(
+					callback<typename std::decay<T>::type>,
+					std::placeholders::_1,
+					std::move(wrapped)
+				);
+			
+			}
+			
+			
+			template <typename T, typename... Args>
+			auto wrap (T && callback, Args &&... args) -> decltype(
+				outer_wrapper(
+					inner_wrapper(
+						binder(
+							std::forward<T>(callback),
+							std::forward<Args>(args)...
+						)
+					)
+				)
+			) {
+			
+				return outer_wrapper(
+					inner_wrapper(
+						binder(
+							std::forward<T>(callback),
+							std::forward<Args>(args)...
+						)
+					)
+				);
+			
+			}
 			
 			
 		public:
@@ -214,6 +355,56 @@ namespace MCPP {
 			 *	saved to the backing store.
 			 */
 			void Save () const;
+			
+			
+			template <typename T, typename... Args>
+			void Enqueue (bool wait, T && callback, Args &&... args) {
+			
+				auto wrapped=wrap(
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
+				);
+				
+				lock.Execute([&] () {
+				
+					callbacks.EmplaceBack(
+						std::move(wrapped),
+						wait
+					);
+				
+				});
+			
+			}
+			
+			
+			template <typename T, typename... Args>
+			void Enqueue (Word milliseconds, bool wait, T && callback, Args &&... args) {
+			
+				auto wrapped=wrap(
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
+				);
+				
+				lock.Execute([&] () {
+				
+					//	Deduce execution time
+					Word when=milliseconds+ticks;
+				
+					//	Find insertion point
+					Word i=0;
+					for (;i<scheduled_callbacks.Count();++i) if (when<scheduled_callbacks[i].Item<0>()) break;
+					
+					//	Insert
+					scheduled_callbacks.Emplace(
+						when,
+						std::move(wrapped),
+						wait
+					);
+				
+				});
+			
+			}
+			
 	
 	
 	};

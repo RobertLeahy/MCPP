@@ -40,6 +40,7 @@ namespace MCPP {
 	static const Word default_between_saves=5*60*20;	//	5 minutes
 	static const bool default_offline_freeze=true;
 	static const Word num_lunar_phases=8;
+	static const Word threshold_percentage_default=10;	//	10%
 	
 	
 	static const String time_key("time");
@@ -47,6 +48,8 @@ namespace MCPP {
 	static const String offline_freeze_key("offline_freeze");
 	static const String between_saves_key("maintenance_interval");
 	static const String tick_error("Error while ticking");
+	static const String tick_too_long("Tick took {0}% too long - Actual: {1}ms - Expected: {2}ms");
+	static const String threshold_percentage_key("tick_threshold");
 	static const Regex true_regex(
 		"^\\s*(?:t(?:rue)?|y(?:es)?)\\s*$",
 		RegexOptions().SetIgnoreCase()
@@ -119,6 +122,9 @@ namespace MCPP {
 
 	TimeModule::TimeModule () noexcept {
 	
+		ticks=0;
+		tick_time=0;
+		executing=0;
 		age=0;
 		time=0;
 		since=0;
@@ -178,6 +184,21 @@ namespace MCPP {
 					)
 		);
 		
+		//	Threshold
+		auto threshold_percentage=RunningServer->Data().GetSetting(threshold_percentage_key);
+		if (
+			threshold_percentage.IsNull() ||
+			!threshold_percentage->ToInteger(&(this->threshold_percentage))
+		) this->threshold_percentage=threshold_percentage_default;
+		
+		threshold=static_cast<Word>(
+			this->tick_length*(
+				static_cast<Double>(
+					this->threshold_percentage
+				)/100
+			)
+		)+this->tick_length;
+		
 		//	Attempt to load age and time
 		TimeSave save;
 		Word len=sizeof(save);
@@ -196,6 +217,9 @@ namespace MCPP {
 			time=save.Time;
 		
 		}
+		
+		//	Start timer
+		timer=Timer::CreateAndStart();
 	
 		//	Start the tick loop
 		RunningServer->OnInstall.Add(
@@ -398,6 +422,75 @@ namespace MCPP {
 	
 		try {
 		
+			//	Triggers the next tick
+			MultiScopeGuard sg(
+				[this] () {
+				
+					//	Number of milliseconds since last
+					//	tick
+					auto elapsed=timer.ElapsedMilliseconds();
+					
+					//	How long do we have to wait
+					//	for the next tick?
+					auto wait=tick_length-elapsed;
+					
+					executing+=tick_length-wait;
+					
+					//	Enqueue next tick
+					RunningServer->Pool().Enqueue(
+						(elapsed>=tick_length) ? 0 : wait,
+						[this] () {	tick();	}
+					);
+				
+				},
+				//	Do nothing as each scope
+				//	guard goes out of scope
+				std::function<void ()>(),
+				[] () {
+				
+					try {
+					
+						RunningServer->WriteLog(
+							tick_error,
+							Service::LogType::Error
+						);
+					
+					} catch (...) {	}
+					
+					RunningServer->Panic();
+				
+				}
+			);
+			
+			//	How long since the last tick?
+			Word elapsed=static_cast<Word>(
+				timer.ElapsedMilliseconds()
+			);
+			
+			//	New tick
+			timer=Timer::CreateAndStart();
+			++ticks;
+			tick_time+=elapsed;
+			
+			if (elapsed>threshold) {
+			
+				//	Tick was "too long"
+				
+				RunningServer->WriteLog(
+					String::Format(
+						tick_too_long,
+						(static_cast<Double>(elapsed-tick_length)/tick_length)*100,
+						elapsed,
+						tick_length
+					),
+					Service::LogType::Warning
+				);
+			
+			}
+			
+			//	New tick
+			timer=Timer::CreateAndStart();
+		
 			if (!(
 				offline_freeze &&
 				(RunningServer->Clients.AuthenticatedCount()==0)
@@ -424,6 +517,47 @@ namespace MCPP {
 				
 				});
 				
+				//	Execute tasks
+				
+				//	Tasks that are executed every
+				//	tick
+				for (const auto & t : callbacks) {
+				
+					//	Will we wait for this callback
+					//	or not?
+					MultiScopeGuard param;
+					if (t.Item<1>()) param=sg;
+					
+					RunningServer->Pool().Enqueue(
+						t.Item<0>(),
+						std::move(param)
+					);
+				
+				}
+				
+				//	Tasks that have been scheduled
+				//	to be executed
+				while (
+					(scheduled_callbacks.Count()!=0) &&
+					(scheduled_callbacks[0].Item<0>()>=ticks)
+				) {
+				
+					//	Will we wait for this task
+					//	or not?
+					MultiScopeGuard param;
+					if (scheduled_callbacks[0].Item<2>()) param=sg;
+					
+					auto callback=std::move(scheduled_callbacks[0].Item<1>());
+					
+					scheduled_callbacks.Delete(0);
+					
+					RunningServer->Pool().Enqueue(
+						std::move(callback),
+						std::move(param)
+					);
+				
+				}
+				
 			}
 			
 			//	It's been one more tick
@@ -439,12 +573,6 @@ namespace MCPP {
 				save(age,time);
 			
 			}
-			
-			//	Wait for the next tick
-			RunningServer->Pool().Enqueue(
-				tick_length,
-				[this] () {	tick();	}
-			);
 		
 		} catch (...) {
 		
