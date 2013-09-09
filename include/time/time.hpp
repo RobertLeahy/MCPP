@@ -60,7 +60,7 @@ namespace MCPP {
 				T callback;
 				
 				
-				inline void operator () () const noexcept(noexcept(callback())) {
+				inline void operator () () noexcept(noexcept(callback())) {
 				
 					callback();
 				

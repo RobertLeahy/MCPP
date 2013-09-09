@@ -839,7 +839,7 @@ namespace MCPP {
 			
 			
 			template <typename... Args>
-			void operator () (Args &&... args) const noexcept(noexcept(bound(std::forward<Args>(args)...))) {
+			void operator () (Args &&... args) noexcept(noexcept(bound(std::forward<Args>(args)...))) {
 			
 				bound(std::forward<Args>(args)...);
 			
