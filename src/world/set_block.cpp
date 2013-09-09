@@ -4,7 +4,9 @@
 namespace MCPP {
 
 
-	bool WorldContainer::SetBlock (BlockID id, Block block) {
+	bool WorldContainer::SetBlock (BlockID id, Block block, bool force) {
+	
+		bool retr=true;
 	
 		auto column=get_column(id.GetContaining());
 		
@@ -15,22 +17,59 @@ namespace MCPP {
 			if (!column->WaitUntil(ColumnState::Generated)) process(*column);
 			
 			//	Acquire lock
-			wlock.Acquire();
+			wlock->Acquire();
 			
 			try {
 			
-				//	Set block
-				column->SetBlock(id,block);
+				auto old=column->GetBlock(id);
+			
+				if (
+					//	Proceed if we're forcing
+					force ||
+					//	If we're not forcing, check to see
+					//	if we can place the block there
+					can_set(
+						id,
+						old,
+						block
+					)
+				) {
 				
+					//	Set block
+					column->SetBlock(id,block);
+					
+					//	Only fire events for columns
+					//	that are populating or populated
+					auto state=column->GetState();
+					if (
+						(state==ColumnState::Populating) ||
+						(state==ColumnState::Populated)
+					) on_set(
+						id,
+						old,
+						block
+					);
+				
+				} else {
+				
+					//	Could not place
+					retr=false;
+				
+				}
+			
 			} catch (...) {
 			
-				wlock.Release();
+				try {
+				
+					wlock->Release();
+					
+				} catch (...) {	}
 				
 				throw;
 			
 			}
 			
-			wlock.Release();
+			wlock->Release();
 		
 		} catch (...) {
 		
@@ -44,6 +83,8 @@ namespace MCPP {
 		}
 		
 		column->EndInterest();
+		
+		return retr;
 	
 	}
 

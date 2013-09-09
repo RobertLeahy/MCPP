@@ -37,24 +37,9 @@ namespace MCPP {
 			start_populating();
 			
 			try {
-		
-				//	Begin a transaction
-				Begin();
-				
-				try {
-			
-					//	Loop for each populator and invoke it
-					for (const auto & populator : iter->second) populator(column.ID());
-					
-				} catch (...) {
-				
-					End();
-					
-					throw;
-				
-				}
-				
-				End();
+
+				//	Loop for each populator and invoke it
+				for (const auto & populator : iter->second) populator(column.ID());
 				
 			} catch (...) {
 			

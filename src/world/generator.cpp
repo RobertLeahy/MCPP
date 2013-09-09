@@ -46,8 +46,7 @@ namespace MCPP {
 				block.Z=start_z;
 				block.Z<=end_z;
 				++block.Z
-			)
-			for (
+			) for (
 				block.X=start_x;
 				block.X<=end_x;
 				++block.X

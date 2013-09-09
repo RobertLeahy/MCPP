@@ -1268,47 +1268,41 @@ namespace MCPP {
 				//	this thread is populating, in
 				//	which case it needs to keep
 				//	its lock
-				bool resume=!is_populating() && wlock->Transfer();
+				bool resume=wlock->Transfer();
 				
 				try {
 				
-					if (!(
-						//	Enqueue
-						column->InvokeWhen(
-							ColumnState::Populated,
-							std::bind(
-								[this,resume] (BlockID id, decltype(column) column, decltype(wrapper) callback) mutable {
+					//	Enqueue
+					if (!column->InvokeWhen(
+						is_populating() ? ColumnState::Generated : ColumnState::Populated,
+						std::bind(
+							[this,resume] (BlockID id, decltype(column) column, decltype(wrapper) callback) mutable {
+								
+								if (resume) wlock->Resume();
+								
+								try {
+								
+									callback(
+										id,
+										column->GetBlock(id)
+									);
+								
+								} catch (...) {	}
+								
+								//	Don't leak interest
+								column->EndInterest();
+								//	Don't leak lock
+								if (resume) try {
+								
+									wlock->Release();
 									
-									if (resume) wlock->Resume();
-									
-									try {
-									
-										callback(
-											id,
-											column->GetBlock(id)
-										);
-									
-									} catch (...) {	}
-									
-									//	Don't leak interest
-									column->EndInterest();
-									//	Don't leak lock
-									if (resume) try {
-									
-										wlock->Release();
-										
-									} catch (...) {	}
-									
-								},
-								id,
-								column,
-								std::move(wrapper)
-							)
-						) ||
-						//	If we're populating, we'll
-						//	end up at ColumnState::Populated
-						//	anyway, so don't process
-						is_populating()
+								} catch (...) {	}
+								
+							},
+							id,
+							column,
+							std::move(wrapper)
+						)
 					)) process(*column);
 				
 				} catch (...) {
@@ -1330,6 +1324,145 @@ namespace MCPP {
 			
 			
 			bool SetBlock (BlockID id, Block block);
+			template <typename T, typename... Args>
+			void SetBlock (BlockID id, Block block, bool force, T && callback, Args &&... args) {
+			
+				auto bound=std::bind(
+					std::forward<T>(callback),
+					std::placeholders::_1,
+					id,
+					block,
+					std::forward<Args>(args)...
+				);
+				
+				//	Work around limitations of binding
+				//	bound functions
+				bind_wrapper<decltype(bound)> wrapper{std::move(bound)};
+				
+				//	Get the column the desired block resides
+				//	in
+				auto column=get_column(id.GetContaining());
+				
+				try {
+				
+					//	Acquire lock asynchronously
+					wlock->Acquire(
+						[this,id,block,force,column] (decltype(wrapper) callback) mutable {
+						
+							//	Lock acquired
+							
+							//	The lock will have to be
+							//	transferred through
+							wlock->Transfer();
+							
+							try {
+							
+								//	Enqueue, process, or dispatch
+								//	immediately, as applicable
+								if (!column->InvokeWhen(
+									ColumnState::Generated,
+									std::bind(
+										[this,id,block,force,column] (decltype(callback) callback) mutable {
+										
+											//	Resume the lock
+											wlock->Resume();
+											
+											bool success=false;
+											try {
+											
+												try {
+												
+													auto old=column->GetBlock(id);
+												
+													//	Can we set the block?
+													if (force || can_set(id,old,block)) {
+													
+														//	YES
+														
+														success=true;
+														
+														column->SetBlock(id,block);
+														
+														//	Only fire events for columns
+														//	that are populating or populated
+														auto state=column->GetState();
+														if (
+															(state==ColumnState::Populating) ||
+															(state==ColumnState::Populated)
+														) on_set(
+															id,
+															old,
+															block
+														);
+													
+													}
+													
+												} catch (...) {
+												
+													//	Don't leak the lock
+													try {
+													
+														wlock->Release();
+													
+													} catch (...) {	}
+													
+													throw;
+												
+												}
+												
+												wlock->Release();
+												
+											} catch (...) {
+											
+												column->EndInterest();
+												
+												throw;
+											
+											}
+											
+											column->EndInterest();
+											
+											//	Invoke callback
+											try {
+											
+												callback(success);
+											
+											} catch (...) {	}
+										
+										},
+										std::move(callback)
+									)
+								)) process(*column);
+							
+							} catch (...) {
+							
+								column->EndInterest();
+								
+								//	Make sure to resume the lock
+								//	so it can properly be
+								//	released
+								wlock->Resume();
+								
+								throw;
+							
+							}
+						
+						},
+						std::move(wrapper)
+					);
+				
+				} catch (...) {
+				
+					column->EndInterest();
+					
+					throw;
+				
+				}
+				
+				//	We don't release interest here, it's done
+				//	within the asynchronous callback
+			
+			}
 	
 	
 	};
