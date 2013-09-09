@@ -357,6 +357,28 @@ namespace MCPP {
 			void Save () const;
 			
 			
+			/**
+			 *	Enqueues a task to be asynchronously
+			 *	invoked each tick.
+			 *
+			 *	\tparam T
+			 *		The type of callback which shall be
+			 *		invoked each tick.
+			 *	\tparam Args
+			 *		The types of the arguments which shall
+			 *		be passed through to the callback of
+			 *		type \em T.
+			 *
+			 *	\param [in] wait
+			 *		If \em true each tick shall be
+			 *		delayed until this task completes.
+			 *	\param [in] callback
+			 *		The callback which shall be invoked
+			 *		each tick.
+			 *	\param [in] args
+			 *		The arguments which shall be forwarded
+			 *		through to \em callback.
+			 */
 			template <typename T, typename... Args>
 			void Enqueue (bool wait, T && callback, Args &&... args) {
 			
@@ -377,8 +399,33 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Enqueues a task to be asynchronously invoked
+			 *	after a certain number of ticks have passed.
+			 *
+			 *	\tparam T
+			 *		The type of callback which shall be
+			 *		invoked.
+			 *	\tparam Args
+			 *		The types of the arguments which shall be
+			 *		passed through to the callback of type
+			 *		\em T.
+			 *
+			 *	\param [in] ticks
+			 *		The number of ticks after which \em callback
+			 *		shall be invoked.
+			 *	\param [in] wait
+			 *		If \em true the tick after this task is
+			 *		executed shall wait until the task completes.
+			 *	\param [in] callback
+			 *		The callback that shall be invoked after \em ticks
+			 *		ticks.
+			 *	\param [in] args
+			 *		The arguments that shall be forwarded through to
+			 *		\em callback.
+			 */
 			template <typename T, typename... Args>
-			void Enqueue (Word milliseconds, bool wait, T && callback, Args &&... args) {
+			void Enqueue (Word ticks, bool wait, T && callback, Args &&... args) {
 			
 				auto wrapped=wrap(
 					std::forward<T>(callback),
@@ -388,7 +435,7 @@ namespace MCPP {
 				lock.Execute([&] () {
 				
 					//	Deduce execution time
-					Word when=milliseconds+ticks;
+					Word when=ticks+this->ticks;
 				
 					//	Find insertion point
 					Word i=0;
