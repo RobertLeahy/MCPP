@@ -1213,6 +1213,11 @@ namespace MCPP {
 			Event<bool (BlockID, Block, Block)> CanSet;
 			Event<bool (BlockID, Block, Block)> CanReplace [4096];
 			Event<bool (BlockID, Block, Block)> CanPlace [4096];
+			
+			
+			/**
+			 *	\cond
+			 */
 		
 		
 			WorldContainer ();
@@ -1220,13 +1225,103 @@ namespace MCPP {
 			virtual const String & Name () const noexcept override;
 			virtual Word Priority () const noexcept override;
 			virtual void Install () override;
+			
+			
+			/**
+			 *	\endcond
+			 */
 		
 		
+			/**
+			 *	Adds a WorldGenerator to be used in the
+			 *	generation of columns for a certain dimension.
+			 *
+			 *	This overload specifies a default generator.
+			 *	Default generators are only used where a
+			 *	generator for the chosen world type cannot
+			 *	be found.
+			 *
+			 *	\param [in] generator
+			 *		A pointer to the WorldGenerator.  The
+			 *		caller is responsible for this pointer's
+			 *		lifetime and ensuring that it remains
+			 *		valid until the server is shutdown.
+			 *	\param [in] dimension
+			 *		The dimension that should use \em generator
+			 *		as a default.
+			 */
 			void Add (const WorldGenerator * generator, SByte dimension);
+			/**
+			 *	Adds a WorldGenerator to be used in the
+			 *	generation of columns for a certain dimension.
+			 *
+			 *	This overload specifies a generator for a
+			 *	certain world type and dimension combination.
+			 *	The generator shall only be invoked when
+			 *	generating columns in the specified dimension
+			 *	when the world is set to the specified type.
+			 *
+			 *	\param [in] generator
+			 *		A pointer to the WorldGenerator.  The
+			 *		caller is responsible for this pointer's
+			 *		lifetime and ensuring that it remains
+			 *		valid until the server is shutdown.
+			 *	\param [in] type
+			 *		The world type that \em generator may
+			 *		supply columns for.
+			 *	\param [in] dimension
+			 *		The dimension that \em generator may
+			 *		supply chunks for.
+			 */
 			void Add (const WorldGenerator * generator, String type, SByte dimension);
 			
 			
+			/**
+			 *	Begins a transaction against the world.
+			 *
+			 *	Does not return until the lock may be
+			 *	acquired.
+			 *
+			 *	For the duration of the transaction the
+			 *	thread of execution which called this
+			 *	function is the only thread of execution
+			 *	which may perform writes to the world.
+			 *
+			 *	Note that a thread of execution is not
+			 *	necessarily tied to a specific thread.
+			 *	The transaction lock follows the thread
+			 *	of execution through asynchronous callbacks
+			 *	enqueued by whichever thread currently
+			 *	holds the lock.
+			 */
 			void Begin ();
+			/**
+			 *	Asynchronously begins a transaction against
+			 *	the world.
+			 *
+			 *	When the asynchronous callback provided ends,
+			 *	the transaction implicitly ends.
+			 *
+			 *	For the duration of the transaction the
+			 *	thread of execution which called this function
+			 *	is the only thread of execution which
+			 *	may perform writes to the world.
+			 *
+			 *	\tparam T
+			 *		The type of callback to be invoked once
+			 *		the transaction begins.
+			 *	\tparam Args
+			 *		The types of the arguments to be
+			 *		forwarded through to the callback of
+			 *		type \em T.
+			 *
+			 *	\param [in] callback
+			 *		The callback to be invoked once the lock
+			 *		is acquired.
+			 *	\param [in] args
+			 *		The arguments which shall be forwarded
+			 *		to \em callback.
+			 */
 			template <typename T, typename... Args>
 			void Begin (T && callback, Args &&... args) {
 			
@@ -1237,14 +1332,78 @@ namespace MCPP {
 				);
 			
 			}
+			/**
+			 *	Explicitly ends a transaction.
+			 *
+			 *	All synchronously-acquired transactions
+			 *	must be ended this way, unless they are
+			 *	passed off to an asynchronous callback,
+			 *	in which case the transaction will
+			 *	implicitly end once the callback which
+			 *	was invoked last returns.
+			 */
 			void End ();
 			
 			
+			/**
+			 *	Expresses interest in a column, loading
+			 *	it into memory and preventing it from being
+			 *	unloaded for the duration of the interest.
+			 *
+			 *	\param [in] id
+			 *		The column in which to express interest.
+			 *	\param [in] prepare
+			 *		If \em true the column will be generated
+			 *		and populated, otherwise the column will
+			 *		simply be placed into memory.
+			 */
 			void Interested (ColumnID id, bool prepare=true);
+			/**
+			 *	Ends interest in a column, allowing the
+			 *	column to once again be unloaded if appropriate.
+			 *
+			 *	\param [in] id
+			 *		The column in which to end interest.
+			 */
 			void EndInterest (ColumnID id) noexcept;
 			
 			
+			/**
+			 *	Synchronously retrieves a block.
+			 *
+			 *	\param [in] id
+			 *		The coordinates of the block which
+			 *		shall be retrieved.
+			 *
+			 *	\return
+			 *		The block at the coordinates
+			 *		given by \em id.
+			 */
 			Block GetBlock (BlockID id);
+			/**
+			 *	Asynchronously retrieves a block.
+			 *
+			 *	\tparam T
+			 *		The type of callback to be invoked once
+			 *		the block-in-question is retrieved.
+			 *	\tparam Args
+			 *		The types of the arguments to be
+			 *		forwarded through to the callback of
+			 *		type \em T.
+			 *
+			 *	\param [in] id
+			 *		The coordinates of the block which
+			 *		shall be retrieved.
+			 *	\param [in] callback
+			 *		The callback which shall be invoked
+			 *		when the block is retrieved.  Its
+			 *		first argument shall be \em id, and
+			 *		its second argument shall be the
+			 *		block which was retrieved.
+			 *	\param [in] args
+			 *		The arguments to forward through to
+			 *		\em callback.
+			 */
 			template <typename T, typename... Args>
 			void GetBlock (BlockID id, T && callback, Args &&... args) {
 			
@@ -1323,7 +1482,61 @@ namespace MCPP {
 			}
 			
 			
-			bool SetBlock (BlockID id, Block block);
+			/**
+			 *	Synchronously sets a block.
+			 *
+			 *	\param [in] id
+			 *		The coordinates of the block to set.
+			 *	\param [in] block
+			 *		The block to set at the coordinates given
+			 *		by \em id.
+			 *	\param [in] force
+			 *		Whether the setting of the block shall be
+			 *		forced.  If setting the block is forced,
+			 *		event handlers shall not have the opportunity
+			 *		to stop the setting of the block, and shall
+			 *		only be informed after it has been set that
+			 *		it has been.  Defaults to \em true.
+			 *
+			 *	\return
+			 *		\em true if setting the block succeeded,
+			 *		\em false otherwise.  If \em force is
+			 *		\em true, \em true is always returned.
+			 */
+			bool SetBlock (BlockID id, Block block, bool force=true);
+			/**
+			 *	Asynchronously sets a block.
+			 *
+			 *	\tparam T
+			 *		The type of callback which shall be
+			 *		invoked when the block has been set.
+			 *	\tparam Args
+			 *		The type of arguments which shall be
+			 *		forwarded through to the callback of
+			 *		type \em T.
+			 *
+			 *	\param [in] id
+			 *		The coordinates of the block to set.
+			 *	\param [in] block
+			 *		The block to set at the coordinates given
+			 *		by \em id.
+			 *	\param [in] force
+			 *		Whether the setting of the block shall be
+			 *		forced.  If setting the block is forced,
+			 *		event handlers shall not have the opportunity
+			 *		to stop the setting of the block, and shall
+			 *		only be informed after it has been set that
+			 *		it has been.  Defaults to \em true.
+			 *	\param [in] callback
+			 *		The callback which shall be invoked once the
+			 *		block has been set (or once setting the block
+			 *		has failed).  Shall be passed \em true if the
+			 *		operation succeeds, \em false otherwise, \em id,
+			 *		and \em block.
+			 *	\param [in] args
+			 *		Arguments which shall be forwarded through to
+			 *		\em callback.
+			 */
 			template <typename T, typename... Args>
 			void SetBlock (BlockID id, Block block, bool force, T && callback, Args &&... args) {
 			
