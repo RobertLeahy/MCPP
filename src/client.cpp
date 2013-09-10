@@ -12,7 +12,9 @@ namespace MCPP {
 	static const String key_pa("Key:");
 	static const String iv_pa("Initialization Vector:");
 	static const String recv_pa_template("{0}:{1} ==> Server - Packet of type {2}");
+	static const String raw_send_template("Server ==> {0}:{1} - RAW SEND ({2} bytes)");
 	static const String encrypt_pa_key("encryption");
+	static const String raw_send_key("raw_send");
 	
 	
 	//	Formats a byte for display/logging
@@ -108,6 +110,7 @@ namespace MCPP {
 		
 		//	Enable encryption
 		encryptor.Construct(key,iv);
+		debug_enc.Construct(key,iv);
 	
 	}
 	
@@ -138,25 +141,95 @@ namespace MCPP {
 		
 		}
 		
-		return conn->Send(
-			//	Encrypt if necessary
-			encryptor.IsNull()
-				?	packet.ToBytes()
-				:	encryptor->Encrypt(packet.ToBytes())
-		);
+		auto buffer=packet.ToBytes();
+		SmartPointer<SendHandle> retr;
+		
+		if (encryptor.IsNull()) {
+		
+			retr=conn->Send(std::move(buffer));
+		
+		} else {
+		
+			encryptor->BeginEncrypt();
+			
+			try {
+			
+				retr=conn->Send(
+					encryptor->Encrypt(
+						std::move(buffer)
+					)
+				);
+			
+			} catch (...) {
+			
+				encryptor->EndEncrypt();
+				
+				throw;
+			
+			}
+			
+			encryptor->EndEncrypt();
+		
+		}
+		
+		return retr;
 	
 	}
 	
 	
 	SmartPointer<SendHandle> Client::Send (Vector<Byte> buffer) {
 	
+		if (RunningServer->IsVerbose(raw_send_key)) {
+		
+			String log(pa_banner);
+			log	<<	Newline
+				<<	String::Format(
+						raw_send_template,
+						IP(),
+						Port(),
+						buffer.Count()
+					);
+					
+			RunningServer->WriteLog(
+				log,
+				Service::LogType::Debug
+			);
+			
+		}
+	
 		return read([&] () {
 		
-			return conn->Send(
-				encryptor.IsNull()
-					?	std::move(buffer)
-					:	encryptor->Encrypt(std::move(buffer))
-			);
+			SmartPointer<SendHandle> retr;
+			
+			if (encryptor.IsNull()) {
+			
+				retr=conn->Send(std::move(buffer));
+			
+			} else {
+			
+				encryptor->BeginEncrypt();
+				
+				try {
+				
+					retr=conn->Send(
+						encryptor->Encrypt(
+							std::move(buffer)
+						)
+					);
+				
+				} catch (...) {
+				
+					encryptor->EndEncrypt();
+					
+					throw;
+				
+				}
+				
+				encryptor->EndEncrypt();
+			
+			}
+			
+			return retr;
 			
 		});
 	

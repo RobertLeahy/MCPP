@@ -27,6 +27,8 @@ namespace MCPP {
 			EVP_CIPHER_CTX encrypt;
 			Mutex decrypt_lock;
 			EVP_CIPHER_CTX decrypt;
+			Vector<Byte> key;
+			Vector<Byte> iv;
 			
 			
 		public:
@@ -56,7 +58,7 @@ namespace MCPP {
 			 *	\param [in] iv
 			 *		The initialization vector.
 			 */
-			AES128CFB8 (const Vector<Byte> & key, const Vector<Byte> & iv);
+			AES128CFB8 (Vector<Byte> key, Vector<Byte> iv);
 			/**
 			 *	Cleans up this object, freeing all
 			 *	used resources and erasing sensitive

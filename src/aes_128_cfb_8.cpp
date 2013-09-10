@@ -11,11 +11,11 @@ namespace MCPP {
 	static const char * insufficient_iv_size="Initialization vector is not long enough";
 
 
-	AES128CFB8::AES128CFB8 (const Vector<Byte> & key, const Vector<Byte> & iv) {
+	AES128CFB8::AES128CFB8 (Vector<Byte> key, Vector<Byte> iv) : key(std::move(key)), iv(std::move(iv)) {
 	
 		//	Insufficient key or IV bytes
-		if (key.Count()<16) throw std::invalid_argument(insufficient_key_size);
-		if (iv.Count()<16) throw std::invalid_argument(insufficient_iv_size);
+		if (this->key.Count()<16) throw std::invalid_argument(insufficient_key_size);
+		if (this->iv.Count()<16) throw std::invalid_argument(insufficient_iv_size);
 	
 		//	Initialize cipher contexts
 		EVP_CIPHER_CTX_init(&encrypt);
@@ -32,16 +32,12 @@ namespace MCPP {
 					nullptr,
 					reinterpret_cast<unsigned char *>(
 						static_cast<Byte *>(
-							const_cast<Vector<Byte> &>(
-								key
-							)
+							this->key
 						)
 					),
 					reinterpret_cast<unsigned char *>(
 						static_cast<Byte *>(
-							const_cast<Vector<Byte> &>(
-								iv
-							)
+							this->iv
 						)
 					)
 				)==0) ||
@@ -51,16 +47,12 @@ namespace MCPP {
 					nullptr,
 					reinterpret_cast<unsigned char *>(
 						static_cast<Byte *>(
-							const_cast<Vector<Byte> &>(
-								key
-							)
+							this->key
 						)
 					),
 					reinterpret_cast<unsigned char *>(
 						static_cast<Byte *>(
-							const_cast<Vector<Byte> &>(
-								iv
-							)
+							this->iv
 						)
 					)
 				)==0)
