@@ -110,7 +110,6 @@ namespace MCPP {
 		
 		//	Enable encryption
 		encryptor.Construct(key,iv);
-		debug_enc.Construct(key,iv);
 	
 	}
 	
