@@ -285,6 +285,8 @@ namespace MCPP {
 	
 		lock.Acquire();
 		
+		sent=true;
+		
 		//	Do not perform a bulk send if
 		//	one has already been performed,
 		//	or if there are no clients to
@@ -296,8 +298,6 @@ namespace MCPP {
 			return;
 		
 		}
-		
-		sent=true;
 		
 		try {
 		
@@ -388,7 +388,7 @@ namespace MCPP {
 	}
 	
 	
-	void ColumnContainer::RemovePlayer (SmartPointer<Client> client) {
+	void ColumnContainer::RemovePlayer (SmartPointer<Client> client, bool force) {
 	
 		lock.Execute([&] () {
 		
@@ -397,9 +397,12 @@ namespace MCPP {
 			//	A.	The client had been added
 			//		to this column.
 			//	B.	This column had been sent
-			//		to clients
+			//		to clients.
+			//	C.	This isn't a forceful
+			//		removal.
 			if (
 				(clients.erase(client)!=0) &&
+				!force &&
 				sent
 			) client->Send(GetUnload());
 		

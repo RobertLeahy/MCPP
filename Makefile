@@ -479,6 +479,7 @@ bin/mods/ban.dll: bin/mcpp.dll bin/rleahy_lib.dll bin/data_provider.dll src/ban/
 #	WORLD
 
 bin/mods/world.dll: \
+src/world/add_client.cpp \
 src/world/block_id.cpp \
 src/world/column_container.cpp \
 src/world/column_id.cpp \
@@ -508,6 +509,7 @@ obj/new_delete.o | \
 bin/rleahy_lib.dll \
 bin/mcpp.dll
 	$(GPP) -shared -o $@ bin/mcpp.dll bin/rleahy_lib.dll obj/new_delete.o \
+	src/world/add_client.cpp \
 	src/world/block_id.cpp \
 	src/world/column_container.cpp \
 	src/world/column_id.cpp \

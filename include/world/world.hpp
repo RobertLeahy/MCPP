@@ -713,7 +713,11 @@ namespace MCPP {
 			//	Adds a player to this column.
 			void AddPlayer (SmartPointer<Client>);
 			//	Removes a player from this column.
-			void RemovePlayer (SmartPointer<Client>);
+			//
+			//	Boolean indicates whether or not
+			//	column should be unloaded on the
+			//	client.
+			void RemovePlayer (SmartPointer<Client>, bool);
 			//	Expresses "interest" in the column.
 			//
 			//	So longer as interest has been expressed
@@ -1122,6 +1126,15 @@ namespace MCPP {
 			//	at any one time, to avoid race
 			//	conditions while saving
 			Mutex maintenance_lock;
+			
+			
+			//	Maps clients to the columns associated
+			//	with them
+			std::unordered_map<
+				SmartPointer<Client>,
+				std::unordered_set<ColumnID>
+			> clients;
+			Mutex clients_lock;
 		
 		
 			//	PRIVATE METHODS
@@ -1274,6 +1287,11 @@ namespace MCPP {
 			 *		supply chunks for.
 			 */
 			void Add (const WorldGenerator * generator, String type, SByte dimension);
+			
+			
+			void Add (SmartPointer<Client> client, ColumnID id);
+			void Remove (SmartPointer<Client> client, ColumnID id, bool force=false);
+			void Remove (SmartPointer<Client> client, bool force=false);
 			
 			
 			/**
