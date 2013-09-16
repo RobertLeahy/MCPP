@@ -7,9 +7,12 @@
 
 
 #include <data_provider.hpp>
+#include <memory>
+#include <utility>
+#include <functional>
 #include <type_traits>
 #include <cstring>
-#include <utility>
+#include <atomic>
 #ifdef ENVIRONMENT_WINDOWS
 #include <mysql.h>
 #include <errmsg.h>
@@ -217,7 +220,7 @@ namespace MCPP {
 	};
 
 
-	class MySQLDataProvider : public DataProvider {
+	class MySQLConnection {
 	
 	
 		private:
@@ -225,18 +228,6 @@ namespace MCPP {
 		
 			//	Connection
 			mutable MYSQL conn;
-			//	Guards the connection against
-			//	unsynchronized access
-			mutable Mutex lock;
-			
-			
-			//	Connection information for
-			//	reconnects
-			Nullable<Vector<Byte>> username;
-			Nullable<Vector<Byte>> password;
-			Nullable<Vector<Byte>> database;
-			Nullable<Vector<Byte>> host;
-			Nullable<UInt16> port;
 			
 			
 			//	Prepared statements
@@ -259,173 +250,290 @@ namespace MCPP {
 			MYSQL_STMT * delete_kvp_stmt;
 			
 			
-			//	Statistics
-			Word reconnects;
-			Word requests;
-			Word waited;
-			UInt64 waiting;
-			UInt64 executing;
-			UInt64 connecting;
-			
-			
 			//	Private methods
-			
-			//	Connects or reconnects to the
-			//	database
-			void connect (bool);
-			//	Cleans up all prepared statements
 			inline void destroy_stmts () noexcept;
-			//	Checks to see if the connection to
-			//	the database is still up, if not
-			//	it reconnects it
-			void keep_alive ();
-			//	Prepares a prepared statement given
-			//	some query text
+			inline void connect (
+				const Nullable<String> &,
+				Nullable<UInt16>,
+				const Nullable<String> &,
+				const Nullable<String> &,
+				const Nullable<String> &,
+				bool
+			);
 			void prepare_stmt (MYSQL_STMT * &, const char *);
-			//	Destroys a prepared statement
-			static void destroy_stmt (MYSQL_STMT * &) noexcept;
-			//	Throws an error pending on a prepared
-			//	statement
+			__attribute__((noreturn))
 			static void raise (MYSQL_STMT *);
-			//	Calls mysql_thread_init as necessary
-			static void thread_init ();
-			//	Calls mysql_thread_end as necessary
-			static void thread_end ();
-			//	Acquires a lock on the connection
-			template <typename T>
-			auto acquire (T && callback) -> typename std::enable_if<
-				std::is_same<
-					decltype(callback()),
-					void
-				>::value
-			>::type {
-			
-				thread_init();
-			
-				Timer timer(Timer::CreateAndStart());
-				
-				lock.Acquire();
-				
-				try {
-				
-					timer.Stop();
-					waiting+=timer.ElapsedNanoseconds();
-					++waited;
-					
-					keep_alive();
-					
-					callback();
-				
-				} catch (...) {
-				
-					lock.Release();
-					
-					thread_end();
-					
-					throw;
-				
-				}
-				
-				lock.Release();
-				
-				thread_end();
-			
-			}
-			template <typename T>
-			auto acquire (T && callback) -> typename std::enable_if<
-				!std::is_same<
-					decltype(callback()),
-					void
-				>::value,
-				decltype(callback())
-			>::type {
-			
-				thread_init();
-			
-				Timer timer(Timer::CreateAndStart());
-				
-				lock.Acquire();
-				
-				Nullable<decltype(callback())> retr;
-				try {
-				
-					timer.Stop();
-					waiting+=timer.ElapsedNanoseconds();
-					++waited;
-					
-					keep_alive();
-					
-					retr.Construct(callback());
-				
-				} catch (...) {
-				
-					lock.Release();
-					
-					thread_end();
-					
-					throw;
-				
-				}
-				
-				lock.Release();
-				
-				thread_end();
-				
-				return *retr;
-			
-			}
-			//	Performs statistics maintenance
-			//	necessary around the executing of
-			//	a SQL query
-			template <typename T>
-			auto execute (T && callback) -> typename std::enable_if<
-				std::is_same<
-					decltype(callback()),
-					void
-				>::value
-			>::type {
-			
-				Timer timer(Timer::CreateAndStart());
-				
-				callback();
-				
-				timer.Stop();
-				executing+=timer.ElapsedNanoseconds();
-				++requests;
-			
-			}
-			template <typename T>
-			auto execute (T && callback) -> typename std::enable_if<
-				!std::is_same<
-					decltype(callback()),
-					void
-				>::value,
-				decltype(callback())
-			>::type {
-			
-				Timer timer(Timer::CreateAndStart());
-				
-				auto retr=callback();
-				
-				timer.Stop();
-				executing+=timer.ElapsedNanoseconds();
-				++requests;
-				
-				return retr;
-			
-			}
-		
-		
+	
+	
 		public:
 		
 		
-			MySQLDataProvider () = delete;
-			MySQLDataProvider (
+			MySQLConnection () = delete;
+			MySQLConnection (const MySQLConnection &) = delete;
+			MySQLConnection (MySQLConnection &&) = delete;
+			MySQLConnection & operator = (const MySQLConnection &) = delete;
+			MySQLConnection & operator = (MySQLConnection &&) = delete;
+			MySQLConnection (
 				const Nullable<String> &,
 				Nullable<UInt16>,
 				const Nullable<String> &,
 				const Nullable<String> &,
 				const Nullable<String> &
+			);
+			~MySQLConnection () noexcept;
+			
+			
+			//	Returns true if a reconnection occurred,
+			//	false otherwise.
+			bool KeepAlive (
+				const Nullable<String> &,
+				Nullable<UInt16>,
+				const Nullable<String> &,
+				const Nullable<String> &,
+				const Nullable<String> &
+			);
+			
+			
+			Vector<Tuple<String,String>> GetInfo ();
+			
+			
+			void WriteLog (const String &, Service::LogType);
+			void WriteChatLog (const String &, const Vector<String> &, const String &, const Nullable<String> &);
+			
+			
+			bool GetBinary (const String &, void *, Word *);
+			void SaveBinary (const String &, const void *, Word);
+			void DeleteBinary (const String &);
+			
+			
+			Nullable<String> GetSetting (const String &);
+			void SetSetting (const String &, const Nullable<String> &);
+			void DeleteSetting (const String &);
+			
+			
+			void InsertValue (const String &, const String &);
+			void DeleteValues (const String &, const String &);
+			void DeleteValues (const String &);
+			Vector<String> GetValues (const String &);
+	
+	
+	};
+	
+	
+	class MySQLDataProvider : public DataProvider {
+	
+	
+		private:
+		
+		
+			std::atomic<Word> executed;
+			std::atomic<UInt64> executing;
+			std::atomic<Word> connected;
+			std::atomic<UInt64> connecting;
+			std::atomic<Word> waited;
+			std::atomic<UInt64> waiting;
+		
+		
+			void tasks_func () noexcept;
+			//	Gets a connection, blocking until
+			//	one becomes available if necessary
+			std::unique_ptr<MySQLConnection> get ();
+			//	Returns a connection to the connection
+			//	pool
+			void done (std::unique_ptr<MySQLConnection> &);
+			//	Instructs the connection pool manager that
+			//	the held connection underwent an error,
+			//	and was cleaned up
+			void done () noexcept;
+			//	Enqueues a logging task
+			void enqueue (std::function<void (std::unique_ptr<MySQLConnection> &)>);
+			template <typename T, typename... Args>
+			auto execute (T && callback, Args &&... args) -> typename std::enable_if<
+				std::is_same<
+					decltype(
+						callback(
+							std::declval<
+								std::unique_ptr<MySQLConnection> &
+							>(),
+							std::forward<Args>(args)...
+						)
+					),
+					void
+				>::value
+			>::type {
+			
+				auto conn=get();
+				
+				Timer timer;
+				
+				try {
+				
+					timer=Timer::CreateAndStart();
+					
+				} catch (...) {
+				
+					done(conn);
+					
+					throw;
+				
+				}
+				
+				try {
+				
+					callback(
+						conn,
+						std::forward<Args>(args)...
+					);
+				
+				} catch (...) {
+				
+					done();
+					
+					throw;
+				
+				}
+				
+				try {
+				
+					executing+=timer.ElapsedNanoseconds();
+				
+				} catch (...) {
+				
+					done(conn);
+					
+					throw;
+				
+				}
+				
+				++executed;
+				
+				done(conn);
+			
+			}
+			template <typename T, typename... Args>
+			auto execute (T && callback, Args &&... args) -> typename std::enable_if<
+				!std::is_same<
+					decltype(
+						callback(
+							std::declval<
+								std::unique_ptr<MySQLConnection> &
+							>(),
+							std::forward<Args>(args)...
+						)
+					),
+					void
+				>::value,
+				decltype(
+					callback(
+						std::declval<
+							std::unique_ptr<MySQLConnection> &
+						>(),
+						std::forward<Args>(args)...
+					)
+				)
+			>::type {
+			
+				auto conn=get();
+				
+				Timer timer;
+				
+				try {
+				
+					timer=Timer::CreateAndStart();
+					
+				} catch (...) {
+				
+					done(conn);
+					
+					throw;
+				
+				}
+				
+				Nullable<
+					decltype(
+						callback(
+							std::declval<
+								std::unique_ptr<MySQLConnection> &
+							>(),
+							std::forward<Args>(args)...
+						)
+					)
+				> retr;
+				
+				try {
+				
+					retr.Construct(
+						callback(
+							conn,
+							std::forward<Args>(args)...
+						)
+					);
+				
+				} catch (...) {
+				
+					done();
+					
+					throw;
+				
+				}
+				
+				try {
+				
+					executing+=timer.ElapsedNanoseconds();
+				
+				} catch (...) {
+				
+					done(conn);
+					
+					throw;
+				
+				}
+				
+				++executed;
+				
+				done(conn);
+				
+				return *retr;
+			
+			}
+		
+		
+			Vector<std::function<void (std::unique_ptr<MySQLConnection> &)>> tasks;
+			Mutex tasks_lock;
+			CondVar tasks_wait;
+			bool tasks_stop;
+			Thread tasks_thread;
+			
+			
+			Vector<std::unique_ptr<MySQLConnection>> pool;
+			Word pool_curr;
+			Word pool_max;
+			Mutex lock;
+			CondVar wait;
+			
+			
+			Nullable<String> username;
+			Nullable<String> password;
+			Nullable<String> host;
+			Nullable<String> database;
+			Nullable<UInt16> port;
+			
+			
+		public:
+		
+		
+			MySQLDataProvider () = delete;
+			MySQLDataProvider (const MySQLDataProvider &) = delete;
+			MySQLDataProvider (MySQLDataProvider &&) = delete;
+			MySQLDataProvider & operator = (const MySQLDataProvider &) = delete;
+			MySQLDataProvider & operator = (MySQLDataProvider &&) = delete;
+			MySQLDataProvider (
+				Nullable<String>,
+				Nullable<UInt16>,
+				Nullable<String>,
+				Nullable<String>,
+				Nullable<String>,
+				Word
 			);
 			virtual ~MySQLDataProvider () noexcept;
 			
@@ -457,3 +565,4 @@ namespace MCPP {
 
 
 }
+ 

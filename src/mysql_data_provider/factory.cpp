@@ -7,6 +7,8 @@ namespace MCPP {
 
 	//	Name of the configuration file
 	static const String filename("mysql.ini");
+	//	Default number of pool connections
+	static const Word default_pool_max=0;
 
 
 	DataProvider * DataProvider::GetDataProvider () {
@@ -16,6 +18,7 @@ namespace MCPP {
 		Nullable<String> database;
 		Nullable<String> host;
 		Nullable<UInt16> port;
+		Word pool_max=default_pool_max;
 		
 		//	Get absolute path to the configuration
 		//	file in a format acceptable for use with
@@ -82,7 +85,7 @@ namespace MCPP {
 							UInt16 temp;
 							if (value.ToInteger(&temp)) port=temp;
 						
-						}
+						} else if (key=="pool_max") value.ToInteger(&pool_max);
 					
 					}
 				
@@ -103,13 +106,14 @@ namespace MCPP {
 		
 		//	Create MySQLDataProvider and
 		//	return
-		return new MySQLDataProvider(
-			host,
+		return reinterpret_cast<DataProvider *>(new MySQLDataProvider(
+			std::move(host),
 			std::move(port),
-			username,
-			password,
-			database
-		);
+			std::move(username),
+			std::move(password),
+			std::move(database),
+			pool_max
+		));
 	
 	}
 

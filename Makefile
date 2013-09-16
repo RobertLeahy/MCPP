@@ -360,13 +360,13 @@ bin/libmysql.dll \
 bin/rleahy_lib.dll \
 obj/new_delete.o \
 obj/data_provider.o \
-src/mysql_data_provider/constructor.cpp \
-src/mysql_data_provider/misc.cpp \
+src/mysql_data_provider/mysql_connection.cpp \
+src/mysql_data_provider/mysql_data_provider.cpp \
+src/mysql_data_provider/log.cpp \
 src/mysql_data_provider/factory.cpp \
 src/mysql_data_provider/binary.cpp \
-src/mysql_data_provider/log.cpp \
-src/mysql_data_provider/settings.cpp \
 src/mysql_data_provider/key_value.cpp \
+src/mysql_data_provider/settings.cpp \
 src/mysql_data_provider/info.cpp | \
 obj \
 bin \
@@ -376,13 +376,13 @@ bin/data_providers
 	obj/data_provider.o \
 	bin/rleahy_lib.dll \
 	bin/libmysql.dll \
-	src/mysql_data_provider/constructor.cpp \
-	src/mysql_data_provider/misc.cpp \
+	src/mysql_data_provider/mysql_connection.cpp \
+	src/mysql_data_provider/mysql_data_provider.cpp \
+	src/mysql_data_provider/log.cpp \
 	src/mysql_data_provider/factory.cpp \
 	src/mysql_data_provider/binary.cpp \
-	src/mysql_data_provider/log.cpp \
-	src/mysql_data_provider/settings.cpp \
 	src/mysql_data_provider/key_value.cpp \
+	src/mysql_data_provider/settings.cpp \
 	src/mysql_data_provider/info.cpp
 	cmd /c "move bin\data_providers\data_provider.dll bin\data_providers\mysql_data_provider.dll"
 	
