@@ -133,6 +133,19 @@ namespace MCPP {
 			Service::LogType::Information
 		);
 		
+		//	Install disconnect handler
+		RunningServer->OnDisconnect.Add([this] (SmartPointer<Client> client, const String &) mutable {
+		
+			Remove(
+				std::move(client),
+				//	Client has disconnected, we
+				//	don't bother sending them packets
+				//	to unload the columns they had
+				true
+			);
+		
+		});
+		
 		//	Install mods
 		mods->Install();
 		
