@@ -1295,6 +1295,15 @@ namespace MCPP {
 			
 			
 			/**
+			 *	Retrieves the world's seed.
+			 *
+			 *	\return
+			 *		The world's seed.
+			 */
+			UInt64 Seed () const noexcept;
+			
+			
+			/**
 			 *	Begins a transaction against the world.
 			 *
 			 *	Does not return until the lock may be

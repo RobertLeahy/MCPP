@@ -72,6 +72,13 @@ namespace MCPP {
 		);
 	
 	}
+	
+	
+	UInt64 WorldContainer::Seed () const noexcept {
+	
+		return seed;
+	
+	}
 
 
 }
