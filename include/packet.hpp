@@ -1683,7 +1683,7 @@ namespace MCPP {
 	template <> class PacketTypeMap<0x10> : public PacketType<0x10,Int16> { };
 	template <> class PacketTypeMap<0x11> : public PacketType<0x11,Int32,SByte,Int32,SByte,Int32> { };
 	template <> class PacketTypeMap<0x12> : public PacketType<0x12,Int32,SByte> { };
-	template <> class PacketTypeMap<0x13> : public PacketTypeMap<0x12> { };
+	template <> class PacketTypeMap<0x13> : public PacketType<0x13,Int32,SByte,Int32> {	};
 	template <> class PacketTypeMap<0x14> : public PacketType<0x14,Int32,String,Int32,Int32,Int32,SByte,SByte,Int16,Vector<Metadatum>> { };
 	//	0x15
 	template <> class PacketTypeMap<0x16> : public PacketType<0x16,Int32,Int32> { };
@@ -1797,7 +1797,7 @@ namespace MCPP {
 	template <> class PacketTypeMap<0x84> : public PacketType<0x84,Int32,Int16,Int32,SByte,PLACEHOLDER> {	};
 	//	...
 	template <> class PacketTypeMap<0xC9> : public PacketType<0xC9,String,bool,Int16> {	};
-	template <> class PacketTypeMap<0xCA> : public PacketType<0xCA,Byte,SByte,SByte> {	};
+	template <> class PacketTypeMap<0xCA> : public PacketType<0xCA,Byte,Single,Single> {	};
 	template <> class PacketTypeMap<0xCB> : public PacketType<0xCB,String> {	};
 	template <> class PacketTypeMap<0xCC> : public PacketType<0xCC,String,SByte,SByte,SByte,bool> {	};
 	template <> class PacketTypeMap<0xCD> : public PacketType<0xCD,SByte> {	};
