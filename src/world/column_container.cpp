@@ -196,6 +196,8 @@ namespace MCPP {
 		//	Update target state
 		this->target=target;
 		
+		lock.Release();
+		
 		//	Inform caller they must
 		//	process
 		return false;
