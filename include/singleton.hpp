@@ -15,6 +15,21 @@
 namespace MCPP {
 
 
+	/**
+	 *	Contains a singleton.
+	 *
+	 *	The singleton is not constructed
+	 *	until an attempt is made to access it,
+	 *	in which case it is thread safely
+	 *	constructed and persists until manually
+	 *	destroyed.
+	 *
+	 *	Destruction is not thread safe.
+	 *
+	 *	After the singleton is manually destroyed,
+	 *	an further attempts to access it will
+	 *	reconstruct it.
+	 */
 	template <typename T>
 	class Singleton {
 	
@@ -30,6 +45,9 @@ namespace MCPP {
 		public:
 		
 		
+			/**
+			 *	Creates a new singleton container.
+			 */
 			Singleton () noexcept {
 			
 				constructed=false;
@@ -43,6 +61,16 @@ namespace MCPP {
 			Singleton & operator = (Singleton &&) = delete;
 			
 			
+			/**
+			 *	Retrieves the singleton, constructing
+			 *	it if necessary.
+			 *
+			 *	Thread safe.
+			 *
+			 *	\return
+			 *		A reference to the contained
+			 *		singleton.
+			 */
 			T & Get () noexcept(std::is_nothrow_constructible<T>::value) {
 			
 				if (!constructed) {
@@ -66,9 +94,16 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Destroys the contained singleton.
+			 *
+			 *	Not thread safe.
+			 */
 			void Destroy () noexcept {
 			
 				obj.Destroy();
+				
+				constructed=false;
 			
 			}
 			
