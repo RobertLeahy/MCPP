@@ -74,6 +74,52 @@ namespace MCPP {
 
 
 	};
+	
+	
+	template <typename T, typename... Args>
+	class PackContains {
+	
+	
+		template <typename... Args_i>
+		class inner {
+		
+		
+			public:
+			
+			
+				static constexpr Word Value=0;
+		
+		
+		};
+		
+		
+		template <typename T_i, typename... Args_i>
+		class inner<T_i,Args_i...> {
+		
+		
+			public:
+			
+			
+				static constexpr Word Value=inner<Args_i...>::Value+(
+					std::is_same<
+						typename std::decay<T>::type,
+						typename std::decay<T_i>::type
+					>::value
+						?	1
+						:	0
+				);
+		
+		
+		};
+		
+		
+		public:
+		
+		
+			static constexpr Word Value=inner<Args...>::Value;
+	
+	
+	};
 	 
 	 
 	/**
@@ -352,6 +398,127 @@ namespace MCPP {
 			}
 			
 			
+			inline SmartPointer<SendHandle> atomic_perform (const Packet & packet) {
+			
+				return send(packet);
+			
+			}
+			
+			
+			inline SmartPointer<SendHandle> atomic_perform (const Tuple<Vector<Byte>,Vector<Byte>> & t) {
+			
+				if (encryptor.IsNull()) enable_encryption(
+					t.Item<0>(),
+					t.Item<1>()
+				);
+				
+				return SmartPointer<SendHandle>();
+			
+			}
+			
+			
+			template <typename T>
+			static typename std::enable_if<
+				std::is_convertible<T,std::function<void ()>>::value,
+				SmartPointer<SendHandle>
+			>::type atomic_perform (T && callback) noexcept(noexcept(callback())) {
+			
+				callback();
+				
+				return SmartPointer<SendHandle>();
+			
+			}
+			
+			
+			inline SmartPointer<SendHandle> atomic_perform (ClientState state) noexcept {
+			
+				this->state=state;
+				
+				return SmartPointer<SendHandle>();
+			
+			}
+			
+			
+			//	Recursion terminators
+			static inline void atomic_helper () noexcept {	}
+			static inline void atomic_helper (const SmartPointer<SendHandle> &) noexcept {	}
+			static inline void atomic_helper (const Vector<SmartPointer<SendHandle>> &) noexcept {	}
+			
+			
+			template <typename T, typename... Args>
+			typename std::enable_if<
+				!(
+					std::is_same<
+						typename std::decay<T>::type,
+						SmartPointer<SendHandle>
+					>::value ||
+					std::is_same<
+						typename std::decay<T>::type,
+						Vector<SmartPointer<SendHandle>>
+					>::value
+				)
+			>::type atomic_helper (T && t, Args &&... args) {
+			
+				atomic_perform(std::forward<T>(t));
+				
+				atomic_helper(std::forward<Args>(args)...);
+			
+			}
+			
+			
+			template <typename T, typename... Args>
+			void atomic_helper (SmartPointer<SendHandle> & handle, T && t, Args &&... args) {
+			
+				auto h=atomic_perform(std::forward<T>(t));
+				
+				if (!h.IsNull()) handle=std::move(h);
+				
+				atomic_helper(
+					handle,
+					std::forward<Args>(args)...
+				);
+			
+			}
+			
+			
+			template <typename T, typename... Args>
+			void atomic_helper (Vector<SmartPointer<SendHandle>> & vec, T && t, Args &&... args) {
+			
+				auto h=atomic_perform(std::forward<T>(t));
+				
+				if (!h.IsNull()) vec.Add(std::move(h));
+				
+				atomic_helper(
+					vec,
+					std::forward<Args>(args)...
+				);
+			
+			}
+			
+			
+			template <typename... Args>
+			static typename std::enable_if<
+				PackContains<Packet,Args...>::Value==1,
+				SmartPointer<SendHandle>
+			>::type get_atomic () noexcept {
+			
+				return SmartPointer<SendHandle>();
+			
+			}
+			
+			
+			template <typename... Args>
+			static typename std::enable_if<
+				PackContains<Packet,Args...>::Value!=1,
+				Vector<SmartPointer<SendHandle>>
+			>::type get_atomic () noexcept {
+			
+				return Vector<SmartPointer<SendHandle>>();
+			
+			}
+			
+			
+			
 		public:
 		
 		
@@ -370,6 +537,124 @@ namespace MCPP {
 			 *		The connection to wrap.
 			 */
 			Client (SmartPointer<Connection> conn);
+			
+			
+			/**
+			 *
+			 */
+			template <typename... Args>
+			typename std::enable_if<
+				PackContains<Packet,Args...>::Value==0
+			>::type Atomic (Args &&... args) {
+			
+				bool locked;
+				if (
+					comm_locked &&
+					(Thread::ID()==comm_locked_id)
+				) {
+				
+					locked=false;
+				
+				} else {
+				
+					locked=true;
+				
+					comm_lock.Write();
+					
+					comm_locked=true;
+					comm_locked_id=Thread::ID();
+				
+				}
+				
+				try {
+				
+					atomic_helper(std::forward<Args>(args)...);
+				
+				} catch (...) {
+				
+					if (locked) {
+					
+						comm_locked=false;
+					
+						comm_lock.CompleteWrite();
+					
+					}
+					
+					throw;
+				
+				}
+				
+				if (locked) {
+				
+					comm_locked=false;
+					
+					comm_lock.CompleteWrite();
+				
+				}
+			
+			}
+			/**
+			 *
+			 */
+			template <typename... Args>
+			typename std::enable_if<
+				PackContains<Packet,Args...>::Value!=0,
+				decltype(get_atomic<Args...>())
+			>::type Atomic (Args &&... args) {
+			
+				auto retr=get_atomic<Args...>();
+			
+				bool locked;
+				if (
+					comm_locked &&
+					(Thread::ID()==comm_locked_id)
+				) {
+				
+					locked=false;
+				
+				} else {
+				
+					locked=true;
+				
+					comm_lock.Write();
+					
+					comm_locked=true;
+					comm_locked_id=Thread::ID();
+				
+				}
+				
+				try {
+				
+					atomic_helper(
+						retr,
+						std::forward<Args>(args)...
+					);
+				
+				} catch (...) {
+				
+					if (locked) {
+					
+						comm_locked=false;
+					
+						comm_lock.CompleteWrite();
+					
+					}
+					
+					throw;
+				
+				}
+				
+				if (locked) {
+				
+					comm_locked=false;
+					
+					comm_lock.CompleteWrite();
+				
+				}
+				
+				return retr;
+			
+			}
 		
 		
 			/**
@@ -412,514 +697,6 @@ namespace MCPP {
 			 *		send operation.
 			 */
 			SmartPointer<SendHandle> Send (const Packet & packet);
-			/**
-			 *	Sends data to the client and
-			 *	atomically performs some action.
-			 *
-			 *	\tparam T
-			 *		The type of a callback to be
-			 *		executed atomically after
-			 *		data is sent.
-			 *	\tparam Args
-			 *		The types of the arguments
-			 *		which shall be passed to
-			 *		the callback.
-			 *
-			 *	\param [in] packet
-			 *		The packet to send to the client.
-			 *	\param [in] callback
-			 *		The callback which will be executed
-			 *		after data is sent.  Will be passed
-			 *		a reference to this object, a handle-
-			 *		which it may use to monitor the progress
-			 *		of the asynchronous send operation,
-			 *		as well as any other arguments passed
-			 *		to this function.
-			 *	\param [in] args
-			 *		Arguments of types Args which shall
-			 *		be forwarded through to \em callback.
-			 *		
-			 *	\return
-			 *		A send handle which can be used to
-			 *		monitor the progress of the asynchronous
-			 *		send operation.
-			 */
-			template <typename T, typename... Args>
-			auto Send (const Packet & packet, T && callback, Args &&... args) -> typename std::enable_if<
-				IsCallable<T,Client &,SmartPointer<SendHandle>,Args...>::Value,
-				SmartPointer<SendHandle>
-			>::type {
-			
-				SmartPointer<SendHandle> handle;
-				
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-				
-					comm_lock.Write();
-					
-					comm_locked=true;
-					comm_locked_id=Thread::ID();
-				
-				}
-				
-				try {
-				
-					handle=send(packet);
-					
-					callback(
-						*this,
-						handle,
-						std::forward<Args>(args)...
-					);
-				
-				} catch (...) {
-				
-					if (locked) {
-					
-						comm_locked=false;
-					
-						comm_lock.CompleteWrite();
-					
-					}
-					
-					throw;
-				
-				}
-				
-				if (locked) {
-				
-					comm_locked=false;
-					
-					comm_lock.CompleteWrite();
-				
-				}
-				
-				return handle;
-			
-			}
-			/**
-			 *	Sends data to the client and atomically
-			 *	updates the client's state.
-			 *
-			 *	\param [in] packet
-			 *		The packet to send to the client.
-			 *	\param [in] state
-			 *		The state to set the client's state
-			 *		to.
-			 *
-			 *	\return
-			 *		A send handle which can be used to
-			 *		monitor the progress of the asynchronous
-			 *		send operation.
-			 */
-			SmartPointer<SendHandle> Send (const Packet & packet, ClientState state);
-			/** 
-			 *	Sends data to the client, atomically
-			 *	updates the client's state, and performs
-			 *	some action.
-			 *
-			 *	\tparam T
-			 *		The type of a callback to be
-			 *		executed atomically after
-			 *		data is sent.
-			 *	\tparam Args
-			 *		The types of the arguments
-			 *		which shall be passed to
-			 *		the callback.
-			 *
-			 *	\param [in] packet
-			 *		The packet to send to the client.
-			 *	\param [in] state
-			 *		The state to set the client's state
-			 *		to.
-			 *	\param [in] callback
-			 *		The callback which will be executed
-			 *		after data is sent.  Will be passed
-			 *		a reference to this object, a handle-
-			 *		which it may use to monitor the progress
-			 *		of the asynchronous send operation,
-			 *		as well as any other arguments passed
-			 *		to this function.
-			 *	\param [in] args
-			 *		Arguments of types Args which shall
-			 *		be forwarded through to \em callback.
-			 *		
-			 *	\return
-			 *		A send handle which can be used to
-			 *		monitor the progress of the asynchronous
-			 *		send operation.
-			 */
-			template <typename T, typename... Args>
-			auto Send (
-				const Packet & packet,
-				ClientState state,
-				T && callback,
-				Args &&... args
-			) -> typename std::enable_if<
-				IsCallable<T,Client &,SmartPointer<SendHandle>,Args...>::Value,
-				SmartPointer<SendHandle>
-			>::type {
-			
-				SmartPointer<SendHandle> handle;
-			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-				
-					comm_lock.Write();
-					
-					comm_locked=true;
-					comm_locked_id=Thread::ID();
-				
-				}
-				
-				try {
-				
-					this->state=state;
-					
-					handle=send(packet);
-					
-					callback(
-						*this,
-						handle,
-						std::forward<Args>(args)...
-					);
-				
-				} catch (...) {
-				
-					if (locked) {
-					
-						comm_locked=false;
-					
-						comm_lock.CompleteWrite();
-					
-					}
-					
-					throw;
-				
-				}
-				
-				if (locked) {
-				
-					comm_locked=false;
-					
-					comm_lock.CompleteWrite();
-				
-				}
-				
-				return handle;
-			
-			}
-			/**
-			 *	Sends data to the client and atomically
-			 *	enables encryption.
-			 *
-			 *	\param [in] packet
-			 *		The packet to send to the client.
-			 *	\param [in] key
-			 *		The encryption key.
-			 *	\param [in] iv
-			 *		The initialization vector.
-			 *	\param [in] before
-			 *		\em true if \em packet should be
-			 *		sent before encryption is enabled,
-			 *		\em false otherwise.  Defaults to
-			 *		\em true.
-			 *
-			 *	\return
-			 *		A send handle which can be used to
-			 *		monitor the progress of the asynchronous
-			 *		send operation.
-			 */
-			SmartPointer<SendHandle> Send (
-				const Packet & packet,
-				const Vector<Byte> & key,
-				const Vector<Byte> & iv,
-				bool before=true
-			);
-			/** 
-			 *	Sends data to the client, atomically
-			 *	enables encryption, and performs some
-			 *	action.
-			 *
-			 *	\tparam T
-			 *		The type of a callback to be
-			 *		executed atomically after
-			 *		data is sent.
-			 *	\tparam Args
-			 *		The types of the arguments
-			 *		which shall be passed to
-			 *		the callback.
-			 *
-			 *	\param [in] packet
-			 *		The packet to send to the client.
-			 *	\param [in] key
-			 *		The encryption key.
-			 *	\param [in] iv
-			 *		The initialization vector.
-			 *	\param [in] before
-			 *		\em true if \em packet should be
-			 *		sent before encryption is enabled,
-			 *		\em false otherwise.
-			 *	\param [in] callback
-			 *		The callback which will be executed
-			 *		after data is sent.  Will be passed
-			 *		a reference to this object, a handle-
-			 *		which it may use to monitor the progress
-			 *		of the asynchronous send operation,
-			 *		as well as any other arguments passed
-			 *		to this function.
-			 *	\param [in] args
-			 *		Arguments of types Args which shall
-			 *		be forwarded through to \em callback.
-			 *		
-			 *	\return
-			 *		A send handle which can be used to
-			 *		monitor the progress of the asynchronous
-			 *		send operation.
-			 */
-			template <typename T, typename... Args>
-			auto Send (
-				const Packet & packet,
-				const Vector<Byte> & key,
-				const Vector<Byte> & iv,
-				bool before,
-				T && callback,
-				Args &&... args
-			) -> typename std::enable_if<
-				IsCallable<T,Client &,SmartPointer<SendHandle>,Args...>::Value,
-				SmartPointer<SendHandle>
-			>::type {
-			
-				SmartPointer<SendHandle> handle;
-			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-				
-					comm_lock.Write();
-					
-					comm_locked=true;
-					comm_locked_id=Thread::ID();
-				
-				}
-				
-				try {
-				
-					if (before) handle=send(packet);
-					
-					if (encryptor.IsNull()) enable_encryption(key,iv);
-					
-					if (!before) handle=send(packet);
-					
-					callback(
-						*this,
-						handle,
-						std::forward<Args>(args)...
-					);
-				
-				} catch (...) {
-				
-					if (locked) {
-					
-						comm_locked=false;
-					
-						comm_lock.CompleteWrite();
-					
-					}
-					
-					throw;
-				
-				}
-				
-				if (locked) {
-				
-					comm_locked=false;
-					
-					comm_lock.CompleteWrite();
-				
-				}
-				
-				return handle;
-			
-			}
-			/**
-			 *	Sends data to the client and atomically
-			 *	enables encryption and sets the client's
-			 *	state.
-			 *
-			 *	\param [in] packet
-			 *		The packet to send to the client.
-			 *	\param [in] key
-			 *		The encryption key.
-			 *	\param [in] iv
-			 *		The initialization vector.
-			 *	\param [in] state
-			 *		The state to set the client's state
-			 *		to.
-			 *	\param [in] before
-			 *		\em true if \em packet should be
-			 *		sent before encryption is enabled,
-			 *		\em false otherwise.  Defaults to
-			 *		\em true.
-			 *
-			 *	\return
-			 *		A send handle which can be used to
-			 *		monitor the progress of the asynchronous
-			 *		send operation.
-			 */
-			SmartPointer<SendHandle> Send (
-				const Packet & packet,
-				const Vector<Byte> & key,
-				const Vector<Byte> & iv,
-				ClientState state,
-				bool before=true
-			);
-			/**
-			 *	Sends data to the client, atomically
-			 *	enables encryption, sets the client's
-			 *	state, and performs some action.
-			 *
-			 *	\tparam T
-			 *		The type of a callback to be
-			 *		executed atomically after
-			 *		data is sent.
-			 *	\tparam Args
-			 *		The types of the arguments
-			 *		which shall be passed to
-			 *		the callback.
-			 *
-			 *	\param [in] packet
-			 *		The packet to send to the client.
-			 *	\param [in] key
-			 *		The encryption key.
-			 *	\param [in] iv
-			 *		The initialization vector.
-			 *	\param [in] before
-			 *		\em true if \em packet should be
-			 *		sent before encryption is enabled,
-			 *		\em false otherwise.
-			 *	\param [in] state
-			 *		The state to set the client's state
-			 *		to.
-			 *	\param [in] callback
-			 *		The callback which will be executed
-			 *		after data is sent.  Will be passed
-			 *		a reference to this object, a handle-
-			 *		which it may use to monitor the progress
-			 *		of the asynchronous send operation,
-			 *		as well as any other arguments passed
-			 *		to this function.
-			 *	\param [in] args
-			 *		Arguments of types Args which shall
-			 *		be forwarded through to \em callback.
-			 *		
-			 *	\return
-			 *		A send handle which can be used to
-			 *		monitor the progress of the asynchronous
-			 *		send operation.
-			 */
-			template <typename T, typename... Args>
-			auto Send (
-				const Packet & packet,
-				const Vector<Byte> & key,
-				const Vector<Byte> & iv,
-				bool before,
-				ClientState state,
-				T && callback,
-				Args &&... args
-			) -> typename std::enable_if<
-				IsCallable<T,Client &,SmartPointer<SendHandle>,Args...>::Value,
-				SmartPointer<SendHandle>
-			>::type {
-			
-				SmartPointer<SendHandle> handle;
-				
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-				
-					comm_lock.Write();
-					
-					comm_locked=true;
-					comm_locked_id=Thread::ID();
-				
-				}
-				
-				try {
-				
-					this->state=state;
-					
-					if (before) handle=send(packet);
-					
-					if (encryptor.IsNull()) enable_encryption(key,iv);
-					
-					if (!before) handle=send(packet);
-					
-					callback(
-						*this,
-						handle,
-						std::forward<Args>(args)...
-					);
-				
-				} catch (...) {
-				
-					if (locked) {
-					
-						comm_locked=false;
-					
-						comm_lock.CompleteWrite();
-					
-					}
-					
-					throw;
-				
-				}
-				
-				if (locked) {
-				
-					comm_locked=false;
-					
-					comm_lock.CompleteWrite();
-				
-				}
-				
-				return handle;
-			
-			}
 			
 			
 			/**

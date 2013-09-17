@@ -595,10 +595,12 @@ class Authentication : public Module {
 										//	encryption response and
 										//	enable encryption on
 										//	the client's connection
-										client->Send(
+										client->Atomic(
 											reply,
-											data.Secret,
-											data.Secret
+											Tuple<Vector<Byte>,Vector<Byte>>(
+												data.Secret,
+												data.Secret
+											)
 										);
 										
 										//	Advance state
@@ -721,32 +723,11 @@ class Authentication : public Module {
 						
 						}
 						
-						//	Hit the client with a 0x01
-						Packet reply;
-						reply.SetType<PacketTypeMap<0x01>>();
-						
-						//	TODO: Populate this data
-						//	properly
-						reply.Retrieve<Int32>(0)=1;
-						reply.Retrieve<String>(1)="default";
-						reply.Retrieve<SByte>(2)=0;
-						reply.Retrieve<SByte>(3)=0;
-						reply.Retrieve<SByte>(4)=0;
-						reply.Retrieve<SByte>(5)=0;
-						reply.Retrieve<SByte>(6)=20;
-						
-						//	Atomically authenticate the
-						//	player, send this packet
-						//	to them, and fire the
-						//	authenticate event
-						client->Send(
-							reply,
+						//	Authenticate the player and fire
+						//	the login handler
+						client->Atomic(
 							ClientState::Authenticated,
-							[&] (Client &, SmartPointer<SendHandle>) {
-							
-								RunningServer->OnLogin(client);
-							
-							}
+							[&] () {	RunningServer->OnLogin(client);	}
 						);
 					
 					});
