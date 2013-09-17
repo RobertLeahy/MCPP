@@ -1314,8 +1314,62 @@ namespace MCPP {
 			void Add (const WorldGenerator * generator, String type, SByte dimension);
 			
 			
+			/**
+			 *	Adds a client to a particular column.
+			 *
+			 *	The column will be loaded, populated, and/or
+			 *	generated as necessary, after which the
+			 *	column will be sent to the client-in-question.
+			 *
+			 *	The column will not be unloaded until this
+			 *	client is removed from it.
+			 *
+			 *	\param [in] client
+			 *		The client to add.
+			 *	\param [in] id
+			 *		The column to which to add \em client.
+			 *	\param [in] async
+			 *		If \em true the function will return at once
+			 *		if the column specified by \em id is already
+			 *		undergoing processing by another thread.  The
+			 *		column will be sent to \em client at some
+			 *		indeterminate point in the future.  If \em false
+			 *		the method will block in the aforementioned situation
+			 *		until the column has been prepared by the
+			 *		other thread and sent.  Defaults to \em false.
+			 */
 			void Add (SmartPointer<Client> client, ColumnID id, bool async=false);
+			/**
+			 *	Removes a particular client from a particular column.
+			 *
+			 *	If that client was never added to that particular column,
+			 *	or has already been removed from it, nothing happens.
+			 *
+			 *	\param [in] client
+			 *		The client to remove.
+			 *	\param [in] id
+			 *		The column from which to remove \em client.
+			 *	\param [in] force
+			 *		If \em true \em client will be removed from the column
+			 *		specified by \em id without sending the necessary packet
+			 *		to \em client to unload the column on the client side.
+			 *		Defaults to \em false.
+			 */
 			void Remove (SmartPointer<Client> client, ColumnID id, bool force=false);
+			/**
+			 *	Removes all columns from a particular client.
+			 *
+			 *	If the client never had any columns, or all columns have
+			 *	been removed from the client, nothing happens.
+			 *
+			 *	\param [in] client
+			 *		The client from which all columns shall be
+			 *		removed.
+			 *	\param [in] force
+			 *		If \em true columns removed from \em client shall not
+			 *		result in a packet being sent to \em client to unload
+			 *		those columns.  Defaults to \em false.
+			 */
 			void Remove (SmartPointer<Client> client, bool force=false);
 			
 			
