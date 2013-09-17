@@ -68,6 +68,8 @@ namespace MCPP {
 			throw;
 		
 		}
+		
+		column->EndInterest();
 	
 	}
 	
@@ -82,10 +84,28 @@ namespace MCPP {
 			
 			return iter->second.erase(id)!=0;
 		
-		})) get_column(id)->RemovePlayer(
-			std::move(client),
-			force
-		);
+		})) {
+		
+			auto column=get_column(id);
+			
+			try {
+			
+				column->RemovePlayer(
+					std::move(client),
+					force
+				);
+			
+			} catch (...) {
+			
+				column->EndInterest();
+				
+				throw;
+			
+			}
+			
+			column->EndInterest();
+			
+		}
 	
 	}
 	
@@ -108,10 +128,28 @@ namespace MCPP {
 		
 		});
 		
-		for (auto id : set) get_column(id)->RemovePlayer(
-			client,
-			force
-		);
+		for (auto id : set) {
+		
+			auto column=get_column(id);
+			
+			try {
+		
+				column->RemovePlayer(
+					client,
+					force
+				);
+				
+			} catch (...) {
+			
+				column->EndInterest();
+				
+				throw;
+			
+			}
+			
+			column->EndInterest();
+			
+		}
 	
 	}
 
