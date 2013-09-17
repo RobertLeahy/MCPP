@@ -166,6 +166,43 @@ namespace MCPP {
 	}
 	
 	
+	bool ColumnContainer::Check (ColumnState target) noexcept {
+	
+		//	Do not lock, atomically check
+		//	current state
+		Word t=static_cast<Word>(target);
+		
+		Word c=static_cast<Word>(curr);
+		
+		//	If the current state is as much
+		//	or more than what we require
+		//	return true at once
+		if (t<=c) return true;
+		
+		lock.Acquire();
+		
+		//	Reload in case the state changed
+		c=static_cast<Word>(curr);
+		//	Recheck in case the state has
+		//	changed
+		if (t<=c) {
+		
+			lock.Release();
+			
+			return true;
+		
+		}
+		
+		//	Update target state
+		this->target=target;
+		
+		//	Inform caller they must
+		//	process
+		return false;
+	
+	}
+	
+	
 	bool ColumnContainer::InvokeWhen (ColumnState target, std::function<void ()> callback) {
 	
 		//	Do not lock, atomically check

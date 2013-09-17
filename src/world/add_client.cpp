@@ -10,8 +10,14 @@ namespace MCPP {
 		
 		try {
 	
-			//	Wait until column is populated
-			if (!column->WaitUntil(ColumnState::Populated)) process(*column);
+			//	Wait until column is populated, or
+			//	see if column will eventually enter
+			//	desired state
+			if (!(
+				async
+					?	column->Check(ColumnState::Populated)
+					:	column->WaitUntil(ColumnState::Populated)
+			)) process(*column);
 			
 			clients_lock.Execute([&] () {
 			

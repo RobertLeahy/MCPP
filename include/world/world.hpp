@@ -720,6 +720,13 @@ namespace MCPP {
 			//	is returned which means that the caller MUST
 			//	do the required processing on the column.
 			bool InvokeWhen (ColumnState, std::function<void ()>);
+			//	Checks the column's state.
+			//
+			//	If the column will enter the requisite state
+			//	at some point in the future, returns true,
+			//	otherwise returns false and the caller should
+			//	perform that required processing immediately.
+			bool Check (ColumnState) noexcept;
 			//	Retrieves the column's current state
 			ColumnState GetState () const noexcept;
 			//	Sends the column to all currently
@@ -1307,7 +1314,7 @@ namespace MCPP {
 			void Add (const WorldGenerator * generator, String type, SByte dimension);
 			
 			
-			void Add (SmartPointer<Client> client, ColumnID id);
+			void Add (SmartPointer<Client> client, ColumnID id, bool async=false);
 			void Remove (SmartPointer<Client> client, ColumnID id, bool force=false);
 			void Remove (SmartPointer<Client> client, bool force=false);
 			
