@@ -29,7 +29,7 @@ namespace MCPP {
 		lock.Acquire();
 		
 		//	Set dirty flag appropriately
-		this->dirty=dirty;
+		if (dirty) this->dirty=true;
 		
 		//	Set populated flag if appropriate
 		if (target==ColumnState::Populated) Populated=true;
