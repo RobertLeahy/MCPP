@@ -4,6 +4,37 @@
 namespace MCPP {
 
 
+	static inline Int32 adjust_coord (Double coord) {
+	
+		if (coord<0) {
+		
+			Double rem=coord-static_cast<Double>(
+				static_cast<Int64>(
+					coord
+				)
+			);
+			
+			if (rem!=0) coord-=1;
+		
+		}
+		
+		return static_cast<Int32>(coord);
+	
+	}
+
+
+	ColumnID ColumnID::GetContaining (Double x, Double z, SByte dimension) noexcept {
+	
+		return BlockID{
+			adjust_coord(x),
+			0,
+			adjust_coord(z),
+			dimension
+		}.GetContaining();
+	
+	}
+
+
 	bool ColumnID::operator == (const ColumnID & other) const noexcept {
 	
 		return (

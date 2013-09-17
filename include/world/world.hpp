@@ -277,6 +277,24 @@ namespace MCPP {
 		
 		
 			/**
+			 *	Gets the column which contains a
+			 *	certain point.
+			 *
+			 *	\param [in] x
+			 *		The x coordinate of the point.
+			 *	\param [in] z
+			 *		The z coordinate of the point.
+			 *	\param [in] dimension
+			 *		The dimension of the point.
+			 *
+			 *	\return
+			 *		The ID of the column which contains
+			 *		the point-in-question.
+			 */
+			static ColumnID GetContaining (Double x, Double z, SByte dimension) noexcept;
+		
+		
+			/**
 			 *	The x-coordinate of the
 			 *	column-in-question.
 			 */
