@@ -281,9 +281,6 @@ namespace MCPP {
 		
 		} catch (...) {
 		
-			//	Cleanup
-			try {	if (cleanup) cleanup();	} catch (...) {	}
-		
 			//	PANIC
 			try {	if (panic) panic();	} catch (...) {	}
 		
