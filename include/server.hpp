@@ -103,6 +103,9 @@ namespace MCPP {
 		public:
 		
 		
+			static Server & Get () noexcept;
+		
+		
 			/**
 			 *	Whether protocol analysis shall be
 			 *	performed.

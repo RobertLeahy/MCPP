@@ -71,3 +71,10 @@ String Server::CompiledWith () const {
 	#endif
 
 }
+
+
+Server & Server::Get () noexcept {
+
+	return *RunningServer;
+
+}
