@@ -430,11 +430,13 @@ namespace MCPP {
 					//	tick
 					auto elapsed=timer.ElapsedMilliseconds();
 					
-					//	How long do we have to wait
-					//	for the next tick?
-					auto wait=tick_length-elapsed;
+					executing+=elapsed;
 					
-					executing+=tick_length-wait;
+					//	If we've been processing for too long,
+					//	enqueue for immediate execution,
+					//	otherwise wait for the appropriate
+					//	amount of time
+					Word wait=(elapsed>tick_length) ? 0 : (tick_length-static_cast<Word>(elapsed));
 					
 					//	Enqueue next tick
 					RunningServer->Pool().Enqueue(
@@ -469,32 +471,31 @@ namespace MCPP {
 			
 			//	New tick
 			timer=Timer::CreateAndStart();
-			++ticks;
-			tick_time+=elapsed;
-			
-			if (elapsed>threshold) {
-			
-				//	Tick was "too long"
-				
-				RunningServer->WriteLog(
-					String::Format(
-						tick_too_long,
-						(static_cast<Double>(elapsed-tick_length)/tick_length)*100,
-						elapsed,
-						tick_length
-					),
-					Service::LogType::Warning
-				);
-			
-			}
-			
-			//	New tick
-			timer=Timer::CreateAndStart();
 		
 			if (!(
 				offline_freeze &&
 				(RunningServer->Clients.AuthenticatedCount()==0)
 			)) {
+			
+				//	Update stats
+				++ticks;
+				tick_time+=elapsed;
+			
+				if (elapsed>threshold) {
+				
+					//	Tick was "too long"
+					
+					Server::Get().WriteLog(
+						String::Format(
+							tick_too_long,
+							(static_cast<Double>(elapsed-tick_length)/tick_length)*100,
+							elapsed,
+							tick_length
+						),
+						Service::LogType::Warning
+					);
+				
+				}
 			
 				//	We're ticking
 				
