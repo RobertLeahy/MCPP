@@ -138,6 +138,7 @@ namespace MCPP {
 					
 					//	Queue up all scheduled tasks
 					//	that are due to be run
+					bool enqueued=false;
 					while (
 						(scheduled.Count()!=0) &&
 						(
@@ -146,18 +147,23 @@ namespace MCPP {
 						)
 					) {
 					
-						queue.EmplaceBack(
+						queue.Emplace(
+							0,
 							std::move(scheduled[0].Item<0>()),
 							std::move(scheduled[0].Item<2>())
 						);
 						
 						scheduled.Delete(0);
+						
+						enqueued=true;
 					
 					}
 					
 					//	Get a task
 					curr=std::move(queue[0]);
 					queue.Delete(0);
+					
+					if (enqueued) queue_wait.WakeAll();
 					
 				} catch (...) {
 				

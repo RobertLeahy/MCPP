@@ -696,8 +696,10 @@ namespace MCPP {
 						)
 					);
 					
-					//	Wake up a worker
-					queue_wait.Wake();
+					//	Wake up workers so they
+					//	adjust their sleep times
+					//	as necessary
+					queue_wait.WakeAll();
 				
 				} catch (...) {
 				
