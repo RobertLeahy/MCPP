@@ -254,7 +254,7 @@ namespace MCPP {
 		//	that to determine how many
 		//	days we are into this lunar
 		//	cycle
-		return static_cast<LunarPhase>((time%(day_length*num_lunar_phases))/day_length);
+		return static_cast<LunarPhase>(((time+6000)%(day_length*num_lunar_phases))/day_length);
 	
 	}
 	
@@ -268,12 +268,14 @@ namespace MCPP {
 		
 		//	Otherwise return the number
 		//	of ticks since midnight
-		return time%day_length;
+		return (time+6000)%day_length;
 	
 	}
 	
 	
 	TimeOfDay Time::get_time_of_day () const noexcept {
+	
+		auto time=get_time(false);
 		
 		if (
 			(time<4200) ||
