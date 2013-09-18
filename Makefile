@@ -88,6 +88,7 @@ obj/sha1.o \
 obj/new_delete.o \
 obj/noise.o \
 obj/multi_scope_guard.o \
+obj/concurrency_manager.o \
 bin/ssleay32.dll \
 bin/libeay32.dll \
 bin/libcurl.dll \
@@ -120,6 +121,7 @@ bin/data_provider.dll
 	obj/new_delete.o \
 	obj/noise.o \
 	obj/multi_scope_guard.o \
+	obj/concurrency_manager.o \
 	bin/ssleay32.dll \
 	bin/libeay32.dll \
 	bin/libcurl.dll \
@@ -343,6 +345,17 @@ src/multi_scope_guard.cpp | \
 bin/rleahy_lib.dll \
 obj
 	$(GPP) -c -o $@ src/multi_scope_guard.cpp
+	
+	
+#	CONCURRENCY MANAGER
+
+obj/concurrency_manager.o: \
+include/thread_pool.hpp \
+include/concurrency_manager.hpp \
+src/concurrency_manager.cpp | \
+bin/rleahy_lib.dll \
+obj
+	$(GPP) -c -o $@ src/concurrency_manager.cpp
 	
 	
 #	DATA PROVIDERS
