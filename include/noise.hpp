@@ -16,6 +16,9 @@
 #include <limits>
 #include <unordered_map>
 #include <fma.hpp>
+
+
+#pragma GCC optimize ("fast-math")
  
  
 namespace MCPP {
@@ -1455,3 +1458,6 @@ namespace MCPP {
 
 
 }
+
+
+#pragma GCC reset_options

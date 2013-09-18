@@ -3,6 +3,9 @@
 #include <random>
 
 
+#pragma GCC optimize ("fast-math")
+
+
 //	Simplex functions and pre-populated data
 //	tables from:
 //
