@@ -126,41 +126,28 @@ namespace MCPP {
 	}
 	
 	
+	
+				
+			
+			
 	void Server::WriteLog (const String & message, Service::LogType type) noexcept {
 	
 		//	Don't throw errors, eat them
 		try {
-	
-			auto callback=[=] () {
+		
+			//	Fire event
+			try {
 			
-				//	Don't throw errors, eat them
-				try {
-				
-					try {
-					
-						OnLog(message,type);
-						
-					} catch (...) {	}
-				
-					if (data==nullptr) Service::WriteLog(message,type);
-					else data->WriteLog(message,type);
-				
-				} catch (...) {	}
+				OnLog(message,type);
 			
-			};
+			} catch (...) {	}
 			
-			//	Is there a thread pool?
-			if (pool.IsNull()) {
-			
-				//	Log synchronously
-				callback();
-			
-			} else {
-			
-				//	Log asynchronously
-				pool->Enqueue(callback);
-			
-			}
+			//	Use the data provider to log
+			//	if it's present, otherwise
+			//	fall back on default service
+			//	logging
+			if (data==nullptr) Service::WriteLog(message,type);
+			else data->WriteLog(message,type);
 			
 		} catch (...) {	}
 	
@@ -172,34 +159,26 @@ namespace MCPP {
 		//	Don't throw errors, eat them
 		try {
 		
-			auto callback=[=] () {
+			//	Fire event
+			try {
 			
-				try {
-				
-					try {
-					
-						OnChatLog(from,to,message,notes);
-					
-					} catch (...) {	}
-					
-					if (data!=nullptr) data->WriteChatLog(from,to,message,notes);
-				
-				} catch (...) {	}
+				OnChatLog(
+					from,
+					to,
+					message,
+					notes
+				);
 			
-			};
+			} catch (...) {	}
 			
-			//	Is there a thread pool?
-			if (pool.IsNull()) {
-			
-				//	Log synchronously
-				callback();
-			
-			} else {
-			
-				//	Log asynchronously
-				pool->Enqueue(callback);
-			
-			}
+			//	If there's no data provider, don't
+			//	try and log at all
+			if (data!=nullptr) data->WriteChatLog(
+				from,
+				to,
+				message,
+				notes
+			);
 		
 		} catch (...) {	}
 	
