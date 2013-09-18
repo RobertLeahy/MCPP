@@ -726,6 +726,17 @@ namespace MCPP {
 			 *		was current as of the invocation.
 			 */
 			ThreadPoolInfo GetInfo () const;
+			
+			
+			/**
+			 *	Determines how many workers are in the
+			 *	thread pool.
+			 *
+			 *	\return
+			 *		The number of worker threads managed
+			 *		by the thread pool.
+			 */
+			Word Count () const noexcept;
 	
 	
 	};

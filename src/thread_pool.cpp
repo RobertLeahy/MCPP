@@ -435,6 +435,13 @@ namespace MCPP {
 		return info;
 	
 	}
+	
+	
+	Word ThreadPool::Count () const noexcept {
+	
+		return workers.Count();
+	
+	}
 
 
 }
