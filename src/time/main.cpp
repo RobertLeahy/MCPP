@@ -3,7 +3,11 @@
 #include <client.hpp>
 #include <data_provider.hpp>
 #include <thread_pool.hpp>
+#include <singleton.hpp>
 #include <cstddef>
+
+
+using namespace MCPP;
 
 
 namespace MCPP {
@@ -70,7 +74,7 @@ namespace MCPP {
 	static const String waxing_gibbous_moon("Waxing Gibbous");
 	
 	
-	const String & TimeModule::GetLunarPhase (LunarPhase phase) noexcept {
+	const String & Time::GetLunarPhase (LunarPhase phase) noexcept {
 	
 		switch (phase) {
 		
@@ -102,7 +106,7 @@ namespace MCPP {
 	static const String night("Night");
 	
 	
-	const String & TimeModule::GetTimeOfDay (TimeOfDay time_of_day) noexcept {
+	const String & Time::GetTimeOfDay (TimeOfDay time_of_day) noexcept {
 	
 		switch (time_of_day) {
 		
@@ -120,7 +124,7 @@ namespace MCPP {
 	}
 
 
-	TimeModule::TimeModule () noexcept {
+	Time::Time () noexcept {
 	
 		ticks=0;
 		tick_time=0;
@@ -132,21 +136,21 @@ namespace MCPP {
 	}
 	
 	
-	const String & TimeModule::Name () const noexcept {
+	const String & Time::Name () const noexcept {
 	
 		return name;
 	
 	}
 	
 	
-	Word TimeModule::Priority () const noexcept {
+	Word Time::Priority () const noexcept {
 	
 		return priority;
 	
 	}
 	
 	
-	void TimeModule::Install () {
+	void Time::Install () {
 	
 		//	Retrieve settings from the backing
 		//	store
@@ -240,7 +244,7 @@ namespace MCPP {
 	}
 	
 	
-	LunarPhase TimeModule::get_lunar_phase () const noexcept {
+	LunarPhase Time::get_lunar_phase () const noexcept {
 		
 		//	Determine the phase of the
 		//	lunar cycle we're in by
@@ -255,7 +259,7 @@ namespace MCPP {
 	}
 	
 	
-	UInt64 TimeModule::get_time (bool total) const noexcept {
+	UInt64 Time::get_time (bool total) const noexcept {
 		
 		//	If we're getting the total,
 		//	return exactly the current
@@ -269,7 +273,7 @@ namespace MCPP {
 	}
 	
 	
-	TimeOfDay TimeModule::get_time_of_day () const noexcept {
+	TimeOfDay Time::get_time_of_day () const noexcept {
 		
 		if (
 			(time<4200) ||
@@ -285,35 +289,35 @@ namespace MCPP {
 	}
 	
 	
-	LunarPhase TimeModule::GetLunarPhase () const noexcept {
+	LunarPhase Time::GetLunarPhase () const noexcept {
 	
 		return lock.Execute([&] () {	return get_lunar_phase();	});
 	
 	}
 	
 	
-	UInt64 TimeModule::GetTime (bool total) const noexcept {
+	UInt64 Time::GetTime (bool total) const noexcept {
 	
 		return lock.Execute([&] () {	return get_time(total);	});
 	
 	}
 	
 	
-	TimeOfDay TimeModule::GetTimeOfDay () const noexcept {
+	TimeOfDay Time::GetTimeOfDay () const noexcept {
 	
 		return lock.Execute([&] () {	return get_time_of_day();	});
 	
 	}
 	
 	
-	UInt64 TimeModule::GetAge () const noexcept {
+	UInt64 Time::GetAge () const noexcept {
 	
 		return lock.Execute([&] () {	return age;	});
 	
 	}
 	
 	
-	Tuple<UInt64,UInt64,LunarPhase,TimeOfDay,UInt64> TimeModule::Get () const noexcept {
+	Tuple<UInt64,UInt64,LunarPhase,TimeOfDay,UInt64> Time::GetInfo () const noexcept {
 	
 		return lock.Execute([&] () {
 		
@@ -330,7 +334,7 @@ namespace MCPP {
 	}
 	
 	
-	void TimeModule::Add (UInt64 ticks) noexcept {
+	void Time::Add (UInt64 ticks) noexcept {
 	
 		lock.Acquire();
 		time+=ticks;
@@ -339,7 +343,7 @@ namespace MCPP {
 	}
 	
 	
-	void TimeModule::Subtract (UInt64 ticks) noexcept {
+	void Time::Subtract (UInt64 ticks) noexcept {
 	
 		lock.Acquire();
 		//	If we'd cause an underflow, add enough
@@ -351,7 +355,7 @@ namespace MCPP {
 	}
 	
 	
-	void TimeModule::Set (UInt64 time, bool total) noexcept {
+	void Time::Set (UInt64 time, bool total) noexcept {
 	
 		if (total) {
 		
@@ -390,7 +394,7 @@ namespace MCPP {
 	}
 	
 	
-	void TimeModule::Save () const {
+	void Time::Save () const {
 	
 		lock.Acquire();
 		UInt64 age=this->age;
@@ -402,7 +406,7 @@ namespace MCPP {
 	}
 	
 	
-	void TimeModule::save (UInt64 age, UInt64 time) const {
+	void Time::save (UInt64 age, UInt64 time) const {
 	
 		TimeSave save{
 			age,
@@ -418,7 +422,7 @@ namespace MCPP {
 	}
 	
 	
-	void TimeModule::tick () {
+	void Time::tick () {
 	
 		try {
 		
@@ -595,7 +599,14 @@ namespace MCPP {
 	}
 	
 	
-	Nullable<TimeModule> Time;
+	static Singleton<Time> singleton;
+	
+	
+	Time & Time::Get () noexcept {
+	
+		return singleton.Get();
+	
+	}
 
 
 }
@@ -606,16 +617,14 @@ extern "C" {
 
 	Module * Load () {
 	
-		if (Time.IsNull()) Time.Construct();
-		
-		return &(*Time);
+		return &(singleton.Get());
 	
 	}
 	
 	
 	void Unload () {
 	
-		Time.Destroy();
+		singleton.Destroy();
 	
 	}
 

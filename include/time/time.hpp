@@ -47,7 +47,7 @@ namespace MCPP {
 	/**
 	 *	Keeps track of the time of day.
 	 */
-	class TimeModule : public Module {
+	class Time : public Module {
 	
 	
 		template <typename T>
@@ -220,6 +220,17 @@ namespace MCPP {
 		
 		
 			/**
+			 *	Retrieves a reference to a valid instance
+			 *	of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance of
+			 *		this class.
+			 */
+			static Time & Get () noexcept;
+		
+		
+			/**
 			 *	Retrieves a string which describes
 			 *	a phase of the moon.
 			 *
@@ -243,7 +254,7 @@ namespace MCPP {
 			static const String & GetTimeOfDay (TimeOfDay time_of_day) noexcept;
 		
 		
-			TimeModule () noexcept;
+			Time () noexcept;
 			
 			
 			virtual const String & Name () const noexcept override;
@@ -300,7 +311,7 @@ namespace MCPP {
 			 *		the current time of day, and the current
 			 *		world's age, respectively.
 			 */
-			Tuple<UInt64,UInt64,LunarPhase,TimeOfDay,UInt64> Get () const noexcept;
+			Tuple<UInt64,UInt64,LunarPhase,TimeOfDay,UInt64> GetInfo () const noexcept;
 			
 			
 			/**
@@ -455,12 +466,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	/**
-	 *	The single valid instance of TimeModule.
-	 */
-	extern Nullable<TimeModule> Time;
 
 
 }

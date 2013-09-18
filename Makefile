@@ -551,6 +551,7 @@ include/data_provider.hpp \
 include/client.hpp \
 include/thread_pool.hpp \
 include/multi_scope_guard.hpp \
+include/singleton.hpp \
 src/time/main.cpp | \
 bin/mcpp.dll \
 bin/rleahy_lib.dll

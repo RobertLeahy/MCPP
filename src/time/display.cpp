@@ -91,17 +91,17 @@ class DisplayTime : public Command, public Module {
 		
 		virtual bool Execute (SmartPointer<Client>, const String &, ChatMessage & message) override {
 		
-			auto t=Time->Get();
+			auto t=Time::Get().GetInfo();
 			
 			message	<< ChatStyle::Bold
 					<< "The current time is: "
 					<< format_time(t.Item<1>())
 					<< Newline
 					<< "It is: "
-					<< TimeModule::GetTimeOfDay(t.Item<3>())
+					<< Time::GetTimeOfDay(t.Item<3>())
 					<< Newline
 					<< "The moon is: "
-					<< TimeModule::GetLunarPhase(t.Item<2>());
+					<< Time::GetLunarPhase(t.Item<2>());
 		
 			//	No syntax errors ever
 			return true;
