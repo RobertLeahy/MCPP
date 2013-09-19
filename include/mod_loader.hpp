@@ -65,15 +65,14 @@ namespace MCPP {
 			//	Collection of loaded modules
 			Vector<
 				Tuple<
-					//	Filename the module
-					//	was loaded from
+					//	Filename the module was
+					//	loaded from
 					String,
-					//	Pointer to the module
-					//	object
+					//	Pointer to the module object
 					Module *,
-					//	Handle to the dynamically
-					//	loaded module
-					Library
+					//	Handle to the dynamically loaded
+					//	module
+					void *
 				>
 			> mods;
 			//	Directory to scan
@@ -82,10 +81,11 @@ namespace MCPP {
 			LogType log;
 			
 			
-			inline void unload () noexcept;
+			inline void begin_load () const;
+			inline void end_load () const;
 			inline void destroy () noexcept;
-			template <typename T>
-			inline T load (const String &, const Library &, const String &);
+			inline void unload_impl () noexcept;
+			inline void load_impl (String filename);
 			
 			
 		public:

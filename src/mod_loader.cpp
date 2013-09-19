@@ -1,8 +1,13 @@
 #include <mod_loader.hpp>
+#include <system_error>
+#include <type_traits>
 #include <utility>
 
 
-#ifdef ENVIRONMENT_POSIX
+#ifdef ENVIRONMENT_WINDOWS
+#include <windows.h>
+#else
+//	Make sure we get dladdr
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -12,173 +17,342 @@
 #endif
 
 
-static const String could_not_open_dir="Could not open modules directory";
-static const String attempt_to_load="Attempting to load {0}";
-static const String failed_to_load="Failed to load {0}";
-static const String loaded="Loading {0}";
-static const String bad_format="{0} does not specify a load function";
-static const String bad_ptr="{0} failed to generate module structure";
-static const String identified="{0} identifies as \"{1}\"";
-
-
 namespace MCPP {
 
 
-	ModuleLoader::ModuleLoader (String dir, LogType log) : dir(std::move(dir)), log(std::move(log)) {	}
+	static const String could_not_open_dir="Could not open modules directory";
+	static const String attempt_to_load="Attempting to load {0}";
+	static const String failed_to_load="Failed to load {0}";
+	static const String loaded="Loaded {0}";
+	static const String bad_format="{0} does not specify a load function";
+	static const String bad_ptr="{0} failed to generate module structure";
+	static const String identified="{0} identifies as \"{1}\"";
+
+
+	#ifdef ENVIRONMENT_WINDOWS
 	
 	
-	//	There's an issue with the module
-	//	loading/management scheme vis-a-vis
-	//	dlsym on Linux.
-	//
-	//	On Windows GetAddress only returns an
-	//	address inside the target module,
-	//	whereas on Linux dlsym will do a
-	//	tree-like search through that module
-	//	and all its dependencies.
-	//
-	//	This is an issue because modules can
-	//	have sub-modules, which depend on that
-	//	module.
-	//
-	//	Example:
-	//
-	//	We load foo.so, whidh loads bar.so.
-	//
-	//	bar.so depends on foo.so.
-	//
-	//	foo.so tries to lookup "Cleanup" in
-	//	bar.so, but bar.so does not have a
-	//	cleanup action, and therefore does
-	//	not contain that symbol.
-	//
-	//	On Windows -- using GetAddress --
-	//	this would throw, indicating the
-	//	desired symbol was not present.
-	//
-	//	On Linux however, this will branch
-	//	into foo.so, find "Cleanup" there,
-	//	and return the address of that.
-	//
-	//	This is disastrous as this will lead
-	//	to infinite recursion.
-	//
-	//	Therefore we have implement a workaround
-	//	on Linux to check to make sure the
-	//	address of the target symbol actually
-	//	comes from the correct module file.
-	//
-	//	Credit goes to greymerk for finding/thinking
-	//	of this workaround.
-	template <typename T>
-	T ModuleLoader::load (const String & symbol, const Library & lib, const String &
-		#ifdef ENVIRONMENT_POSIX
-		filename
-		#endif
-	) {
+	//	Adds the appropriate directory
+	//	to the search path (on Windows)
+	inline void ModuleLoader::begin_load () const {
 	
-		#ifdef ENVIRONMENT_WINDOWS
+		//	Get OS string
+		auto os_str=dir.ToOSString();
 		
-		return lib.GetAddress<T>(symbol);
-		
-		#else
-		
-		union {
-			T addr;
-			void * addr_ptr;
-		};
-		
-		//	Get the address, if that throws
-		//	then we're free and clear
-		addr=lib.GetAddress<T>(symbol);
-		
-		//	Otherwise we need to do a sanity
-		//	check to enforce the Windows behaviour
-		
-		//	Get the raw OS handle from the
-		//	wrapper
-		void * handle;
-		memcpy(&handle,&lib,sizeof(Library));
-		
-		//	Get information about the module
-		//	containing addr
-		Dl_info info;
-		if (dladdr(
-			addr_ptr,
-			&info
-		)==0) throw std::runtime_error(
-			dlerror()
-		);
-		
-		//	Check to see if that's this module
-		if (
-			UTF8().Decode(
-				reinterpret_cast<const Byte *>(
-					info.dli_fname
-				),
-				reinterpret_cast<const Byte *>(
-					info.dli_fname+strlen(info.dli_fname)
+		//	Set the DLL search directory
+		if (!SetDllDirectoryW(
+			reinterpret_cast<LPCWSTR>(
+				static_cast<Byte *>(
+					os_str
 				)
-			)!=Path::Combine(
-				dir,
-				filename
 			)
-		) throw std::runtime_error(nullptr);	//	Dummy exception
-		
-		//	Okay we're good
-		return addr;
-		
-		#endif
+		)) throw std::system_error(
+			std::error_code(
+				GetLastError(),
+				std::system_category()
+			)
+		);
 	
 	}
 	
 	
+	//	Removes the added directory from
+	//	the search path
+	inline void ModuleLoader::end_load () const {
+	
+		//	Remove the DLL search directory
+		if (!SetDllDirectoryW(nullptr)) throw std::system_error(
+			std::error_code(
+				GetLastError(),
+				std::system_category()
+			)
+		);
+	
+	}
+	
+	
+	//	Loads a particular DLL and returns a
+	//	handle to it, or throws on failure
+	static void * load (const String & filename) {
+	
+		//	Get OS string
+		auto os_str=filename.ToOSString();
+		
+		//	Attempt to load the DLL
+		void * retr=reinterpret_cast<void *>(
+			LoadLibraryW(
+				reinterpret_cast<LPCWSTR>(
+					static_cast<Byte *>(
+						os_str
+					)
+				)
+			)
+		);
+		
+		//	Throw on error
+		if (retr==nullptr) throw std::system_error(
+			std::error_code(
+				GetLastError(),
+				std::system_category()
+			)
+		);
+		
+		return retr;
+	
+	}
+	
+	
+	//	Unloads a particular DLL
+	static void unload (void * handle) {
+	
+		if (!FreeLibrary(
+			reinterpret_cast<HMODULE>(
+				handle
+			)
+		)) throw std::system_error(
+			std::error_code(
+				GetLastError(),
+				std::system_category()
+			)
+		);
+	
+	}
+	
+	
+	//	Gets the address of a particular
+	//	function from a particular loaded
+	//	library
+	template <typename T>
+	T get (void * handle, const String & func, const String &) {
+	
+		//	Make sure assumptions hold
+		static_assert(
+			std::is_pointer<T>::value &&
+			(sizeof(T)==sizeof(FARPROC)),
+			"Cannot GetProcAddress of that type"
+		);
+	
+		//	GetProcAddress does not have a
+		//	Unicode version
+		auto os_str=func.ToCString();
+		
+		//	Union allows warning-less
+		//	"casting" between pointer-to-function
+		//	and pointer-to-object, which
+		//	Windows necessarily allows but
+		//	C++ does not
+		union {
+			T out;
+			FARPROC in;
+		};
+		
+		//	Get address
+		if ((in=GetProcAddress(
+			reinterpret_cast<HMODULE>(handle),
+			static_cast<char *>(os_str)
+		))==nullptr) throw std::system_error(
+			std::error_code(
+				GetLastError(),
+				std::system_category()
+			)
+		);
+		
+		return out;
+	
+	}
+	
+	
+	#else
+	
+	
+	//	Does nothing
+	inline void ModuleLoader::begin_load () const noexcept {	}
+	//	Does nothing
+	inline void ModuleLoader::end_load () const noexcept {	}
+	
+	
+	//	Loads a particular SO and returns
+	//	a handle to it, or throws on failure
+	static void * load (const String & filename) {
+	
+		//	Get OS string for filename
+		auto os_str=filename.ToOSString();
+		
+		//	Attempt to load SO
+		void * retr=dlsym(
+			reinterpret_cast<char *>(
+				static_cast<Byte *>(
+					os_str
+				)
+			),
+			RTLD_GLOBAL|RTLD_LAZY
+		);
+		
+		//	Throw on error
+		if (retr==nullptr) throw std::runtime_error(dlerror());
+	
+	}
+	
+	
+	//	Unloads a particular SO
+	static void unload (void * handle) {
+	
+		if (dlclose(handle)!=0) throw std::runtime_error(dlerror());
+	
+	}
+	
+	
+	//	Gets the address of a particular function
+	//	from a particular loaded library
+	template <typename T>
+	T get (void * handle, const String & func, const String & filename) {
+	
+		//	Make sure assumptions hold
+		static_assert(
+			std::is_pointer<T>::value &&
+			(sizeof(T)==sizeof(void *)),
+			"Cannot dlsym that type"
+		);
+	
+		//	Get OS name
+		auto os_str=filename.ToOSString();
+		
+		//	Union allows warning-less
+		//	"casting" between pointer-to-function
+		//	and pointer-to-object, which
+		//	POSIX mandates but C++ does
+		//	not
+		union {
+			T out;
+			void * in;
+		};
+		
+		//	Attempt to load
+		if ((in=dlsym(
+			handle,
+			reinterpret_cast<char *>(
+				static_cast<Byte *>(
+					os_str
+				)
+			)
+		))==nullptr) throw std::runtime_error(dlerror());
+		
+		//	On POSIX attempting to find a symbol
+		//	through a module handle does NOT
+		//	constrain the search to that module
+		//	(as it does on Windows).
+		//
+		//	Rather it constrains the search to
+		//	that module AND ALL ITS DEPENDENCIES,
+		//	which can create problems (as this
+		//	module could define a symbol with an
+		//	identical name).
+		//
+		//	Therefore we implement a workaround
+		//	to check to make sure the address of
+		//	the located symbol actually comes
+		//	from the correct module file.
+		//
+		//	Credit goes to greymerk for finding/thinking
+		//	of this workaround.
+		Dl_info info;
+		if (dladdr(
+			in,
+			&info
+		)==0) throw std::runtime_error(dlerror());
+		
+		//	Check to see if that's this module
+		if (
+			Path::GetFileName(
+				UTF8().Decode(
+					reinterpret_cast<const Byte *>(
+						info.dli_fname
+					),
+					reinterpret_cast<const Byte *>(
+						info.dli_fname+strlen(info.dli_fname)
+					)
+				)
+			)!=Path::GetFileName(
+				filename
+			)
+		) throw std::runtime_error(nullptr);	//	Dummy exception
+		
+		return out;
+	
+	}
+	
+	
+	#endif
+	
+	
 	inline void ModuleLoader::destroy () noexcept {
 	
-		unload();
+		//	Call unload function of all
+		//	loaded modules
+		unload_impl();
 		
 		//	Attempt to call the "Cleanup" method
-		//	in each mod
+		//	in each module
 		for (auto & mod : mods) {
 		
 			try {
 			
-				load<void (*) ()>(
-					"Cleanup",
+				get<void (*) ()>(
 					mod.Item<2>(),
+					"Cleanup",
 					mod.Item<0>()
 				)();
 			
+			//	If cleanup function doesn't
+			//	exist, that's fine
 			} catch (...) {	}
 		
 		}
 		
+		//	Unload each module
+		for (auto & mod : mods) {
+		
+			try {
+			
+				unload(mod.Item<2>());
+			
+			//	If a module fails to be
+			//	unloaded, we can't really
+			//	do anything about it
+			} catch (...) {	}
+		
+		}
+		
+		//	Clear list of modules
 		mods.Clear();
 	
 	}
 	
 	
-	inline void ModuleLoader::unload () noexcept {
+	inline void ModuleLoader::unload_impl () noexcept {
 	
-		//	Enumerate loaded modules
+		//	Attempt to call "Unload" method in
+		//	each module
 		for (auto & mod : mods) {
 		
-			//	Attempt to find the address
-			//	of the void Unload () method
-			//	and call it
 			try {
 			
-				load<void (*) ()>(
-					"Unload",
+				get<void (*) ()>(
 					mod.Item<2>(),
+					"Unload",
 					mod.Item<0>()
 				)();
 			
+			//	Modules don't necessarily have to
+			//	specify an unload method
 			} catch (...) {	}
 		
 		}
 	
 	}
+	
+	
+	ModuleLoader::ModuleLoader (String dir, LogType log) : dir(std::move(dir)), log(std::move(log)) {	}
 	
 	
 	ModuleLoader::~ModuleLoader () noexcept {
@@ -190,7 +364,183 @@ namespace MCPP {
 	
 	void ModuleLoader::Unload () noexcept {
 	
-		unload();
+		unload_impl();
+	
+	}
+	
+	
+	inline void ModuleLoader::load_impl (String filename) {
+	
+		//	Attempt to load the module
+		
+		log(
+			String::Format(
+				attempt_to_load,
+				filename
+			),
+			Service::LogType::Information
+		);
+		
+		void * handle;
+		try {
+		
+			//	On Windows the search directory
+			//	is set, on Linux it is not
+			handle=load(
+				#ifdef ENVIRONMENT_WINDOWS
+				filename
+				#else
+				Path::Combine(dir,filename)
+				#endif
+			);
+		
+		} catch (...) {
+		
+			//	Load failed
+			
+			log(
+				String::Format(
+					failed_to_load,
+					filename
+				),
+				Service::LogType::Warning
+			);
+			
+			//	Abandon this module
+			return;
+		
+		}
+		
+		try {
+		
+			//	Module successfully mapped into our
+			//	address space, log this
+			
+			log(
+				String::Format(
+					loaded,
+					filename
+				),
+				Service::LogType::Information
+			);
+			
+			//	Attempt to get Module pointer from
+			//	module
+			Module * ptr;
+			try {
+			
+				ptr=get<Module * (*) ()>(
+					handle,
+					"Load",
+					filename
+				)();
+			
+			} catch (...) {
+			
+				//	Couldn't get pointer
+				
+				log(
+					String::Format(
+						bad_format,
+						filename
+					),
+					Service::LogType::Information
+				);
+				
+				//	Abandon this module
+				
+				unload(handle);
+				
+				return;
+			
+			}
+			//	Was a pointer returned?
+			//
+			//	If not, that's an error
+			if (ptr==nullptr) {
+			
+				log(
+					String::Format(
+						bad_ptr,
+						filename
+					),
+					Service::LogType::Warning
+				);
+				
+				//	Abandon this module
+				
+				unload(handle);
+				
+				return;
+			
+			}
+			
+			//	We're now responsible for the lifetime
+			//	of the Module pointer
+			try {
+			
+				//	Print module's name
+				log(
+					String::Format(
+						identified,
+						filename,
+						ptr->Name()
+					),
+					Service::LogType::Information
+				);
+				
+				//	Find where the module should go
+				//	within the list of modules
+				Word priority=ptr->Priority();
+				Word i=0;
+				for (;
+					(i<mods.Count()) &&
+					(mods[i].Item<1>()->Priority()<priority);
+					++i
+				);
+				
+				//	Insert
+				mods.Emplace(
+					i,
+					std::move(filename),
+					ptr,
+					handle
+				);
+			
+			} catch (...) {
+			
+				try {
+				
+					get<void (*) ()>(
+						handle,
+						"Unload",
+						filename
+					)();
+				
+				} catch (...) {	}
+				
+				try {
+				
+					get<void (*) ()>(
+						handle,
+						"Cleanup",
+						filename
+					)();
+				
+				} catch (...) {	}
+				
+				throw;
+			
+			}
+			
+		} catch (...) {
+		
+			//	Free module if an error occurs
+			unload(handle);
+			
+			throw;
+		
+		}
 	
 	}
 	
@@ -199,12 +549,11 @@ namespace MCPP {
 	
 		//	If there are loaded modules,
 		//	unload them
-		if (mods.Count()!=0) destroy();
+		destroy();
 		
-		//	Attempt to iterate mod
+		//	Attempt to iterate module
 		//	directory
 		IterateDirectory iter(dir);
-		
 		Nullable<FileIterator> begin;
 		Nullable<FileIterator> end;
 		try {
@@ -212,238 +561,54 @@ namespace MCPP {
 			begin.Construct(iter.begin());
 			end.Construct(iter.end());
 		
-		//	Directory could not be
-		//	opened
 		} catch (...) {
 		
-			//	Log this
 			log(
 				could_not_open_dir,
-				Service::LogType::Warning
+				Service::LogType::Information
 			);
-		
-			//	End -- nothing else we
-			//	can do
+			
+			//	Nothing we can do
 			return;
 		
 		}
 		
-		//	Iterate the directory to build
-		//	a listing
-		for (;*begin!=*end;++(*begin)) {
+		//	Begin the loading process
+		begin_load();
 		
-			//	Get the filename
-			String filename=(*begin)->Name();
+		try {
+		
+			//	Iterate the directory
+			for (;*begin!=*end;++(*begin)) {
 			
-			//	Get extension to see if it
-			//	purports to be a library
-			String ext(Path::GetFileExtension(filename));
-			
-			if (
-				#ifdef ENVIRONMENT_WINDOWS
-				ext.ToLower()=="dll"
-				#else
-				ext=="so"
-				#endif
-			) {
-			
-				//	Attempt to load the module
+				String filename=(*begin)->Name();
 				
-				log(
-					String::Format(
-						attempt_to_load,
-						filename
-					),
-					Service::LogType::Information
-				);
-				
-				Library lib;
-				
-				try {
-				
-					lib=Library(
-						Path::Combine(
-							dir,
-							filename
-						)
-					);
-				
-				} catch (...) {
-				
-					//	Loading failed
-					
-					log(
-						String::Format(
-							failed_to_load,
-							filename
-						),
-						Service::LogType::Warning
-					);
-					
-					//	Try the next file
-					continue;
-				
-				}
-				
-				log(
-					String::Format(
-						loaded,
-						filename
-					),
-					Service::LogType::Information
-				);
-				
-				//	Try and get the Module pointer
-				//	from the module
-				Module * ptr;
-				try {
-				
-					ptr=load<Module * (*) ()>(
-						"Load",
-						lib,
-						filename
-					)();
-				
-				} catch (...) {
-				
-					//	Couldn't get a pointer from
-					//	it
-					
-					log(
-						String::Format(
-							bad_format,
-							filename
-						),
-						Service::LogType::Warning
-					);
-					
-					//	Try the next file
-					continue;
-				
-				}
-				
-				//	Was no pointer returned?
-				//
-				//	That's an error condition
-				if (ptr==nullptr) {
-				
-					log(
-						String::Format(
-							bad_ptr,
-							filename
-						),
-						Service::LogType::Warning
-					);
-					
-					//	Try the next file
-					continue;
-				
-				}
-				
-				//	If anything goes wrong hereafter,
-				//	we have a pointer that we're responsible
-				//	for
-				//
-				//	Try and cache the address of the cleanup
-				//	function in case we lose the library
-				//	due to moving it (notably into the
-				//	vector emplace insert).
-				void (*unload) ()=nullptr;
-				void (*cleanup) ()=nullptr;
-				try {
-					
-					unload=load<void (*) ()>(
-						"Unload",
-						lib,
-						filename
-					);
-					
-				} catch (...) {	}
-				
-				try {
-				
-					cleanup=load<void (*) ()>(
-						"Cleanup",
-						lib,
-						filename
-					);
-				
-				} catch (...) {	}
-				
-				try {
-				
-					//	Print out the module's name
-					log(
-						String::Format(
-							identified,
-							filename,
-							ptr->Name()
-						),
-						Service::LogType::Information
-					);
-					
-					//	Find where the module should go
-					//	within the list of modules
-					Word priority=ptr->Priority();
-					Word insert=0;
-					
-					bool found=false;
-					for (Word i=0;i<mods.Count();++i) {
-					
-						//	Check the priority of this element,
-						//	compare it to this priority,
-						//	and set this as the insertion point
-						//	if it's greater or equal
-						if (mods[i].Item<1>()->Priority()>=priority) {
-						
-							insert=i;
-							
-							found=true;
-							
-							break;
-						
-						}
-					
-					}
-					
-					//	If we didn't find an insertion point,
-					//	insert at the end
-					if (!found) insert=mods.Count();
-					
-					//	Create tuple in place
-					mods.Emplace(
-						insert,
-						std::move(filename),
-						ptr,
-						std::move(lib)
-					);
-					
-				} catch (...) {
-				
-					//	Try and dispose of the pointer
-					try {
-					
-						if (unload!=nullptr) unload();
-					
-					} catch (...) {	}
-					
-					try {
-					
-						if (cleanup!=nullptr) cleanup();
-					
-					} catch (...) {	}
-					
-					//	Re-throw, an exception shouldn't
-					//	be thrown therefore it's fatal
-					//	(probably memory not being allocated
-					//	inside a string or vector, not good)
-					throw;
-				
-				}
+				//	Get extension and check
+				//	if the file extension is
+				//	the library file extension
+				//	on this platform
+				String ext(Path::GetFileExtension(filename));
+				if (
+					#ifdef ENVIRONMENT_WINDOWS
+					//	Filenames on Windows are not
+					//	case sensitive
+					ext.ToLower()=="dll"
+					#else
+					ext=="so"
+					#endif
+				) load_impl(std::move(filename));
 			
 			}
 		
+		} catch (...) {	
+		
+			end_load();
+			
+			throw;
+		
 		}
+		
+		end_load();
 	
 	}
 	
@@ -451,16 +616,11 @@ namespace MCPP {
 	void ModuleLoader::Install () {
 	
 		//	Loop for each loaded module
-		//	they're already in the correct
-		//	order
-		for (auto & mod : mods) {
-		
-			//	Attempt to install
-			mod.Item<1>()->Install();
-		
-		}
+		//	as they're already in the
+		//	correct order
+		for (auto & mod : mods) mod.Item<1>()->Install();
 	
 	}
-
-
+	
+	
 }
