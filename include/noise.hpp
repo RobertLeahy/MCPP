@@ -37,25 +37,125 @@ namespace MCPP {
 			
 			
 			template <typename T>
-			inline void init (T & gen) noexcept(
-				noexcept(
-					std::shuffle(
-						std::declval<Byte *>(),
-						std::declval<Byte *>(),
-						gen
-					)
-				)
-			) {
+			inline Byte get_random (T & gen, Byte bound) noexcept(noexcept(gen())) {
 			
-				//	Populate the first half of the table
-				for (Word i=0;i<(sizeof(permutation)/2);++i) permutation[i]=static_cast<Byte>(i);
+				typedef typename T::result_type stype;
+				typedef typename std::make_unsigned<stype>::type type;
 				
-				//	Shuffle
-				std::shuffle(
-					permutation,
-					&permutation[sizeof(permutation)/2],
-					gen
+				union {
+					type r;
+					stype r_in;
+				};
+				
+				//	If the bound is the maximum integer
+				//	for the unsigned result type, it cannot
+				//	be affected by modulo bias, so we simply
+				//	return the next integer generated
+				if (bound==std::numeric_limits<type>::max()) {
+				
+					r_in=gen();
+					
+					return r;
+				
+				}
+				
+				type d=static_cast<type>(bound)+1;
+				//	This is the maximum number the random
+				//	number generator may yield, divided
+				//	by the divisor.
+				type q=std::numeric_limits<type>::max()/d;
+				
+				//	Loop until we retrieve a random
+				//	number unaffected by modulo bias
+				//	over the given range
+				do r_in=gen();
+				while(
+					//	This eliminates modulo bias by
+					//	asking:
+					//
+					//	If I restrict the inputs to
+					//	modulus to the range [(r/d)*d,((r/d)+1)*d)
+					//	could I obtain all values within
+					//	the bound given the maximum output
+					//	of the random number generator?
+					//
+					//	If the answer is no a new number is
+					//	obtained.
+					//
+					//	Example:
+					//
+					//	The function is called with a generator
+					//	which generates [-128,127] (i.e. the range
+					//	of a signed byte), and a bound of 5 (i.e.
+					//	the output range is [0,5].
+					//
+					//	The union of r and r_in will map this range
+					//	to an output range of [0,255] (i.e. the range
+					//	of an unsigned byte).
+					//
+					//	If the random number generates a number on
+					//	the range [252,255], modulo bias would occur.
+					//
+					//	Consider the outputs that would be yielded
+					//	by blindly applying modulus to this range:
+					//
+					//	252 = 0
+					//	253 = 1
+					//	254 = 2
+					//	255 = 3
+					//
+					//	The numbers 4 and 5 from the desired output
+					//	range are not present, increasing the likelihood
+					//	of obtaining outputs in the range [0,3].
+					//
+					//	In this case:
+					//
+					//	d=6
+					//	q=255/6=42
+					//
+					//	Consider the case r=252:
+					//
+					//	(r/d)+1=43
+					//
+					//	This means that in order for 252 not to
+					//	produce modulo bias (if not discarded)
+					//	the random number generator would have to
+					//	be capable of generating numbers up to
+					//	at least (43*d)-1=257 (which it is not).
+					//
+					//	But we see that ((r/d)+1)>q, which
+					//	causes this result to be discarded.
+					((r/d)+1)>q
 				);
+					
+				//	Current result will not produce
+				//	modulo bias, apply modulus and return
+				return static_cast<Byte>(r%d);
+			
+			}
+			
+			
+			template <typename T>
+			inline void init (T & gen) noexcept(noexcept(gen())) {
+			
+				//	Populate and shuffle the first half
+				//	of the table using Fisher-Yates-Knuth
+				//	shuffle
+				for (Word i=0;i<(sizeof(permutation)/2);++i) {
+				
+					permutation[i]=static_cast<Byte>(i);
+					
+					std::swap(
+						permutation[i],
+						permutation[
+							get_random(
+								gen,
+								static_cast<Byte>(i)
+							)
+						]
+					);
+				
+				}
 				
 				//	Copy the first half of the table
 				//	into the last half
