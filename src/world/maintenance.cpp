@@ -49,7 +49,7 @@ namespace MCPP {
 					
 					//	See if we can unload
 					
-					bool unloaded=false;
+					bool did_unload=false;
 					
 					column->Acquire();
 					
@@ -57,7 +57,7 @@ namespace MCPP {
 					
 						//	We can unload
 						
-						unloaded=true;
+						did_unload=true;
 						
 						lock.Execute([&] () {	world.erase(column->ID());	});
 						
@@ -65,7 +65,7 @@ namespace MCPP {
 					
 					column->Release();
 					
-					if (unloaded) {
+					if (did_unload) {
 						
 						++unloaded;
 						++this_unloaded;
