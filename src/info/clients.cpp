@@ -12,7 +12,7 @@ static const String client_sent("Bytes Sent");
 static const String client_received("Bytes Received");
 static const String client_latency_template("{0}ms");
 static const String client_latency("Latency");
-static const String username_template("({0})");
+static const String username_template(" ({0})");
 static const String yes("Yes");
 static const String no("No");
 static const String info_separator(", ");
