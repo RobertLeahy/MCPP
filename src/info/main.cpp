@@ -186,6 +186,7 @@ namespace MCPP {
 			//	Rebuild help
 			//
 			//	CONSIDER OPTIMIZING
+			help=String();
 			for (const auto * ip : providers) {
 			
 				if (help.Size()!=0) help << Newline;
