@@ -89,6 +89,7 @@ obj/new_delete.o \
 obj/noise.o \
 obj/multi_scope_guard.o \
 obj/concurrency_manager.o \
+obj/hardware_concurrency.o \
 bin/ssleay32.dll \
 bin/libeay32.dll \
 bin/libcurl.dll \
@@ -122,6 +123,7 @@ bin/data_provider.dll
 	obj/noise.o \
 	obj/multi_scope_guard.o \
 	obj/concurrency_manager.o \
+	obj/hardware_concurrency.o \
 	bin/ssleay32.dll \
 	bin/libeay32.dll \
 	bin/libcurl.dll \
@@ -356,6 +358,15 @@ src/concurrency_manager.cpp | \
 bin/rleahy_lib.dll \
 obj
 	$(GPP) -c -o $@ src/concurrency_manager.cpp
+	
+#	HARDWARE CONCURRENCY
+
+obj/hardware_concurrency.o: \
+include/hardware_concurrency.hpp \
+src/hardware_concurrency.cpp | \
+bin/rleahy_lib.dll \
+obj
+	$(GPP) -c -o $@ src/hardware_concurrency.cpp
 	
 	
 #	DATA PROVIDERS
