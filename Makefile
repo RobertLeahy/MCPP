@@ -756,6 +756,33 @@ bin/mcpp.dll
 	src/shutdown/main.cpp
 	
 	
+bin/mods/chat_log.dll: \
+obj/new_delete.o \
+src/log/main.cpp \
+include/chat/chat.hpp \
+include/command/command.hpp \
+include/server.hpp \
+include/mod.hpp \
+include/op/op.hpp \
+include/data_provider.hpp \
+include/concurrency_manager.hpp | \
+bin/mods/chat.dll \
+bin/mods/command.dll \
+bin/mods/op.dll \
+bin/mcpp.dll \
+bin/rleahy_lib.dll \
+bin/data_provider.dll
+	$(GPP) -shared -o $@ \
+	obj/new_delete.o \
+	src/log/main.cpp \
+	bin/mods/chat.dll \
+	bin/mods/command.dll \
+	bin/mods/op.dll \
+	bin/mcpp.dll \
+	bin/rleahy_lib.dll \
+	bin/data_provider.dll
+	
+	
 #	INFORMATION SUB-MODULES
 
 
