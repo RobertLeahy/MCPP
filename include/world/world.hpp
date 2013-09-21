@@ -888,27 +888,6 @@ namespace MCPP {
 		"ColumnContainer layout incorrect"
 	);
 	#pragma GCC diagnostic pop
-	
-	
-	template <typename T>
-	class bind_wrapper {
-	
-	
-		public:
-		
-		
-			T bound;
-			
-			
-			template <typename... Args>
-			void operator () (Args &&... args) noexcept(noexcept(bound(std::forward<Args>(args)...))) {
-			
-				bound(std::forward<Args>(args)...);
-			
-			}
-	
-	
-	};
 	 
 	 
 	class WorldLock {
@@ -917,48 +896,85 @@ namespace MCPP {
 		private:
 		
 		
-			//	ID of the thread that currently
-			//	holds the lock
-			Nullable<decltype(Thread::ID())> id;
-			//	Recursion count, if zero
-			//	the lock is not held
-			Word count;
-			//	Guards against unsynchronized
-			//	access
+			//	The type of a lock request
+			typedef Tuple<
+				//	A callback for asynchronous lock
+				//	requests, an empty std::function
+				//	otherwise
+				std::function<void (bool)>,
+				//	Whether this lock request is for
+				//	an exclusive lock
+				bool,
+				//	A boolean which synchronous lock
+				//	requests will wait on
+				std::atomic<bool> *,
+				//	The thread ID of synchronous lock
+				//	requests
+				decltype(Thread::ID())
+			> wl_tuple;
+		
+		
+			//	Locks currently held
+			std::unordered_map<
+				//	ID of the thread holding
+				//	the lock
+				decltype(Thread::ID()),
+				//	Recursion count
+				Word
+			> locks;
+			//	Number of locks (necessary since
+			//	asynchronous locks will not always
+			//	be in the hash map
+			Word num;
+			//	Whether the currently-held lock
+			//	(if there's just one) is exclusive
+			//	or not
+			bool exclusive;
+			//	List of pending lock requests
+			Vector<wl_tuple> pending;
+			//	The lock that synchronizes access
+			//	to this structure
 			Mutex lock;
-			//	Synchronous calls wait here
+			//	The condvar on which non-exclusive
+			//	requests wait
 			CondVar wait;
-			//	Asynchronous calls are stored
-			//	here.  The lock decides whether
-			//	to wake the condvar or dispatch
-			//	an asynchronous callback by
-			//	checking for empty callbacks,
-			//	which denote that a synchronous
-			//	call was next in line
-			Vector<std::function<void (bool)>> list;
-			//	The thread pool that shall be
-			//	used for asynchronous callbacks
+			//	The condvar on which exclusive requests
+			//	wait
+			CondVar ex_wait;
+			//	The thread pool that shall be used for
+			//	asynchronous callbacks
 			ThreadPool & pool;
-			//	The panic callback
+			//	The panic callback which shall be invoked
+			//	if something goes wrong with the thread
+			//	pool
 			std::function<void ()> panic;
 			
 			
-			void acquire (std::function<void (bool)>);
+			inline void acquire_impl(const std::function<void (bool)> &, decltype(Thread::ID()), bool);
+			void acquire (std::function<void (bool)>, bool);
+			inline bool can_acquire (const wl_tuple &) noexcept;
+			void release ();
+			inline void release_impl () {
 			
+				try {
+				
+					Release();
+					
+				} catch (...) {
+				
+					//	The lock may be in an inconsistent state!
+					try {	if (panic) panic();	} catch (...) {	}
+					
+					//	We don't know what went wrong in Release,
+					//	so we can't attempt recovery, just rethrow
+					
+					throw;
+				
+				}
 			
-		public:
-			
-			
-			WorldLock () = delete;
-			WorldLock (
-				ThreadPool & pool,
-				std::function<void ()> panic
-			) noexcept;
-			
-			
-			void Acquire ();
+			}
 			template <typename T, typename... Args>
-			void Acquire (T && callback, Args &&... args) {
+			void acquire_async_impl (bool ex, T && callback, Args &&... args) {
 			
 				auto bound=std::bind(
 					std::forward<T>(callback),
@@ -975,42 +991,102 @@ namespace MCPP {
 				//	this wouldn't be an issue,
 				//	but we'll have to wait for C++14
 				//	for that...
-				bind_wrapper<decltype(bound)> wrapped{std::move(bound)};
+				Tuple<decltype(bound)> wrapped(std::move(bound));
 				
 				acquire(
 					std::bind(
-						[this] (decltype(wrapped) callback, bool set_thread) mutable {
+						[this] (decltype(wrapped) wrapped, bool set) mutable {
 						
-							if (set_thread) {
+							if (set) {
 							
-								lock.Acquire();
-								id.Construct(Thread::ID());
-								lock.Release();
+								auto id=Thread::ID();
 							
+								lock.Execute([&] () mutable {
+								
+									try {
+									
+										locks.emplace(
+											id,
+											1
+										);
+									
+									} catch (...) {
+									
+										//	The lock may be in an inconsistent
+										//	state!
+										try {	if (panic) panic();	} catch (...) {	}
+										
+										//	Attempt recovery as best we can
+										--num;
+										exclusive=false;
+										
+										throw;
+									
+									}
+								
+								});
+								
 							}
 							
 							try {
 							
-								callback();
+								wrapped.template Item<0>()();
+								
+							} catch (...) {
 							
-							} catch (...) {	}
+								release_impl();
+								
+								throw;
 							
-							try {
+							}
 							
-								Release();
-							
-							} catch (...) {	}
+							release_impl();
 						
 						},
 						std::move(wrapped),
 						std::placeholders::_1
-					)
+					),
+					ex
+				);
+			
+			}
+			
+			
+		public:
+			
+			
+			WorldLock () = delete;
+			WorldLock (
+				ThreadPool & pool,
+				std::function<void ()> panic
+			) noexcept;
+			
+			
+			void Acquire ();
+			void AcquireExclusive ();
+			template <typename T, typename... Args>
+			void Acquire (T && callback, Args &&... args) {
+			
+				acquire_async_impl(
+					false,
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
+				);
+			
+			}
+			template <typename T, typename... Args>
+			void AcquireExclusive (T && callback, Args &&... args) {
+			
+				acquire_async_impl(
+					true,
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
 				);
 			
 			}
 			void Release ();
 			bool Transfer () noexcept;
-			void Resume () noexcept;
+			void Resume ();
 	
 	
 	};
@@ -1465,7 +1541,7 @@ namespace MCPP {
 			void Begin (T && callback, Args &&... args) {
 			
 				//	Acquire asynchronously
-				wlock->Acquire(
+				wlock->AcquireExclusive(
 					std::forward<T>(callback),
 					std::forward<Args>(callback)...
 				);
@@ -1555,7 +1631,7 @@ namespace MCPP {
 				
 				//	Work around limitations of binding
 				//	bound functions
-				bind_wrapper<decltype(bound)> wrapper{std::move(bound)};
+				Tuple<decltype(bound)> wrapper(std::move(bound));
 				
 				//	Get the column the desired block resides
 				//	in
@@ -1574,13 +1650,13 @@ namespace MCPP {
 					if (!column->InvokeWhen(
 						is_populating() ? ColumnState::Generated : ColumnState::Populated,
 						std::bind(
-							[this,resume] (BlockID id, decltype(column) column, decltype(wrapper) callback) mutable {
+							[this,resume] (BlockID id, decltype(column) column, decltype(wrapper) wrapper) mutable {
 								
 								if (resume) wlock->Resume();
 								
 								try {
 								
-									callback(
+									wrapper.template Item<0>()(
 										id,
 										column->GetBlock(id)
 									);
@@ -1609,7 +1685,13 @@ namespace MCPP {
 					
 					//	Make sure the lock gets
 					//	restored
-					if (resume) wlock->Resume();
+					if (resume) try {
+					
+						wlock->Resume();
+						
+					//	Nothing really we can do
+					//	about this...
+					} catch (...) {	}
 					
 					throw;
 				
@@ -1689,7 +1771,7 @@ namespace MCPP {
 				
 				//	Work around limitations of binding
 				//	bound functions
-				bind_wrapper<decltype(bound)> wrapper{std::move(bound)};
+				Tuple<decltype(bound)> wrapper(std::move(bound));
 				
 				//	Get the column the desired block resides
 				//	in
@@ -1699,7 +1781,7 @@ namespace MCPP {
 				
 					//	Acquire lock asynchronously
 					wlock->Acquire(
-						[this,id,block,force,column] (decltype(wrapper) callback) mutable {
+						[this,id,block,force,column] (decltype(wrapper) wrapper) mutable {
 						
 							//	Lock acquired
 							
@@ -1714,7 +1796,7 @@ namespace MCPP {
 								if (!column->InvokeWhen(
 									ColumnState::Generated,
 									std::bind(
-										[this,id,block,force,column] (decltype(callback) callback) mutable {
+										[this,id,block,force,column] (decltype(wrapper) wrapper) mutable {
 										
 											//	Resume the lock
 											wlock->Resume();
@@ -1777,12 +1859,12 @@ namespace MCPP {
 											//	Invoke callback
 											try {
 											
-												callback(success);
+												wrapper.template Item<0>()(success);
 											
 											} catch (...) {	}
 										
 										},
-										std::move(callback)
+										std::move(wrapper)
 									)
 								)) process(*column);
 							
@@ -1793,7 +1875,13 @@ namespace MCPP {
 								//	Make sure to resume the lock
 								//	so it can properly be
 								//	released
-								wlock->Resume();
+								try {
+								
+									wlock->Resume();
+									
+								//	Nothing really we can do about
+								//	this...
+								} catch (...) {	}
 								
 								throw;
 							

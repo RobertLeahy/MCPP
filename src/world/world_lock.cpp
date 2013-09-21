@@ -4,179 +4,243 @@
 namespace MCPP {
 
 
-	WorldLock::WorldLock (ThreadPool & pool, std::function<void ()> panic) noexcept : count(0), pool(pool), panic(std::move(panic)) {	}
+	WorldLock::WorldLock (
+		ThreadPool & pool,
+		std::function<void ()> panic
+	) noexcept
+		:	num(0),
+			exclusive(false),
+			pool(pool),
+			panic(std::move(panic))
+	{	}
 	
 	
-	void WorldLock::acquire (std::function<void (bool)> callback) {
+	static inline void fire (const std::function<void (bool)> & callback, bool pass) noexcept {
 	
-		//	Which thread is this?
+		if (callback) try {
+		
+			callback(pass);
+		
+		} catch (...) {	}
+	
+	}
+	
+	
+	inline void WorldLock::acquire_impl (const std::function<void (bool)> & callback, decltype(Thread::ID()) id, bool ex) {
+	
+		locks.emplace(
+			id,
+			1
+		);
+	
+		exclusive=ex;
+		++num;
+		
+		fire(callback,false);
+	
+	}
+	
+	
+	void WorldLock::acquire (std::function<void (bool)> callback, bool ex) {
+	
+		auto id=Thread::ID();
+		bool sync=!callback;
+	
+		lock.Execute([&] () mutable {
+		
+			//	Can we acquire immediately or
+			//	do we have to wait?
+			
+			//	If there are no locks, acquire
+			//	at once
+			if (num==0) {
+			
+				acquire_impl(callback,id,ex);
+				
+				return;
+			
+			}
+			
+			//	If this thread currently holds
+			//	the lock, we simply recursively
+			//	acquire
+			auto iter=locks.find(id);
+			if (iter!=locks.end()) {
+			
+				//	Increment recursion count
+				++iter->second;
+				
+				fire(callback,false);
+				
+				return;
+			
+			}
+			
+			//	If there are no pending locks,
+			//	non-exclusive locks may acquire
+			//	provided there is not an exclusive
+			//	lock currently held.
+			//
+			//	Exclusive locks can acquire only if
+			//	there is no lock currently held.
+			if (
+				(pending.Count()==0) &&
+				(
+					ex
+						?	(num==0)
+						:	!exclusive
+				)
+			) {
+			
+				acquire_impl(callback,id,ex);
+				
+				return;
+			
+			}
+			
+			//	We must block/enqueue
+			
+			std::atomic<bool> woken;
+			woken=false;
+			
+			pending.EmplaceBack(
+				std::move(callback),
+				ex,
+				&woken,
+				id
+			);
+			
+			//	If synchronous, wait to be
+			//	woken up
+			if (sync) do (ex ? ex_wait : wait).Sleep(lock);
+			while (!woken);
+		
+		});
+	
+	}
+	
+	
+	inline bool WorldLock::can_acquire (const wl_tuple & t) noexcept {
+	
+		//	No locks, can always acquire
+		if (num==0) return true;
+		
+		//	Exclusive held, can never acquire
+		if (exclusive) return false;
+		
+		//	This lock is exclusive, and as per
+		//	above there is at least one held
+		//	lock, therefore cannot acquire
+		return !t.Item<1>();
+	
+	}
+	
+	
+	void WorldLock::release () {
+	
 		auto id=Thread::ID();
 		
-		lock.Acquire();
+		lock.Execute([&] () {
 		
-		if (
-			//	We can acquire immediately
-			//	because no thread currently
-			//	holds the lock
-			(count==0) ||
-			//	We can acquire recursively because
-			//	this thread currently holds the
-			//	lock
-			(
-				!this->id.IsNull() &&
-				(*(this->id)==id)
-			)
-		) {
-		
-			//	Acquire
+			//	Look up the lock this thread
+			//	holds
+			auto iter=locks.find(id);
 			
-			this->id.Construct(id);
-			++count;
+			//	Short-circuit out if this thread
+			//	doesn't actually hold a lock, or
+			//	if we're just winding back through
+			//	a recursive acquisition
+			if (
+				(iter==locks.end()) ||
+				((--iter->second)!=0)
+			) return;
 			
-			lock.Release();
+			//	Release
+			locks.erase(iter);
+			exclusive=false;
+			--num;
 			
-			//	If this lock is asynchronous
-			//	invoke the callback at once
-			if (callback) try {
+			//	Flush out pending requests
+			while (
+				(pending.Count()!=0) &&
+				can_acquire(pending[0])
+			) {
 			
-				callback(
-					//	We've already set the
-					//	thread, no need for the
-					//	callback to acquire the
-					//	lock and do so again
-					false
-				);
+				//	Extract lock request
+				auto & t=pending[0];
+				auto callback=std::move(t.Item<0>());
+				exclusive=t.Item<1>();
+				auto * wake=t.Item<2>();
+				auto id=t.Item<3>();
+				pending.Delete(0);
 				
-			//	Had this callback actually been
-			//	invoked asynchronously -- i.e.
-			//	at some time later -- the caller
-			//	would not receive exceptions from
-			//	it, so we simply eat them
-			} catch (...) {	}
-		
-		} else {
-		
-			//	Enqueue or block
-			
-			bool sync=!callback;
-			
-			try {
-			
-				//	Add to list of pending
-				//	tasks/threads
-				list.Add(std::move(callback));
+				//	Maintain counter
+				++num;
 				
-			} catch (...) {
-			
-				lock.Release();
+				try {
 				
-				throw;
+					if (callback) {
+					
+						//	Asynchronous
+						
+						pool.Enqueue(
+							std::move(callback),
+							true
+						);
+					
+					} else {
+					
+						//	Synchronous
+						
+						//	Insert lock
+						locks.emplace(
+							id,
+							1
+						);
+						
+						//	Release waiting thread
+						*wake=true;
+						(exclusive ? ex_wait : wait).WakeAll();
+					
+					}
+					
+				} catch (...) {
+				
+					//	The lock may be in an inconsistent
+					//	state!
+					try {	if (panic) panic();	} catch (...) {	}
+					
+					//	Attempt recovery as best we can
+					--num;
+					exclusive=false;
+					
+					throw;
+				
+				}
 			
 			}
-			
-			if (sync) {
-			
-				//	If synchronous, wait until
-				//	we can acquire
-			
-				while (count!=0) wait.Sleep(lock);
-				
-				//	Acquire
-				this->id.Construct(id);
-				++count;
-			
-			}
-			
-			lock.Release();
 		
-		}
+		});
 	
 	}
 	
 	
 	void WorldLock::Acquire () {
 	
-		acquire(std::function<void (bool)>());
+		acquire(
+			std::function<void (bool)>(),
+			false
+		);
 	
 	}
 	
 	
-	void WorldLock::Release () {
+	void WorldLock::AcquireExclusive () {
 	
-		auto id=Thread::ID();
-	
-		lock.Acquire();
-		
-		if (
-			//	Is the lock held?
-			!this->id.IsNull() &&
-			//	Do we hold it?
-			(*(this->id)==id) &&
-			//	Are we releasing or just
-			//	winding back through recursively-
-			//	acquired locks?
-			((--count)==0)
-		) {
-		
-			//	Actually releasing
-			
-			//	Make sure we null this out,
-			//	otherwise if this thread reenters
-			//	the lock before an asynchronous
-			//	callback takes ownership of it,
-			//	two threads could have the lock
-			this->id.Destroy();
-			
-			if (list.Count()!=0) {
-			
-				//	There are waiting tasks/threads
-				
-				auto callback=std::move(list[0]);
-				list.Delete(0);
-				
-				if (callback) {
-					
-					//	Dispatch an asynchronous task
-					
-					//	Acquire the lock on behalf
-					//	of the callback we're about
-					//	to dispatch
-					++count;
-					
-					try {
-					
-						pool.Enqueue(
-							std::move(callback),
-							//	We don't know which thread
-							//	will run the callback, so it
-							//	must set its own thread ID
-							//	when it begins executing
-							true
-						);
-					
-					} catch (...) {
-					
-						lock.Release();
-					
-						panic();
-						
-						throw;
-					
-					}
-					
-				} else {
-				
-					//	Release a waiting thread
-					
-					wait.Wake();
-				
-				}
-			
-			}
-		
-		}
-		
-		lock.Release();
+		acquire(
+			std::function<void (bool)>(),
+			true
+		);
 	
 	}
 	
@@ -185,44 +249,34 @@ namespace MCPP {
 	
 		auto id=Thread::ID();
 	
-		lock.Acquire();
+		return lock.Execute([&] () {
 		
-		bool retr=false;
-		//	Are we holding the lock?
-		if (
-			!this->id.IsNull() &&
-			(*(this->id)==id)
-		) {
+			return locks.erase(id)!=0;
 		
-			//	YES, release and transfer
-			//	out
-			
-			retr=true;
-			
-			this->id.Destroy();
-			
-			//	When we transfer out, we lose
-			//	all layers of recursion
-			count=1;
-		
-		}
-		
-		lock.Release();
-		
-		return retr;
+		});
 	
 	}
 	
 	
-	void WorldLock::Resume () noexcept {
+	void WorldLock::Resume () {
 	
 		auto id=Thread::ID();
 		
-		lock.Acquire();
+		lock.Execute([&] () {
 		
-		this->id.Construct(id);
+			locks.emplace(
+				id,
+				1
+			);
 		
-		lock.Release();
+		});
+	
+	}
+	
+	
+	void WorldLock::Release () {
+	
+		release();
 	
 	}
 
