@@ -59,6 +59,8 @@ namespace MCPP {
 	
 	bool BlockID::IsContainedBy (const ColumnID & column) const noexcept {
 	
+		if (column.Dimension!=Dimension) return false;
+	
 		Int32 x=X/16;
 		if (X<0) --x;
 		
@@ -67,10 +69,7 @@ namespace MCPP {
 		Int32 z=Z/16;
 		if (Z<0) --z;
 		
-		return !(
-			(column.Z==z) &&
-			(column.Dimension==Dimension)
-		);
+		return column.Z==z;
 	
 	}
 
