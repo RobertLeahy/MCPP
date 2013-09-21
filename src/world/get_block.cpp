@@ -4,7 +4,7 @@
 namespace MCPP {
 
 
-	Block WorldContainer::GetBlock (BlockID id) {
+	Block World::GetBlock (BlockID id) {
 	
 		auto column=get_column(id.GetContaining());
 		

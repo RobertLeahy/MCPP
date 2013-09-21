@@ -4,15 +4,15 @@
 namespace MCPP {
 
 
-	void WorldContainer::Begin () {
+	void World::Begin () {
 		
 		//	Acquire synchronously
-		wlock->Acquire();
+		wlock->AcquireExclusive();
 	
 	}
 	
 	
-	void WorldContainer::End () {
+	void World::End () {
 	
 		//	Release
 		wlock->Release();

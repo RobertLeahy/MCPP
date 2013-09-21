@@ -1520,6 +1520,15 @@ namespace MCPP {
 			 *		The world's seed.
 			 */
 			UInt64 Seed () const noexcept;
+			/**
+			 *	Retrieves the current level
+			 *	type.
+			 *
+			 *	\return
+			 *		The string which represents
+			 *		the current level type.
+			 */
+			const String & Type () const noexcept;
 			
 			
 			/**
