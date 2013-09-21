@@ -1234,7 +1234,7 @@ namespace MCPP {
 				ColumnID,
 				SmartPointer<ColumnContainer>
 			> world;
-			Mutex lock;
+			mutable Mutex lock;
 			
 			
 			//	World lock
@@ -1529,6 +1529,16 @@ namespace MCPP {
 			 *		the current level type.
 			 */
 			const String & Type () const noexcept;
+			
+			
+			/**
+			 *	Retrieves information about the world.
+			 *
+			 *	\return
+			 *		A structure populated with information
+			 *		about the world.
+			 */
+			WorldInfo GetInfo () const noexcept;
 			
 			
 			/**

@@ -512,6 +512,7 @@ src/world/generator.cpp \
 src/world/generators.cpp \
 src/world/get_block.cpp \
 src/world/get_column.cpp \
+src/world/get_info.cpp \
 src/world/has_skylight.cpp \
 src/world/interest.cpp \
 src/world/key.cpp \
@@ -542,6 +543,7 @@ bin/mcpp.dll
 	src/world/generators.cpp \
 	src/world/get_block.cpp \
 	src/world/get_column.cpp \
+	src/world/get_info.cpp \
 	src/world/has_skylight.cpp \
 	src/world/interest.cpp \
 	src/world/key.cpp \
