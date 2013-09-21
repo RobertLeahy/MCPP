@@ -38,19 +38,7 @@ namespace MCPP {
 	
 	bool World::is_populating () const noexcept {
 	
-		return populating_lock.Read([&] () {
-		
-			bool retr=populating.count(Thread::ID())!=0;
-			
-			if (!retr) {
-			
-				Server::Get().WriteLog("Huh?",Service::LogType::Debug);
-			
-			}
-			
-			return retr;
-			
-		});
+		return populating_lock.Read([&] () {	return populating.count(Thread::ID())!=0;	});
 	
 	}
 
