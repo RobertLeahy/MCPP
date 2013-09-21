@@ -79,7 +79,7 @@ namespace MCPP {
 	 *	based on username, IP address, or IP address
 	 *	range.
 	 */
-	class BanModule : public Module {
+	class Bans : public Module {
 	
 	
 		private:
@@ -93,6 +93,17 @@ namespace MCPP {
 			
 			
 		public:
+		
+		
+			/**
+			 *	Retrieves a reference to a valid
+			 *	instance of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance
+			 *		of this class.
+			 */
+			static Bans & Get () noexcept;
 		
 		
 			/**
@@ -208,12 +219,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	/**
-	 *	The current BanModule.
-	 */
-	extern Nullable<BanModule> Bans;
 
 
 }

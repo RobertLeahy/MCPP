@@ -6,7 +6,7 @@
 namespace MCPP {
 
 
-	bool WorldContainer::can_set (BlockID id, Block from, Block to) noexcept {
+	bool World::can_set (BlockID id, Block from, Block to) noexcept {
 	
 		try {
 	
@@ -35,7 +35,7 @@ namespace MCPP {
 	}
 	
 	
-	void WorldContainer::on_set (BlockID id, Block from, Block to) {
+	void World::on_set (BlockID id, Block from, Block to) {
 	
 		OnSet(
 			id,
@@ -74,7 +74,15 @@ namespace MCPP {
 	}
 	
 	
-	void WorldContainer::init_events () noexcept {
+	template <Word n, typename T>
+	static inline void cleanup_array (T (& arr) [n]) noexcept {
+	
+		for (auto & i : arr) i=T();
+	
+	}
+	
+	
+	void World::init_events () noexcept {
 	
 		init_array(OnReplace);
 		init_array(OnPlace);
@@ -84,12 +92,22 @@ namespace MCPP {
 	}
 	
 	
-	void WorldContainer::destroy_events () noexcept {
+	void World::destroy_events () noexcept {
 	
 		destroy_array(OnReplace);
 		destroy_array(OnPlace);
 		destroy_array(CanReplace);
 		destroy_array(CanPlace);
+	
+	}
+	
+	
+	void World::cleanup_events () noexcept {
+	
+		cleanup_array(OnReplace);
+		cleanup_array(OnPlace);
+		cleanup_array(CanReplace);
+		cleanup_array(CanPlace);
 	
 	}
 

@@ -34,12 +34,12 @@ namespace MCPP {
 				//	Old packet handler
 				PacketHandler prev(
 					std::move(
-						RunningServer->Router[0xFF]
+						Server::Get().Router[0xFF]
 					)
 				);
 				
 				//	New handler
-				RunningServer->Router[0xFF]=[=] (SmartPointer<Client> client, Packet packet) {
+				Server::Get().Router[0xFF]=[=] (SmartPointer<Client> client, Packet packet) {
 				
 					typedef PacketTypeMap<0xFF> pt;
 				

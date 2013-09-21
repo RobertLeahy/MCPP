@@ -9,11 +9,11 @@ namespace MCPP {
 	static const String unload("Unloaded column {0}");
 
 
-	void WorldContainer::maintenance () {
+	void World::maintenance () {
 	
 		try {
 		
-			bool is_verbose=RunningServer->IsVerbose(verbose);
+			bool is_verbose=Server::Get().IsVerbose(verbose);
 			Word this_saved=0;
 			Word this_unloaded=0;
 		
@@ -72,7 +72,7 @@ namespace MCPP {
 						
 						//	TODO: Fire event
 						
-						if (is_verbose) RunningServer->WriteLog(
+						if (is_verbose) Server::Get().WriteLog(
 							String::Format(
 								unload,
 								column->ToString()
@@ -91,7 +91,7 @@ namespace MCPP {
 			++maintenances;
 			
 			//	Log if applicable
-			if (is_verbose) RunningServer->WriteLog(
+			if (is_verbose) Server::Get().WriteLog(
 				String::Format(
 					end_maintenance,
 					elapsed,
@@ -103,7 +103,7 @@ namespace MCPP {
 			
 			//	Prepare for the next maintenance
 			//	cycle
-			RunningServer->Pool().Enqueue(
+			Server::Get().Pool().Enqueue(
 				maintenance_interval,
 				[this] () {	maintenance();	}
 			);
@@ -114,7 +114,7 @@ namespace MCPP {
 		
 			try {
 		
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					maintenance_error,
 					Service::LogType::Error
 				);
@@ -123,7 +123,7 @@ namespace MCPP {
 			//	we're panicking anyway
 			} catch (...) {	}
 			
-			RunningServer->Panic();
+			Server::Get().Panic();
 			
 			throw;
 		

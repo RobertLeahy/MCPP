@@ -9,7 +9,7 @@ namespace MCPP {
 	static const String end_save("Saved column {0} - {1} bytes in {2}ns");
 
 
-	bool WorldContainer::save (ColumnContainer & column) {
+	bool World::save (ColumnContainer & column) {
 	
 		//	Start timer
 		Timer timer(Timer::CreateAndStart());
@@ -44,7 +44,7 @@ namespace MCPP {
 		//	Perform save
 		try {
 		
-			RunningServer->Data().SaveBinary(
+			Server::Get().Data().SaveBinary(
 				key(column),
 				buffer,
 				ColumnContainer::Size
@@ -54,7 +54,7 @@ namespace MCPP {
 		
 			try {
 		
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					String::Format(
 						save_failed,
 						column.ToString(),
@@ -68,7 +68,7 @@ namespace MCPP {
 			} catch (...) {	}
 			
 			//	PANIC
-			RunningServer->Panic();
+			Server::Get().Panic();
 			
 			throw;
 		
@@ -79,7 +79,7 @@ namespace MCPP {
 		++saved;
 		
 		//	Log if applicable
-		if (RunningServer->IsVerbose(verbose)) RunningServer->WriteLog(
+		if (Server::Get().IsVerbose(verbose)) Server::Get().WriteLog(
 			String::Format(
 				end_save,
 				column.ToString(),

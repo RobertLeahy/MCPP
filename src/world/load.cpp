@@ -4,7 +4,7 @@
 namespace MCPP {
 
 
-	ColumnState WorldContainer::load (ColumnContainer & column) {
+	ColumnState World::load (ColumnContainer & column) {
 		
 		//	Attempt to retrieve data
 		Word len=ColumnContainer::Size;
@@ -14,7 +14,7 @@ namespace MCPP {
 			//
 			//	If it's not, the column will have
 			//	to be generated.
-			RunningServer->Data().GetBinary(
+			Server::Get().Data().GetBinary(
 				key(column),
 				column.Get(),
 				&len

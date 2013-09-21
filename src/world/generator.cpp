@@ -4,7 +4,7 @@
 namespace MCPP {
 
 
-	void WorldContainer::generate (ColumnContainer & column) {
+	void World::generate (ColumnContainer & column) {
 	
 		get_generator(column.ID().Dimension)(column);
 	

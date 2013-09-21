@@ -12,6 +12,7 @@ static const String client_sent("Bytes Sent");
 static const String client_received("Bytes Received");
 static const String client_latency_template("{0}ms");
 static const String client_latency("Latency");
+static const String username_template("({0})");
 static const String yes("Yes");
 static const String no("No");
 static const String info_separator(", ");
@@ -83,7 +84,13 @@ class ClientsInfo : public Module, public InformationProvider {
 					<< ChatFormat::Pop
 					<< ChatFormat::Pop;
 					
-			RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+			
+				String username;
+				if (client->GetState()==ClientState::Authenticated) username=String::Format(
+					username_template,
+					client->GetUsername().ToLower()
+				);
 			
 				message	<<	Newline
 						<<	ChatStyle::Bold
@@ -92,6 +99,7 @@ class ClientsInfo : public Module, public InformationProvider {
 								client->IP(),
 								client->Port()
 							)
+						<<	username
 						<<	": "
 						<<	ChatFormat::Pop
 						//	Authenticated?
@@ -143,7 +151,7 @@ class ClientsInfo : public Module, public InformationProvider {
 		
 		virtual void Install () override {
 		
-			Information->Add(this);
+			Information::Get().Add(this);
 		
 		}
 

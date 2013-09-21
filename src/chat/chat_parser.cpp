@@ -90,13 +90,13 @@ namespace MCPP {
 	}
 	
 	
-	void ChatModule::Log (const ChatMessage & message) {
+	void Chat::Log (const ChatMessage & message) {
 	
 		auto t=log_prep(message);
 		
 		Nullable<String> notes;	//	This stays null
 		
-		RunningServer->WriteChatLog(
+		Server::Get().WriteChatLog(
 			t.Item<0>(),
 			t.Item<1>(),
 			t.Item<2>(),
@@ -106,13 +106,13 @@ namespace MCPP {
 	}
 	
 	
-	void ChatModule::Log (const ChatMessage & message, String notes) {
+	void Chat::Log (const ChatMessage & message, String notes) {
 	
 		auto t=log_prep(message);
 		
 		Nullable<String> notes_copy(std::move(notes));
 		
-		RunningServer->WriteChatLog(
+		Server::Get().WriteChatLog(
 			t.Item<0>(),
 			t.Item<1>(),
 			t.Item<2>(),
@@ -122,7 +122,7 @@ namespace MCPP {
 	}
 	
 	
-	void ChatModule::Log (const ChatMessage & message, const Vector<String> & dne) {
+	void Chat::Log (const ChatMessage & message, const Vector<String> & dne) {
 	
 		auto t=log_prep(message);
 		
@@ -143,7 +143,7 @@ namespace MCPP {
 		
 		}
 		
-		RunningServer->WriteChatLog(
+		Server::Get().WriteChatLog(
 			t.Item<0>(),
 			t.Item<1>(),
 			t.Item<2>(),
@@ -175,7 +175,7 @@ namespace MCPP {
 	}
 	
 	
-	String ChatModule::Format (const ChatMessage & message) {
+	String Chat::Format (const ChatMessage & message) {
 	
 		//	Whether we're in the text
 		//	property of a JSON object

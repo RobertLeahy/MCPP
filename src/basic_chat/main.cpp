@@ -33,10 +33,10 @@ namespace MCPP {
 			virtual void Install () override {
 				
 				//	Install our chat handler
-				Chat->Chat=[] (SmartPointer<Client> client, const String & message) {
+				Chat::Get().Chat=[] (SmartPointer<Client> client, const String & message) {
 				
 					//	Send
-					Chat->Send(
+					Chat::Get().Send(
 						ChatMessage(
 							std::move(client),
 							message
@@ -62,15 +62,9 @@ extern "C" {
 
 	Module * Load () {
 	
-		try {
+		if (basic_chat.IsNull()) basic_chat.Construct();
 		
-			if (basic_chat.IsNull()) basic_chat.Construct();
-			
-			return &(*basic_chat);
-		
-		} catch (...) {	}
-		
-		return nullptr;
+		return &(*basic_chat);
 	
 	}
 	

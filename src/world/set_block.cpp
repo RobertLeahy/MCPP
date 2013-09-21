@@ -4,7 +4,7 @@
 namespace MCPP {
 
 
-	bool WorldContainer::SetBlock (BlockID id, Block block, bool force) {
+	bool World::SetBlock (BlockID id, Block block, bool force) {
 	
 		bool retr=true;
 	

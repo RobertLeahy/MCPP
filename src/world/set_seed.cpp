@@ -9,7 +9,7 @@ namespace MCPP {
 	static const String log_int_seed("Set seed to {0}");
 
 
-	void WorldContainer::set_seed (Nullable<String> material) {
+	void World::set_seed (Nullable<String> material) {
 	
 		String log;
 	
@@ -66,7 +66,7 @@ namespace MCPP {
 		}
 		
 		//	Write to log
-		RunningServer->WriteLog(
+		Server::Get().WriteLog(
 			log,
 			Service::LogType::Information
 		);
@@ -74,7 +74,7 @@ namespace MCPP {
 	}
 	
 	
-	UInt64 WorldContainer::Seed () const noexcept {
+	UInt64 World::Seed () const noexcept {
 	
 		return seed;
 	

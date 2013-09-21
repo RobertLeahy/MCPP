@@ -32,7 +32,7 @@ class Kick : public Module, public Command {
 		
 		virtual void Install () override {
 		
-			Commands->Add(this);
+			Commands::Get().Add(this);
 		
 		}
 		
@@ -61,7 +61,7 @@ class Kick : public Module, public Command {
 		virtual bool Check (SmartPointer<Client> client) const override {
 		
 			//	Only ops can kick
-			return Ops->IsOp(client->GetUsername());
+			return Ops::Get().IsOp(client->GetUsername());
 		
 		}
 		
@@ -85,7 +85,7 @@ class Kick : public Module, public Command {
 				RegexOptions().SetIgnoreCase()
 			);
 			
-			RunningServer->Clients.Scan([&] (const SmartPointer<Client> & client) {
+			Server::Get().Clients.Scan([&] (const SmartPointer<Client> & client) {
 			
 				//	Only authenticated users are
 				//	valid chat targets
@@ -137,7 +137,7 @@ class Kick : public Module, public Command {
 			bool found=false;
 			
 			//	Scan
-			RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
 			
 				if (
 					(client->GetState()==ClientState::Authenticated) &&

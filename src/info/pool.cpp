@@ -36,7 +36,7 @@ class PoolInfo : public Module, public InformationProvider {
 		
 		virtual void Install () override {
 		
-			Information->Add(this);
+			Information::Get().Add(this);
 		
 		}
 		
@@ -58,7 +58,7 @@ class PoolInfo : public Module, public InformationProvider {
 		virtual void Execute (ChatMessage & message) const override {
 		
 			//	Get data about the thread pool
-			auto info=RunningServer->Pool().GetInfo();
+			auto info=Server::Get().Pool().GetInfo();
 			
 			message	<<	ChatStyle::Bold
 					<<	pool_banner

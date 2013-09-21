@@ -4,7 +4,7 @@
 namespace MCPP {
 
 
-	SmartPointer<ColumnContainer> WorldContainer::get_column (ColumnID id) {
+	SmartPointer<ColumnContainer> World::get_column (ColumnID id) {
 	
 		return lock.Execute([&] () {
 		

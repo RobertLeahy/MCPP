@@ -37,7 +37,7 @@ class Whisper : public Module, public Command {
 		
 		virtual void Install () override {
 		
-			Commands->Add(this);
+			Commands::Get().Add(this);
 		
 		}
 		
@@ -96,7 +96,7 @@ class Whisper : public Module, public Command {
 				RegexOptions().SetIgnoreCase()
 			);
 			
-			RunningServer->Clients.Scan([&] (const SmartPointer<Client> & client) {
+			Server::Get().Clients.Scan([&] (const SmartPointer<Client> & client) {
 			
 				//	Only authenticated users are valid
 				//	chat targets
@@ -134,7 +134,7 @@ class Whisper : public Module, public Command {
 			);
 			
 			//	Attempt to send
-			if (Chat->Send(whisper).Count()==0) {
+			if (Chat::Get().Send(whisper).Count()==0) {
 			
 				//	Delivery success -- could not be
 				//	delivered to zero recipients (meaning

@@ -132,7 +132,7 @@ namespace MCPP {
 	 *	for them, autocompletion, and invoking
 	 *	them as necessary.
 	 */
-	class CommandModule : public Module {
+	class Commands : public Module {
 	
 	
 		private:
@@ -153,12 +153,19 @@ namespace MCPP {
 		
 		
 			/**
+			 *	Retrieves a reference to a valid
+			 *	instance of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance
+			 *		of this class.
+			 */
+			static Commands & Get () noexcept;
+		
+		
+			/**
 			 *	\cond
 			 */
-		
-		
-			CommandModule ();
-			~CommandModule () noexcept;
 		
 		
 			virtual const String & Name () const noexcept override;
@@ -211,12 +218,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	/**
-	 *	The single valid instance of CommandModule.
-	 */
-	extern Nullable<CommandModule> Commands;
 
 
 }

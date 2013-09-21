@@ -112,6 +112,7 @@ namespace MCPP {
 		OnLog.Clear();
 		OnLogin.Clear();
 		OnInstall.Clear();
+		OnShutdown.Clear();
 		OnReceive=ReceiveCallback();
 	
 	}
@@ -310,7 +311,19 @@ namespace MCPP {
 			//	Clear all events et cetera
 			//	that might have module resources
 			//	loaded into them
+			try {
+			
+				OnShutdown();
+			
+			} catch (...) {
+			
+				Panic();
+				
+				throw;
+			
+			}
 			cleanup_events();
+			
 			
 			//	Kill all modules
 			mods.Destroy();

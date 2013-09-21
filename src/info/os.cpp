@@ -420,7 +420,7 @@ class OSInfo : public Module, public InformationProvider {
 		
 		virtual void Install () override {
 		
-			Information->Add(this);
+			Information::Get().Add(this);
 		
 		}
 

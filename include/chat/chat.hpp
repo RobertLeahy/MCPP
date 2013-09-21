@@ -323,7 +323,7 @@ namespace MCPP {
 	 *	A modular framework for conveniently
 	 *	implementing chat-related functionalities.
 	 */
-	class ChatModule : public Module {
+	class Chat : public Module {
 	
 	
 		private:
@@ -333,6 +333,17 @@ namespace MCPP {
 	
 	
 		public:
+		
+		
+			/**
+			 *	Retrieves a reference to a valid
+			 *	instance of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance
+			 *		of this class.
+			 */
+			static Chat & Get () noexcept;
 		
 		
 			/**
@@ -389,20 +400,16 @@ namespace MCPP {
 			/**
 			 *	\cond
 			 */
-			 
-			 
-			ChatModule ();
-			virtual ~ChatModule () noexcept;
-			
-			
-			/**
-			 *	\endcond
-			 */
 		
 		
 			virtual const String & Name () const noexcept override;
 			virtual Word Priority () const noexcept override;
 			virtual void Install () override;
+			
+			
+			/**
+			 *	\endcond
+			 */
 			
 			
 			/**
@@ -419,12 +426,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	/**
-	 *	The currently-loaded chat module.
-	 */
-	extern Nullable<ChatModule> Chat;
 
 
 }

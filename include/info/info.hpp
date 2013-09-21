@@ -37,7 +37,7 @@ namespace MCPP {
 	 *	server components to be obtained
 	 *	by server operators through chat.
 	 */
-	class InformationModule : public Module, public Command {
+	class Information : public Module, public Command {
 	
 	
 		private:
@@ -54,12 +54,19 @@ namespace MCPP {
 		
 		
 			/**
+			 *	Retrieves a reference to a valid
+			 *	instance of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance
+			 *		of this class.
+			 */
+			static Information & Get () noexcept;
+		
+		
+			/**
 			 *	\cond
 			 */
-			 
-			 
-			InformationModule ();
-			~InformationModule () noexcept;
 			 
 			 
 			virtual Word Priority () const noexcept override;
@@ -91,12 +98,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	/**
-	 *	The single valid instance of InformationModule.
-	 */
-	extern Nullable<InformationModule> Information;
 
 
 }

@@ -13,7 +13,7 @@ namespace MCPP {
 	static const String processing_error("Error while processing {0}");
 
 
-	void WorldContainer::process (ColumnContainer & column) {
+	void World::process (ColumnContainer & column) {
 	
 		try {
 	
@@ -21,7 +21,7 @@ namespace MCPP {
 			ColumnState curr=column.GetState();
 			
 			//	Are we logging debug information?
-			bool is_verbose=RunningServer->IsVerbose(verbose);
+			bool is_verbose=Server::Get().IsVerbose(verbose);
 			
 			bool dirty;
 			//	Process at least once -- this function
@@ -54,7 +54,7 @@ namespace MCPP {
 						++loaded;
 						
 						//	Log if necessary
-						if (is_verbose) RunningServer->WriteLog(
+						if (is_verbose) Server::Get().WriteLog(
 							(
 								(curr==ColumnState::Generating)
 									//	We missed on the load --
@@ -101,7 +101,7 @@ namespace MCPP {
 						++generated;
 						
 						//	Log if necessary
-						if (is_verbose) RunningServer->WriteLog(
+						if (is_verbose) Server::Get().WriteLog(
 							String::Format(
 								end_generate,
 								column.ToString(),
@@ -140,7 +140,7 @@ namespace MCPP {
 						++populated;
 						
 						//	Log if necessary
-						if (is_verbose) RunningServer->WriteLog(
+						if (is_verbose) Server::Get().WriteLog(
 							String::Format(
 								end_populate,
 								column.ToString(),
@@ -180,7 +180,7 @@ namespace MCPP {
 			} while (!column.SetState(
 				curr,
 				dirty,
-				RunningServer->Pool()
+				Server::Get().Pool()
 			));
 		
 		//	Any error leaves the world
@@ -190,7 +190,7 @@ namespace MCPP {
 		
 			try {
 			
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					String::Format(
 						processing_error,
 						column.ToString()
@@ -202,7 +202,7 @@ namespace MCPP {
 			//	can't do anything about this
 			} catch (...) {	}
 		
-			RunningServer->Panic();
+			Server::Get().Panic();
 		
 			throw;
 		

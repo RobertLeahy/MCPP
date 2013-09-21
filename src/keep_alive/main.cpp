@@ -74,10 +74,10 @@ class KeepAlive : public Module {
 			//	We need to handle keep alives
 			
 			//	Old keep alive handler
-			PacketHandler prev(std::move(RunningServer->Router[0x00]));
+			PacketHandler prev(std::move(Server::Get().Router[0x00]));
 			
 			//	Install our handler
-			RunningServer->Router[0x00]=[=] (SmartPointer<Client> client, Packet packet) {
+			Server::Get().Router[0x00]=[=] (SmartPointer<Client> client, Packet packet) {
 			
 				typedef PacketTypeMap<0x00> pt;
 			
@@ -114,7 +114,7 @@ class KeepAlive : public Module {
 							client->Ping=data.Latency.ElapsedMilliseconds();
 							
 							//	Protocol analysis
-							if (RunningServer->IsVerbose(keep_alive_pa_key)) {
+							if (Server::Get().IsVerbose(keep_alive_pa_key)) {
 							
 								String log(pa_banner);
 								log << Newline << String::Format(
@@ -124,7 +124,7 @@ class KeepAlive : public Module {
 									static_cast<Word>(client->Ping)
 								);
 								
-								RunningServer->WriteLog(
+								Server::Get().WriteLog(
 									log,
 									Service::LogType::Debug
 								);
@@ -164,7 +164,7 @@ class KeepAlive : public Module {
 			callback=[=] () {
 			
 				//	Loop for all clients
-				RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+				Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
 				
 					//	How long have they been inactive?
 					Word inactive=client->Inactive();
@@ -173,7 +173,7 @@ class KeepAlive : public Module {
 					bool timed_out=inactive>timeout_milliseconds;
 					
 					//	Protocol analysis
-					if (RunningServer->IsVerbose(keep_alive_pa_key)) {
+					if (Server::Get().IsVerbose(keep_alive_pa_key)) {
 					
 						String log(pa_banner);
 						log << Newline << String::Format(
@@ -184,7 +184,7 @@ class KeepAlive : public Module {
 							timed_out ? pa_terminating : pa_will_not_terminate
 						);
 						
-						RunningServer->WriteLog(
+						Server::Get().WriteLog(
 							log,
 							Service::LogType::Debug
 						);
@@ -256,7 +256,7 @@ class KeepAlive : public Module {
 				});
 				
 				//	Enqueue this task again
-				RunningServer->Pool().Enqueue(
+				Server::Get().Pool().Enqueue(
 					(timeout_milliseconds>keep_alive_milliseconds)
 						?	keep_alive_milliseconds
 						:	timeout_milliseconds,
@@ -265,7 +265,7 @@ class KeepAlive : public Module {
 			
 			};
 			//	Enqueue
-			RunningServer->Pool().Enqueue(
+			Server::Get().Pool().Enqueue(
 				(timeout_milliseconds>keep_alive_milliseconds)
 					?	keep_alive_milliseconds
 					:	timeout_milliseconds,
@@ -274,13 +274,13 @@ class KeepAlive : public Module {
 			
 			//	We need to hook into connect/disconnect
 			//	to maintain our data structure
-			RunningServer->OnConnect.Add([=] (SmartPointer<Client> client) {
+			Server::Get().OnConnect.Add([=] (SmartPointer<Client> client) {
 			
 				map_lock.Execute([&] () {	map.emplace(client->GetConn(),KeepAliveInfo());	});
 			
 			});
 			
-			RunningServer->OnDisconnect.Add([=] (SmartPointer<Client> client, const String &) {
+			Server::Get().OnDisconnect.Add([=] (SmartPointer<Client> client, const String &) {
 			
 				map_lock.Execute([&] () {	map.erase(client->GetConn());	});
 			

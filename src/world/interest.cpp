@@ -4,7 +4,7 @@
 namespace MCPP {
 
 
-	void WorldContainer::Interested (ColumnID id, bool prepare) {
+	void World::Interested (ColumnID id, bool prepare) {
 	
 		//	This automatically acquires
 		//	interest
@@ -18,7 +18,7 @@ namespace MCPP {
 			try {
 			
 				if (!(
-					is_populating() ||
+					//is_populating() ||
 					column->WaitUntil(ColumnState::Populated)
 				)) process(*column);
 			
@@ -36,7 +36,7 @@ namespace MCPP {
 	}
 	
 	
-	void WorldContainer::EndInterest (ColumnID id) noexcept {
+	void World::EndInterest (ColumnID id) noexcept {
 	
 		lock.Execute([&] () {
 		

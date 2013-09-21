@@ -43,7 +43,7 @@ class OpCommand : public Command {
 		virtual bool Check (SmartPointer<Client> client) const override {
 		
 			//	Only ops can op/deop
-			return Ops->IsOp(client->GetUsername());
+			return Ops::Get().IsOp(client->GetUsername());
 		
 		}
 		
@@ -81,7 +81,7 @@ class OpCommand : public Command {
 				RegexOptions().SetIgnoreCase()
 			);
 			
-			RunningServer->Clients.Scan([&] (const SmartPointer<Client> & client) {
+			Server::Get().Clients.Scan([&] (const SmartPointer<Client> & client) {
 			
 				//	Only authenticated users are
 				//	valid chat targets
@@ -97,7 +97,7 @@ class OpCommand : public Command {
 					//	autocomplete /op).
 					if (
 						regex.IsMatch(username) &&
-						(op!=Ops->IsOp(username))
+						(op!=Ops::Get().IsOp(username))
 					) {
 					
 						//	Normalize to lower case
@@ -124,7 +124,7 @@ class OpCommand : public Command {
 			
 			//	Is the target player already
 			//	opped/deopped?
-			if (Ops->IsOp(args)==op) {
+			if (Ops::Get().IsOp(args)==op) {
 			
 				//	YES
 				
@@ -145,19 +145,19 @@ class OpCommand : public Command {
 				
 				if (op) {
 				
-					Ops->Op(args);
+					Ops::Get().Op(args);
 					
 					message << ChatStyle::BrightGreen << "Opping " << args;
 				
 				} else {
 				
-					Ops->DeOp(args);
+					Ops::Get().DeOp(args);
 					
 					message << ChatStyle::Red << "Deopping " << args;
 				
 				}
 				
-				Chat->Send(message);
+				Chat::Get().Send(message);
 			
 			}
 			
@@ -205,8 +205,8 @@ class OpCommandModule : public Module {
 		
 		virtual void Install () override {
 		
-			Commands->Add(&op);
-			Commands->Add(&deop);
+			Commands::Get().Add(&op);
+			Commands::Get().Add(&deop);
 		
 		}
 

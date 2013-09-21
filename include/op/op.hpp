@@ -13,7 +13,7 @@
 namespace MCPP {
 
 
-	class OpModule : public Module {
+	class Ops : public Module {
 	
 	
 		private:
@@ -24,6 +24,17 @@ namespace MCPP {
 			
 			
 		public:
+		
+		
+			/**
+			 *	Retrieves a reference to a valid
+			 *	instance of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance
+			 *		of this class.
+			 */
+			static Ops & Get () noexcept;
 		
 		
 			/**
@@ -83,12 +94,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	/**
-	 *	The currently active OpModule.
-	 */
-	extern Nullable<OpModule> Ops;
 
 
 }

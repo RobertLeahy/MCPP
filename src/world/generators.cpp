@@ -24,7 +24,7 @@ namespace MCPP {
 	static const ASCIIChar * gen_not_found="No such world generator";
 
 
-	void WorldContainer::Add (const WorldGenerator * generator, SByte dimension) {
+	void World::Add (const WorldGenerator * generator, SByte dimension) {
 	
 		if (generator==nullptr) return;
 	
@@ -33,7 +33,7 @@ namespace MCPP {
 	}
 	
 	
-	void WorldContainer::Add (const WorldGenerator * generator, String type, SByte dimension) {
+	void World::Add (const WorldGenerator * generator, String type, SByte dimension) {
 	
 		if (generator==nullptr) return;
 	
@@ -47,7 +47,7 @@ namespace MCPP {
 	}
 	
 	
-	const WorldGenerator & WorldContainer::get_generator (SByte dimension) const {
+	const WorldGenerator & World::get_generator (SByte dimension) const {
 	
 		auto iter=generators.find(
 			Tuple<String,SByte>(

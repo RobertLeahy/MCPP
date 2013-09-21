@@ -1,8 +1,12 @@
 #include <common.hpp>
 #include <chat/chat.hpp>
+#include <singleton.hpp>
 #include <utility>
 #include <limits>
 #include <algorithm>
+
+
+using namespace MCPP;
 
 
 namespace MCPP {
@@ -13,78 +17,35 @@ namespace MCPP {
 	static const String mods_dir("chat_mods");
 	static const String log_prepend("Chat Support: ");
 	static const String protocol_error("Protocol error");
-	
-	
-	static Nullable<ModuleLoader> mods;
-	
-	
-	ChatModule::ChatModule () {
-	
-		//	Fire up mod loader
-		mods.Construct(
-			Path::Combine(
-				Path::GetPath(
-					File::GetCurrentExecutableFileName()
-				),
-				mods_dir
-			),
-			[] (const String & message, Service::LogType type) {
-			
-				String log(log_prepend);
-				log << message;
-				
-				RunningServer->WriteLog(
-					log,
-					type
-				);
-			
-			}
-		);
-	
-	}
-	
-	
-	ChatModule::~ChatModule () noexcept {
-	
-		mods->Unload();
-	
-	}
 
 
-	const String & ChatModule::Name () const noexcept {
+	const String & Chat::Name () const noexcept {
 	
 		return name;
 	
 	}
 	
 	
-	Word ChatModule::Priority () const noexcept {
+	Word Chat::Priority () const noexcept {
 	
 		return priority;
 	
 	}
 	
 	
-	void ChatModule::Install () {
-	
-		//	Get mods
-		mods->Load();
-	
-		//	Install ourself into the server
-		//	first, so that mods we load
-		//	can overwrite our changes
+	void Chat::Install () {
 		
 		//	We need to handle 0x03
 		
 		//	Grab the old handler
 		PacketHandler prev(
 			std::move(
-				RunningServer->Router[0x03]
+				Server::Get().Router[0x03]
 			)
 		);
 		
 		//	Install our handler
-		RunningServer->Router[0x03]=[=] (SmartPointer<Client> client, Packet packet) {
+		Server::Get().Router[0x03]=[=] (SmartPointer<Client> client, Packet packet) {
 		
 			//	Unauthenticated users cannot chat
 			if (client->GetState()!=ClientState::Authenticated) {
@@ -118,9 +79,6 @@ namespace MCPP {
 			);
 		
 		};
-	
-		//	Install mods
-		mods->Install();
 	
 	}
 	
@@ -183,7 +141,7 @@ namespace MCPP {
 	}
 	
 	
-	Vector<String> ChatModule::Send (const ChatMessage & message) {
+	Vector<String> Chat::Send (const ChatMessage & message) {
 	
 		//	Get the formatted string
 		String formatted(Format(message));
@@ -235,7 +193,7 @@ namespace MCPP {
 		if (
 			(message.To.Count()!=0) ||
 			(message.Recipients.Count()==0)
-		) RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+		) Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
 		
 			//	Skip all clients we have the handle
 			//	for
@@ -311,7 +269,14 @@ namespace MCPP {
 	}
 
 
-	Nullable<ChatModule> Chat;
+	static Singleton<Chat> singleton;
+	
+	
+	Chat & Chat::Get () noexcept {
+	
+		return singleton.Get();
+	
+	}
 	
 	
 }
@@ -322,40 +287,14 @@ extern "C" {
 
 	Module * Load () {
 	
-		try {
-		
-			if (Chat.IsNull()) {
-			
-				//	Make sure the mod loader
-				//	is uninitialized
-				mods.Destroy();
-				
-				//	Create chat module
-				Chat.Construct();
-			
-			}
-			
-			return &(*Chat);
-		
-		} catch (...) {	}
-		
-		return nullptr;
+		return &(Chat::Get());
 	
 	}
 	
 	
 	void Unload () {
 	
-		Chat.Destroy();
-		
-		if (!mods.IsNull()) mods->Unload();
-	
-	}
-	
-	
-	void Cleanup () {
-	
-		mods.Destroy();
+		singleton.Destroy();
 	
 	}
 

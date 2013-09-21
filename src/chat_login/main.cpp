@@ -46,7 +46,7 @@ namespace MCPP {
 			
 				//	Subscribe to the onlogin
 				//	event within the server
-				RunningServer->OnLogin.Add([] (SmartPointer<Client> client) {
+				Server::Get().OnLogin.Add([] (SmartPointer<Client> client) {
 				
 					ChatMessage message;
 					message.Message.EmplaceBack(ChatStyle::BrightGreen);
@@ -55,13 +55,13 @@ namespace MCPP {
 					message.Message.EmplaceBack(ChatFormat::Pop);
 					message.Message.EmplaceBack(online);
 					
-					Chat->Send(message);
+					Chat::Get().Send(message);
 				
 				});
 				
 				//	Subscribe to the ondisconnect
 				//	event within the server
-				RunningServer->OnDisconnect.Add([] (SmartPointer<Client> client, const String & reason) {
+				Server::Get().OnDisconnect.Add([] (SmartPointer<Client> client, const String & reason) {
 				
 					//	Only proceed if the user was
 					//	authenticated
@@ -87,7 +87,7 @@ namespace MCPP {
 						
 						}
 						
-						Chat->Send(message);
+						Chat::Get().Send(message);
 					
 					}
 				

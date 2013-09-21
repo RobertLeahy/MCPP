@@ -1,4 +1,5 @@
 #include <op/op.hpp>
+#include <singleton.hpp>
 #include <utility>
 
 
@@ -10,30 +11,30 @@ namespace MCPP {
 	static const String key("op");
 	
 	
-	Word OpModule::Priority () const noexcept {
+	Word Ops::Priority () const noexcept {
 	
 		return priority;
 	
 	}
 	
 	
-	const String & OpModule::Name () const noexcept {
+	const String & Ops::Name () const noexcept {
 	
 		return name;
 	
 	}
 	
 	
-	void OpModule::Install () {
+	void Ops::Install () {
 	
 		//	Build the op table
 		
-		for (auto & op : RunningServer->Data().GetValues(key)) ops.insert(op.ToLower());
+		for (auto & op : Server::Get().Data().GetValues(key)) ops.insert(op.ToLower());
 	
 	}
 	
 	
-	bool OpModule::IsOp (String username) {
+	bool Ops::IsOp (String username) {
 	
 		username.ToLower();
 	
@@ -42,7 +43,7 @@ namespace MCPP {
 	}
 	
 	
-	void OpModule::DeOp (String username) {
+	void Ops::DeOp (String username) {
 	
 		username.ToLower();
 	
@@ -52,14 +53,14 @@ namespace MCPP {
 			ops.erase(username);
 			
 			//	Remove from the backing store
-			RunningServer->Data().DeleteValues(key,username);
+			Server::Get().Data().DeleteValues(key,username);
 		
 		});
 	
 	}
 	
 	
-	void OpModule::Op (String username) {
+	void Ops::Op (String username) {
 	
 		username.ToLower();
 	
@@ -72,14 +73,14 @@ namespace MCPP {
 			//	op, we don't want to add
 			//	them to the backing store
 			//	again
-			if (pair.second) RunningServer->Data().InsertValue(key,username);
+			if (pair.second) Server::Get().Data().InsertValue(key,username);
 		
 		});
 	
 	}
 	
 	
-	Vector<String> OpModule::List () const {
+	Vector<String> Ops::List () const {
 	
 		return lock.Read([&] () {
 		
@@ -97,7 +98,14 @@ namespace MCPP {
 	}
 	
 	
-	Nullable<OpModule> Ops;
+	static Singleton<Ops> singleton;
+	
+	
+	Ops & Ops::Get () noexcept {
+	
+		return singleton.Get();
+	
+	}
 
 
 }
@@ -108,22 +116,14 @@ extern "C" {
 
 	Module * Load () {
 	
-		if (Ops.IsNull()) try {
-		
-			Ops.Construct();
-			
-			return &(*Ops);
-		
-		} catch (...) {	}
-		
-		return nullptr;
+		return &(singleton.Get());
 	
 	}
 	
 	
 	void Unload () {
 	
-		if (!Ops.IsNull()) Ops.Destroy();
+		singleton.Destroy();
 	
 	}
 

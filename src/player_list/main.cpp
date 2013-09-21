@@ -119,7 +119,7 @@ class PlayerList : public Module {
 			//	We need to handle connect
 			//	events to keep the set
 			//	up to date
-			RunningServer->OnConnect.Add([=] (SmartPointer<Client> client) {
+			Server::Get().OnConnect.Add([=] (SmartPointer<Client> client) {
 			
 				map_lock.Execute([&] () {
 				
@@ -138,7 +138,7 @@ class PlayerList : public Module {
 			//	events to keep the set up
 			//	to date and to send messages
 			//	to the other connected clients
-			RunningServer->OnDisconnect.Add([=] (SmartPointer<Client> client, const String &) {
+			Server::Get().OnDisconnect.Add([=] (SmartPointer<Client> client, const String &) {
 			
 				//	Get consistent state
 				map_lock.Execute([&] () {
@@ -188,7 +188,7 @@ class PlayerList : public Module {
 			//	We need to handle login to populate both
 			//	the player logging in, and to keep
 			//	all the other players up-to-date
-			RunningServer->OnLogin.Add([=] (SmartPointer<Client> client) {
+			Server::Get().OnLogin.Add([=] (SmartPointer<Client> client) {
 			
 				//	Get consistent state
 				map_lock.Execute([&] () {
@@ -306,7 +306,7 @@ class PlayerList : public Module {
 				
 				//	Schedule this callback
 				//	again
-				RunningServer->Pool().Enqueue(
+				Server::Get().Pool().Enqueue(
 					update_freq,
 					callback
 				);
@@ -314,7 +314,7 @@ class PlayerList : public Module {
 			};
 			//	Schedule this callback to run
 			//	initially
-			RunningServer->Pool().Enqueue(
+			Server::Get().Pool().Enqueue(
 				update_freq,
 				callback
 			);

@@ -31,7 +31,7 @@ class MCPPInfo : public Module, public InformationProvider {
 		
 		virtual void Install () override {
 		
-			Information->Add(this);
+			Information::Get().Add(this);
 		
 		}
 		
@@ -58,8 +58,8 @@ class MCPPInfo : public Module, public InformationProvider {
 					<<	Newline
 					<<	String::Format(
 							compiled_by_template,
-							RunningServer->CompiledWith(),
-							RunningServer->BuildDate()
+							Server::Get().CompiledWith(),
+							Server::Get().BuildDate()
 						);
 		
 		}

@@ -156,7 +156,7 @@ namespace MCPP {
 		//	store
 		
 		//	Time between ticks
-		auto tick_length=RunningServer->Data().GetSetting(tick_length_key);
+		auto tick_length=Server::Get().Data().GetSetting(tick_length_key);
 		if (
 			tick_length.IsNull() ||
 			!tick_length->ToInteger(&(this->tick_length)) ||
@@ -164,7 +164,7 @@ namespace MCPP {
 		) this->tick_length=default_tick_length;
 		
 		//	Time between saves
-		auto between_saves=RunningServer->Data().GetSetting(between_saves_key);
+		auto between_saves=Server::Get().Data().GetSetting(between_saves_key);
 		if (
 			between_saves.IsNull() ||
 			!between_saves->ToInteger(&(this->between_saves)) ||
@@ -173,7 +173,7 @@ namespace MCPP {
 		else this->between_saves=this->between_saves/this->tick_length;
 		
 		//	Offline freeze
-		auto offline_freeze=RunningServer->Data().GetSetting(offline_freeze_key);
+		auto offline_freeze=Server::Get().Data().GetSetting(offline_freeze_key);
 		this->offline_freeze=(
 			offline_freeze.IsNull()
 				?	default_offline_freeze
@@ -189,7 +189,7 @@ namespace MCPP {
 		);
 		
 		//	Threshold
-		auto threshold_percentage=RunningServer->Data().GetSetting(threshold_percentage_key);
+		auto threshold_percentage=Server::Get().Data().GetSetting(threshold_percentage_key);
 		if (
 			threshold_percentage.IsNull() ||
 			!threshold_percentage->ToInteger(&(this->threshold_percentage))
@@ -207,7 +207,7 @@ namespace MCPP {
 		TimeSave save;
 		Word len=sizeof(save);
 		if (
-			RunningServer->Data().GetBinary(
+			Server::Get().Data().GetBinary(
 				time_key,
 				&save,
 				&len
@@ -222,16 +222,27 @@ namespace MCPP {
 		
 		}
 		
+		//	When server is shutting down, ensure
+		//	that all objects we could be holding
+		//	from other modules are cleaned up
+		//	before those modules are unloaded
+		Server::Get().OnShutdown.Add([this] () {
+		
+			callbacks.Clear();
+			scheduled_callbacks.Clear();
+		
+		});
+		
 		//	Start timer
 		timer=Timer::CreateAndStart();
 	
 		//	Start the tick loop
-		RunningServer->OnInstall.Add(
+		Server::Get().OnInstall.Add(
 			[this] (bool before) {
 			
 				if (!before) {
 				
-					RunningServer->Pool().Enqueue(
+					Server::Get().Pool().Enqueue(
 						this->tick_length,
 						[this] () {	tick();	}
 					);
@@ -415,7 +426,7 @@ namespace MCPP {
 			time
 		};
 		
-		RunningServer->Data().SaveBinary(
+		Server::Get().Data().SaveBinary(
 			time_key,
 			&save,
 			sizeof(save)
@@ -445,7 +456,7 @@ namespace MCPP {
 					Word wait=(elapsed>tick_length) ? 0 : (tick_length-static_cast<Word>(elapsed));
 					
 					//	Enqueue next tick
-					RunningServer->Pool().Enqueue(
+					Server::Get().Pool().Enqueue(
 						(elapsed>=tick_length) ? 0 : wait,
 						[this] () {	tick();	}
 					);
@@ -458,14 +469,14 @@ namespace MCPP {
 				
 					try {
 					
-						RunningServer->WriteLog(
+						Server::Get().WriteLog(
 							tick_error,
 							Service::LogType::Error
 						);
 					
 					} catch (...) {	}
 					
-					RunningServer->Panic();
+					Server::Get().Panic();
 				
 				}
 			);
@@ -480,7 +491,7 @@ namespace MCPP {
 		
 			if (!(
 				offline_freeze &&
-				(RunningServer->Clients.AuthenticatedCount()==0)
+				(Server::Get().Clients.AuthenticatedCount()==0)
 			)) {
 			
 				//	Update stats
@@ -518,7 +529,7 @@ namespace MCPP {
 				packet.Retrieve<UInt64>(1)=time;
 				
 				//	Send to all clients
-				RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+				Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
 				
 					if (client->GetState()==ClientState::Authenticated) client->Send(packet);
 				
@@ -535,7 +546,7 @@ namespace MCPP {
 					MultiScopeGuard param;
 					if (t.Item<1>()) param=sg;
 					
-					RunningServer->Pool().Enqueue(
+					Server::Get().Pool().Enqueue(
 						t.Item<0>(),
 						std::move(param)
 					);
@@ -558,7 +569,7 @@ namespace MCPP {
 					
 					scheduled_callbacks.Delete(0);
 					
-					RunningServer->Pool().Enqueue(
+					Server::Get().Pool().Enqueue(
 						std::move(callback),
 						std::move(param)
 					);
@@ -585,14 +596,14 @@ namespace MCPP {
 		
 			try {
 			
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					tick_error,
 					Service::LogType::Error
 				);
 			
 			} catch (...) {	}
 		
-			RunningServer->Panic();
+			Server::Get().Panic();
 		
 			throw;
 		

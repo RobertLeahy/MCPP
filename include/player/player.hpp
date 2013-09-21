@@ -6,8 +6,13 @@
 #pragma once
 
 
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
+#include <client.hpp>
+#include <concurrency_manager.hpp>
+#include <world/world.hpp>
+#include <functional>
 #include <unordered_set>
+#include <unordered_map>
 
 
 namespace MCPP {
@@ -25,6 +30,7 @@ namespace MCPP {
 		
 			bool on_ground;
 			Timer on_ground_timer;
+			Timer last_packet_timer;
 	
 	
 		public:
@@ -115,12 +121,17 @@ namespace MCPP {
 			 *		this object.
 			 *
 			 *	\return
-			 *		If the player transitioned from being
-			 *		in the air to on the ground, the number
-			 *		of nanoseconds they spent in the air.
-			 *		Zero otherwise.
+			 *		A tuple with three elements.  The first
+			 *		element is the distance (in blocks) that
+			 *		the player moved from their old position.
+			 *		The second element is the number of nanoseconds
+			 *		since the player's position was last updated.
+			 *		The third element is the number of nanoseconds
+			 *		the player spent in the air, if this packet
+			 *		transitioned them from being in the air
+			 *		to being on the ground, zero otherwise.
 			 */
-			UInt64 FromPacket (const Packet & packet);
+			Tuple<Double,UInt64,UInt64> FromPacket (const Packet & packet);
 	
 	
 	};
@@ -129,7 +140,7 @@ namespace MCPP {
 	/**
 	 *	Represents a player.
 	 *
-	 *	Players are distincts from clients.  A
+	 *	Players are distinct from clients.  A
 	 *	client is a distinct connection whereas
 	 *	a player represents a client logged in,
 	 *	present in the game world.
@@ -137,7 +148,20 @@ namespace MCPP {
 	class Player {
 	
 	
+		public:
 		
+		
+			~Player () noexcept;
+	
+	
+			Int32 ID;
+		
+		
+			Mutex Lock;
+			SmartPointer<Client> Conn;
+			PlayerPosition Position;
+			SByte Dimension;
+			std::unordered_set<ColumnID> Columns;
 	
 	
 	};
@@ -147,16 +171,88 @@ namespace MCPP {
 	 *	Provides management utilities for
 	 *	players.
 	 */
-	class PlayerContainer : public Module {
+	class Players : public Module {
 	
 	
 		private:
 		
 		
+			//	SETTINGS
 			
+			
+			//	Specifies the size of the square
+			//	of columns which shall be sent to
+			//	players
+			Word view_distance;
+			//	Specifies the size of the square of
+			//	columns which shall be allowed to
+			//	remain on the client
+			Word cache_distance;
+			
+			
+			//	Determines the spawn location
+			Int32 spawn_x;
+			Int32 spawn_y;
+			Int32 spawn_z;
+			SByte spawn_dimension;
+			RWLock spawn_lock;
+		
+		
+			//	Contains all player data
+			std::unordered_map<
+				SmartPointer<Client>,
+				SmartPointer<Player>
+			> players;
+			RWLock players_lock;
+			
+			
+			//	Manages column generation/sending
+			//	tasks, insuring that they don't
+			//	swamp the server's thread pool
+			Nullable<ConcurrencyManager> cm;
+			
+			
+			//	Contains the columns around the
+			//	spawn area that we are interested
+			//	in
+			Vector<ColumnID> interested;
+			Mutex interested_lock;
+			CondVar interested_wait;
+			bool interested_locked;
+			Word interested_count;
+			Timer interest_timer;
+			
+			
+			//	Retrieves a player given a client
+			//	handle.  Returns a null smart pointer
+			//	if the client is not associated with
+			//	a player object.
+			SmartPointer<Player> get (const SmartPointer<Client> &) noexcept;
+			//	Performs the necessary maintenance
+			//	tasks (sending/removing columns)
+			//	necessary after a player's position
+			//	has changed
+			void update_position (SmartPointer<Player> &, std::function<void ()> then=std::function<void ()>());
+			
+			
+			//	EVENT HANDLERS
+			void on_connect (SmartPointer<Client>);
+			void on_disconnect (SmartPointer<Client>, const String &);
+			void on_login (SmartPointer<Client>);
+			void position_handler (SmartPointer<Client> client, Packet packet);
+			void set_spawn (std::function<void ()>);
+			void set_spawn (Int32, Int32, Int32, bool);
+			void get_spawn (std::function<void ()> then=std::function<void ()>());
+			void express_interest (Word, std::function<void ()>);
 		
 		
 		public:
+		
+		
+			static Players & Get () noexcept;
+			
+			
+			Players () noexcept;
 		
 		
 			/**
@@ -175,9 +271,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	extern Nullable<PlayerContainer> Players;
 
 
 }

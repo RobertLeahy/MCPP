@@ -83,7 +83,7 @@ namespace MCPP {
 	void Client::enable_encryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
 	
 		//	Protocol analysis
-		if (RunningServer->IsVerbose(encrypt_pa_key)) {
+		if (Server::Get().IsVerbose(encrypt_pa_key)) {
 		
 			String log(pa_banner);
 			log	<<	Newline
@@ -101,7 +101,7 @@ namespace MCPP {
 				<<	Newline
 				<<	buffer_format(iv);
 				
-			RunningServer->WriteLog(
+			Server::Get().WriteLog(
 				log,
 				Service::LogType::Debug
 			);
@@ -117,7 +117,7 @@ namespace MCPP {
 	SmartPointer<SendHandle> Client::send (const Packet & packet) {
 	
 		//	Protocol analysis
-		if (RunningServer->LogPacket(
+		if (Server::Get().LogPacket(
 			packet.Type(),
 			ProtocolDirection::ServerToClient
 		)) {
@@ -133,7 +133,7 @@ namespace MCPP {
 				<<	Newline
 				<<	packet.ToString();
 				
-			RunningServer->WriteLog(
+			Server::Get().WriteLog(
 				log,
 				Service::LogType::Debug
 			);
@@ -178,7 +178,7 @@ namespace MCPP {
 	
 	SmartPointer<SendHandle> Client::Send (Vector<Byte> buffer) {
 	
-		if (RunningServer->IsVerbose(raw_send_key)) {
+		if (Server::Get().IsVerbose(raw_send_key)) {
 		
 			String log(pa_banner);
 			log	<<	Newline
@@ -189,7 +189,7 @@ namespace MCPP {
 						buffer.Count()
 					);
 					
-			RunningServer->WriteLog(
+			Server::Get().WriteLog(
 				log,
 				Service::LogType::Debug
 			);
@@ -332,7 +332,7 @@ namespace MCPP {
 	Packet Client::CompleteReceive () noexcept {
 	
 		//	Protocol Analysis
-		if (RunningServer->LogPacket(
+		if (Server::Get().LogPacket(
 			in_progress.Type(),
 			ProtocolDirection::ClientToServer
 		)) {
@@ -345,7 +345,7 @@ namespace MCPP {
 				byte_format(in_progress.Type())
 			) << Newline << in_progress.ToString();
 			
-			RunningServer->WriteLog(
+			Server::Get().WriteLog(
 				log,
 				Service::LogType::Debug
 			);

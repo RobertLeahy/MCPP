@@ -1148,7 +1148,7 @@ namespace MCPP {
 	 *	Contains and manages the Minecraft world
 	 *	as a collection of columns.
 	 */
-	class WorldContainer : public Module {
+	class World : public Module {
 	
 	
 		private:
@@ -1325,6 +1325,11 @@ namespace MCPP {
 			void init_events () noexcept;
 			//	Destroys all event arrays
 			void destroy_events () noexcept;
+			//	Cleans up all event arrays, default
+			//	constructing each of their objects
+			//	so that no module code is loaded
+			//	into them
+			void cleanup_events () noexcept;
 			
 			//	IS POPULATING?
 			
@@ -1342,6 +1347,17 @@ namespace MCPP {
 		
 		
 		public:
+		
+		
+			/**
+			 *	Retrieves a reference to a valid
+			 *	instance of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance
+			 *		of this class.
+			 */
+			static World & Get () noexcept;
 		
 		
 			//	EVENTS
@@ -1362,8 +1378,8 @@ namespace MCPP {
 			 */
 		
 		
-			WorldContainer ();
-			~WorldContainer () noexcept;
+			World () noexcept;
+			~World () noexcept;
 			virtual const String & Name () const noexcept override;
 			virtual Word Priority () const noexcept override;
 			virtual void Install () override;
@@ -1921,12 +1937,6 @@ namespace MCPP {
 	
 	
 	};
-	
-	
-	/**
-	 *	The single valid instance of WorldContainer.
-	 */
-	extern Nullable<WorldContainer> World;
 	 
 
 }

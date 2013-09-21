@@ -145,14 +145,14 @@ class Authentication : public Module {
 			//	disconnect events so we can
 			//	manage our data structures
 			
-			RunningServer->OnConnect.Add([&] (SmartPointer<Client> client) {
+			Server::Get().OnConnect.Add([&] (SmartPointer<Client> client) {
 			
 				//	Add this client to the map
 				map_lock.Write([&] () {	map.emplace(client->GetConn(),AuthenticationClient());	});
 			
 			});
 			
-			RunningServer->OnDisconnect.Add([&] (SmartPointer<Client> client, const String &) {
+			Server::Get().OnDisconnect.Add([&] (SmartPointer<Client> client, const String &) {
 			
 				//	Remove this client from the map
 				//	if they're in the map
@@ -171,12 +171,12 @@ class Authentication : public Module {
 			//	handler (if any)
 			PacketHandler prev(
 				std::move(
-					RunningServer->Router[0x02]
+					Server::Get().Router[0x02]
 				)
 			);
 			
 			//	Install our own handler
-			RunningServer->Router[0x02]=[=] (SmartPointer<Client> client, Packet packet) {
+			Server::Get().Router[0x02]=[=] (SmartPointer<Client> client, Packet packet) {
 			
 				//	We're only interested in newly-connected
 				//	clients
@@ -306,10 +306,10 @@ class Authentication : public Module {
 			
 			//	Extract previous 0xFC handler
 			//	(if any)
-			prev=std::move(RunningServer->Router[0xFC]);
+			prev=std::move(Server::Get().Router[0xFC]);
 			
 			//	Install our own handler
-			RunningServer->Router[0xFC]=[=] (SmartPointer<Client> client, Packet packet) {
+			Server::Get().Router[0xFC]=[=] (SmartPointer<Client> client, Packet packet) {
 			
 				//	We're only interested in newly-connected
 				//	clients
@@ -453,7 +453,7 @@ class Authentication : public Module {
 						);
 						
 						//	Protocol analysis
-						if (RunningServer->IsVerbose(auth_pa_key)) {
+						if (Server::Get().IsVerbose(auth_pa_key)) {
 						
 							String log(pa_banner);
 							log << Newline << String::Format(
@@ -461,7 +461,7 @@ class Authentication : public Module {
 								request_url
 							);
 							
-							RunningServer->WriteLog(
+							Server::Get().WriteLog(
 								log,
 								Service::LogType::Debug
 							);
@@ -485,7 +485,7 @@ class Authentication : public Module {
 									timer.Stop();
 								
 									//	Protocol analysis
-									if (RunningServer->IsVerbose(auth_pa_key)) {
+									if (Server::Get().IsVerbose(auth_pa_key)) {
 									
 										String log(pa_banner);
 										log << Newline;
@@ -514,7 +514,7 @@ class Authentication : public Module {
 											timer.ElapsedNanoseconds()
 										);
 										
-										RunningServer->WriteLog(
+										Server::Get().WriteLog(
 											log,
 											Service::LogType::Debug
 										);
@@ -611,7 +611,7 @@ class Authentication : public Module {
 									})) return;
 									
 									//	Client is authenticated, log
-									RunningServer->WriteLog(
+									Server::Get().WriteLog(
 										String::Format(
 											logged_in,
 											client->IP(),
@@ -654,10 +654,10 @@ class Authentication : public Module {
 			//	handle it when it's sent when
 			//	the player dies and is then
 			//	ready to respawn
-			prev=std::move(RunningServer->Router[0xCD]);
+			prev=std::move(Server::Get().Router[0xCD]);
 			
 			//	Install our own handler
-			RunningServer->Router[0xCD]=[=] (SmartPointer<Client> client, Packet packet) {
+			Server::Get().Router[0xCD]=[=] (SmartPointer<Client> client, Packet packet) {
 			
 				//	We're only interested in newly-connection
 				//	clients, and clients sending 0 as the
@@ -727,7 +727,7 @@ class Authentication : public Module {
 						//	the login handler
 						client->Atomic(
 							ClientState::Authenticated,
-							[&] () {	RunningServer->OnLogin(client);	}
+							[&] () {	Server::Get().OnLogin(client);	}
 						);
 					
 					});

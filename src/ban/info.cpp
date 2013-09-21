@@ -36,7 +36,7 @@ class BanInfo : public Module, public InformationProvider {
 		
 		virtual void Install () override {
 		
-			Information->Add(this);
+			Information::Get().Add(this);
 		
 		}
 		
@@ -58,7 +58,7 @@ class BanInfo : public Module, public InformationProvider {
 		virtual void Execute (ChatMessage & message) const override {
 		
 			//	Get list
-			auto banlist=Bans->List();
+			auto banlist=Bans::Get().List();
 			
 			//	Sort the lists
 			std::sort(

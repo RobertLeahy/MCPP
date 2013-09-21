@@ -408,6 +408,10 @@ namespace MCPP {
 			 */
 			Event<void (SmartPointer<Client>)> OnLogin;
 			/**
+			 *	Invoked before the server shuts down.
+			 */
+			Event<void ()> OnShutdown;
+			/**
 			 *	Invoked whenever data is received
 			 *	on a connection.  Passed the connection
 			 *	on which the data was received, and

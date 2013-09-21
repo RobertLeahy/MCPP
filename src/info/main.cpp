@@ -1,7 +1,11 @@
 #include <info/info.hpp>
 #include <op/op.hpp>
+#include <singleton.hpp>
 #include <utility>
 #include <algorithm>
+
+
+using namespace MCPP;
 
 
 namespace MCPP {
@@ -17,88 +21,54 @@ namespace MCPP {
 	
 	
 	static String help;
-	static Nullable<ModuleLoader> mods;
 	
 	
 	static const Regex split("\\s+");
 	
 	
-	InformationModule::InformationModule () {
-	
-		//	Fire up mod loader
-		mods.Construct(
-			Path::Combine(
-				Path::GetPath(
-					File::GetCurrentExecutableFileName()
-				),
-				mods_dir
-			),
-			[] (const String & message, Service::LogType type) {
-			
-				String log(log_prepend);
-				log << message;
-				
-				RunningServer->WriteLog(
-					log,
-					type
-				);
-			
-			}
-		);
-	
-	}
-	
-	
-	InformationModule::~InformationModule () noexcept {
-	
-		mods->Unload();
-	
-	}
-	
-	
-	Word InformationModule::Priority () const noexcept {
+	Word Information::Priority () const noexcept {
 	
 		return priority;
 	
 	}
 	
 	
-	const String & InformationModule::Name () const noexcept {
+	const String & Information::Name () const noexcept {
 	
 		return name;
 	
 	}
 	
 	
-	const String & InformationModule::Identifier () const noexcept {
+	const String & Information::Identifier () const noexcept {
 	
 		return identifier;
 	
 	}
 	
 	
-	const String & InformationModule::Help () const noexcept {
+	const String & Information::Help () const noexcept {
 	
 		return help;
 	
 	}
 	
 	
-	const String & InformationModule::Summary () const noexcept {
+	const String & Information::Summary () const noexcept {
 	
 		return summary;
 	
 	}
 	
 	
-	bool InformationModule::Check (SmartPointer<Client> client) const {
+	bool Information::Check (SmartPointer<Client> client) const {
 	
-		return Ops->IsOp(client->GetUsername());
+		return Ops::Get().IsOp(client->GetUsername());
 	
 	}
 	
 	
-	Vector<InformationProvider *> InformationModule::retrieve (const Regex & regex) {
+	Vector<InformationProvider *> Information::retrieve (const Regex & regex) {
 	
 		Vector<InformationProvider *> retr;
 		
@@ -111,7 +81,7 @@ namespace MCPP {
 	}
 	
 	
-	InformationProvider * InformationModule::retrieve (const String & name) {
+	InformationProvider * Information::retrieve (const String & name) {
 	
 		for (auto * ip : providers)
 		if (name==ip->Identifier())
@@ -122,7 +92,7 @@ namespace MCPP {
 	}
 	
 	
-	Vector<String> InformationModule::AutoComplete (const String & args_str) const {
+	Vector<String> Information::AutoComplete (const String & args_str) const {
 	
 		Vector<String> retr;
 		
@@ -132,7 +102,7 @@ namespace MCPP {
 		for (auto * ip : (
 			(args.Count()==0)
 				?	providers
-				:	const_cast<InformationModule *>(this)->retrieve(
+				:	const_cast<Information *>(this)->retrieve(
 						Regex(
 							String::Format(
 								"^{0}",
@@ -149,7 +119,7 @@ namespace MCPP {
 	}
 	
 	
-	bool InformationModule::Execute (SmartPointer<Client> client, const String & args_str, ChatMessage & message) {
+	bool Information::Execute (SmartPointer<Client> client, const String & args_str, ChatMessage & message) {
 	
 		//	If there's no client, do nothing
 		if (client.IsNull()) return true;
@@ -183,51 +153,60 @@ namespace MCPP {
 	}
 	
 	
-	void InformationModule::Install () {
-	
-		//	Get mods
-		mods->Load();
+	void Information::Install () {
 		
 		//	Install ourselves into the command
 		//	module
-		Commands->Add(this);
+		Commands::Get().Add(this);
+	
+	}
+	
+	
+	void Information::Add (InformationProvider * provider) {
+	
+		if (provider!=nullptr) {
 		
-		//	Install mods
-		mods->Install();
+			//	Insert sorted
 		
-		//	Sort commands so they appear
-		//	in alphabetical order in
-		//	calls to help
-		std::sort(
-			providers.begin(),
-			providers.end(),
-			[] (const InformationProvider * a, const InformationProvider * b) {
+			//	Find insertion point
+			Word i=0;
+			for (
+				;
+				(i<providers.Count()) &&
+				(providers[i]->Identifier()<provider->Identifier());
+				++i
+			);
 			
-				return a->Identifier()<b->Identifier();
+			//	Insert
+			providers.Insert(
+				provider,
+				i
+			);
+			
+			//	Rebuild help
+			//
+			//	CONSIDER OPTIMIZING
+			for (const auto * ip : providers) {
+			
+				if (help.Size()!=0) help << Newline;
+				
+				help << "/info " << ip->Identifier() << " - " << ip->Help();
 			
 			}
-		);
-		
-		//	Build help
-		for (const auto * ip : providers) {
-		
-			if (help.Size()!=0) help << Newline;
 			
-			help << "/info " << ip->Identifier() << " - " << ip->Help();
-		
 		}
 	
 	}
 	
 	
-	void InformationModule::Add (InformationProvider * provider) {
+	static Singleton<Information> singleton;
 	
-		if (provider!=nullptr) providers.Add(provider);
+	
+	Information & Information::Get () noexcept {
+	
+		return singleton.Get();
 	
 	}
-	
-	
-	Nullable<InformationModule> Information;
 
 
 }
@@ -238,37 +217,14 @@ extern "C" {
 
 	Module * Load () {
 	
-		try {
-		
-			if (Information.IsNull()) {
-			
-				mods.Destroy();
-				
-				Information.Construct();
-			
-			}
-			
-			return &(*Information);
-		
-		} catch (...) {	}
-		
-		return nullptr;
+		return &(singleton.Get());
 	
 	}
 	
 	
 	void Unload () {
 	
-		Information.Destroy();
-		
-		if (!mods.IsNull()) mods->Unload();
-	
-	}
-	
-	
-	void Cleanup () {
-	
-		mods.Destroy();
+		singleton.Destroy();
 	
 	}
 

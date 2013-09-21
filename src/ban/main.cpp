@@ -1,4 +1,5 @@
 #include <ban/ban.hpp>
+#include <singleton.hpp>
 #include <utility>
 #include <stdexcept>
 #include <limits>
@@ -27,14 +28,14 @@ namespace MCPP {
 	static const char * too_many_bits_except("Mask specifies more bits than in address");
 	
 	
-	Word BanModule::Priority () const noexcept {
+	Word Bans::Priority () const noexcept {
 	
 		return priority;
 	
 	}
 	
 	
-	const String & BanModule::Name () const noexcept {
+	const String & Bans::Name () const noexcept {
 	
 		return name;
 	
@@ -68,14 +69,14 @@ namespace MCPP {
 	}
 	
 	
-	void BanModule::Install () {
+	void Bans::Install () {
 	
 		//	We need to grab the lists
 		//	of bans from the backing
 		//	store
 		
 		//	Banned users
-		auto users=RunningServer->Data().GetValues(user_key);
+		auto users=Server::Get().Data().GetValues(user_key);
 		
 		//	Loop and add to the set
 		for (auto & s : users) {
@@ -87,7 +88,7 @@ namespace MCPP {
 		}
 		
 		//	Banned IPs
-		auto ips=RunningServer->Data().GetValues(ips_key);
+		auto ips=Server::Get().Data().GetValues(ips_key);
 		
 		//	Loop
 		for (auto & ip : ips) {
@@ -102,7 +103,7 @@ namespace MCPP {
 			//	Log if that fails
 			} catch (...) {
 			
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					String::Format(
 						ip_format_log,
 						ip
@@ -117,7 +118,7 @@ namespace MCPP {
 		}
 		
 		//	Banned IP ranges
-		auto ip_ranges=RunningServer->Data().GetValues(ip_ranges_key);
+		auto ip_ranges=Server::Get().Data().GetValues(ip_ranges_key);
 		
 		//	Loop
 		for (auto & range : ip_ranges) {
@@ -138,7 +139,7 @@ namespace MCPP {
 				
 				} catch (...) {
 				
-					RunningServer->WriteLog(
+					Server::Get().WriteLog(
 						String::Format(
 							overflow_log,
 							match[2].Value(),
@@ -159,7 +160,7 @@ namespace MCPP {
 				
 				} catch (...) {
 				
-					RunningServer->WriteLog(
+					Server::Get().WriteLog(
 						String::Format(
 							ip_range_format_log,
 							match[1].Value(),
@@ -177,7 +178,7 @@ namespace MCPP {
 				
 				if (mask_bits>bits_in_ip) {
 				
-					RunningServer->WriteLog(
+					Server::Get().WriteLog(
 						String::Format(
 							too_many_bits,
 							mask_bits,
@@ -202,7 +203,7 @@ namespace MCPP {
 				//	Everyone is banned
 				if (mask_bits==0) {
 				
-					RunningServer->WriteLog(
+					Server::Get().WriteLog(
 						String::Format(
 							banned_everyone,
 							range
@@ -232,11 +233,11 @@ namespace MCPP {
 		//	To implement IP banning
 		//	we need to hook into the
 		//	onaccept event
-		RunningServer->OnAccept.Add([=] (IPAddress ip, UInt16) {
+		Server::Get().OnAccept.Add([=] (IPAddress ip, UInt16) {
 		
 			if (IsBanned(ip)) {
 			
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					String::Format(
 						banned_template,
 						ip
@@ -255,9 +256,9 @@ namespace MCPP {
 		//	The user sends their username with
 		//	0x02, so we can kill their connection
 		//	that early in the connection process
-		PacketHandler prev(std::move(RunningServer->Router[0x02]));
+		PacketHandler prev(std::move(Server::Get().Router[0x02]));
 		
-		RunningServer->Router[0x02]=[=] (SmartPointer<Client> client, Packet packet) {
+		Server::Get().Router[0x02]=[=] (SmartPointer<Client> client, Packet packet) {
 		
 			typedef PacketTypeMap<0x02> pt;
 			
@@ -271,7 +272,7 @@ namespace MCPP {
 				client->Disconnect(ban_reason);
 			
 				//	Log
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					String::Format(
 						banned_template,
 						packet.Retrieve<pt,1>()
@@ -295,7 +296,7 @@ namespace MCPP {
 	}
 	
 	
-	bool BanModule::IsBanned (String username) const {
+	bool Bans::IsBanned (String username) const {
 	
 		username.ToLower();
 	
@@ -334,7 +335,7 @@ namespace MCPP {
 	}
 	
 	
-	bool BanModule::IsBanned (IPAddress ip) const noexcept {
+	bool Bans::IsBanned (IPAddress ip) const noexcept {
 	
 		return ips_lock.Read([&] () {
 		
@@ -352,7 +353,7 @@ namespace MCPP {
 	}
 	
 	
-	void BanModule::Ban (String username) {
+	void Bans::Ban (String username) {
 	
 		username.ToLower();
 	
@@ -366,7 +367,7 @@ namespace MCPP {
 			if (!banned_users.insert(username).second) return false;
 			
 			//	Ban user in the database
-			RunningServer->Data().InsertValue(user_key,username);
+			Server::Get().Data().InsertValue(user_key,username);
 			
 			return true;
 		
@@ -378,7 +379,7 @@ namespace MCPP {
 			//	which means we need to scan
 			//	connected users and boot
 			//	them if they're on.
-			RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
 			
 				if (client->GetUsername().ToLower()==username) {
 				
@@ -393,7 +394,7 @@ namespace MCPP {
 	}
 	
 	
-	void BanModule::Unban (String username) {
+	void Bans::Unban (String username) {
 	
 		username.ToLower();
 		
@@ -407,7 +408,7 @@ namespace MCPP {
 			//	the first place
 			if (banned_users.erase(username)!=0) {
 			
-				RunningServer->Data().DeleteValues(user_key,username);
+				Server::Get().Data().DeleteValues(user_key,username);
 			
 			}
 		
@@ -416,7 +417,7 @@ namespace MCPP {
 	}
 	
 	
-	void BanModule::Ban (IPAddress ip) {
+	void Bans::Ban (IPAddress ip) {
 	
 		//	Add to the banlist
 		if (ips_lock.Write([&] () {
@@ -426,7 +427,7 @@ namespace MCPP {
 			if (!banned_ips.insert(ip).second) return false;
 			
 			//	Ban user in the database
-			RunningServer->Data().InsertValue(ips_key,ip);
+			Server::Get().Data().InsertValue(ips_key,ip);
 			
 			return true;
 		
@@ -438,7 +439,7 @@ namespace MCPP {
 			//
 			//	Scan all connected users and disconnect
 			//	all who match.
-			RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
+			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
 			
 				if (client->IP()==ip) client->Disconnect(ban_reason);
 			
@@ -449,7 +450,7 @@ namespace MCPP {
 	}
 	
 	
-	void BanModule::Unban (IPAddress ip) {
+	void Bans::Unban (IPAddress ip) {
 	
 		//	Remove IP from the banlist
 		ips_lock.Write([&] () {
@@ -459,7 +460,7 @@ namespace MCPP {
 			//	already banned
 			if (banned_ips.erase(ip)!=0) {
 			
-				RunningServer->Data().DeleteValues(ips_key,ip);
+				Server::Get().Data().DeleteValues(ips_key,ip);
 			
 			}
 		
@@ -480,7 +481,7 @@ namespace MCPP {
 	}
 	
 	
-	void BanModule::Ban (IPAddress ip, Word bits) {
+	void Bans::Ban (IPAddress ip, Word bits) {
 	
 		//	Check number of bits in mask
 		if (bits==ip.IsV6() ? 128 : 32) {
@@ -533,7 +534,7 @@ namespace MCPP {
 					banned_ip_ranges.Add(std::move(tuple));
 					
 					//	Add to backing store
-					RunningServer->Data().InsertValue(ip_ranges_key,str);
+					Server::Get().Data().InsertValue(ip_ranges_key,str);
 				
 				}
 			
@@ -544,7 +545,7 @@ namespace MCPP {
 	}
 	
 	
-	void BanModule::Unban (IPAddress ip, Word bits) {
+	void Bans::Unban (IPAddress ip, Word bits) {
 	
 		//	Ignore malformed masks
 		if (ip.IsV6() ? (bits>128) : (bits>32)) return;
@@ -574,7 +575,7 @@ namespace MCPP {
 					str << "/" << bits;
 					
 					//	Delete from the backing store
-					RunningServer->Data().DeleteValues(ip_ranges_key,str);
+					Server::Get().Data().DeleteValues(ip_ranges_key,str);
 					
 					//	We're done
 					break;
@@ -595,7 +596,7 @@ namespace MCPP {
 				
 					//	Go to the backing store and
 					//	remove it there as well
-					RunningServer->Data().DeleteValues(ips_key,ip);
+					Server::Get().Data().DeleteValues(ips_key,ip);
 				
 				}
 			
@@ -606,7 +607,7 @@ namespace MCPP {
 	}
 	
 	
-	BanList BanModule::List () const {
+	BanList Bans::List () const {
 	
 		BanList returnthis;
 		
@@ -625,7 +626,14 @@ namespace MCPP {
 	}
 	
 	
-	Nullable<BanModule> Bans;
+	static Singleton<Bans> singleton;
+	
+	
+	Bans & Bans::Get () noexcept {
+	
+		return singleton.Get();
+	
+	}
 
 
 }
@@ -636,22 +644,14 @@ extern "C" {
 
 	Module * Load () {
 	
-		if (Bans.IsNull()) try {
-		
-			Bans.Construct();
-			
-			return &(*Bans);
-		
-		} catch (...) {	}
-		
-		return nullptr;
+		return &(singleton.Get());
 	
 	}
 	
 	
 	void Unload () {
 	
-		Bans.Destroy();
+		singleton.Destroy();
 	
 	}
 

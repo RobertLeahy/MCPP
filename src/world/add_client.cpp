@@ -4,7 +4,7 @@
 namespace MCPP {
 
 
-	void WorldContainer::Add (SmartPointer<Client> client, ColumnID id) {
+	void World::Add (SmartPointer<Client> client, ColumnID id, bool async) {
 	
 		auto column=get_column(id);
 		
@@ -80,7 +80,7 @@ namespace MCPP {
 	}
 	
 	
-	void WorldContainer::Remove (SmartPointer<Client> client, ColumnID id, bool force) {
+	void World::Remove (SmartPointer<Client> client, ColumnID id, bool force) {
 	
 		if (clients_lock.Execute([&] () {
 		
@@ -116,7 +116,7 @@ namespace MCPP {
 	}
 	
 	
-	void WorldContainer::Remove (SmartPointer<Client> client, bool force) {
+	void World::Remove (SmartPointer<Client> client, bool force) {
 	
 		std::unordered_set<ColumnID> set;
 		

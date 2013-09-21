@@ -30,9 +30,9 @@ class ServerListPing : public Module {
 		
 		virtual void Install () override {
 		
-			PacketHandler prev(std::move(RunningServer->Router[0xFE]));
+			PacketHandler prev(std::move(Server::Get().Router[0xFE]));
 		
-			RunningServer->Router[0xFE]=[=] (SmartPointer<Client> client, Packet packet) {
+			Server::Get().Router[0xFE]=[=] (SmartPointer<Client> client, Packet packet) {
 			
 				//	Is this client in the right state?
 				if (client->GetState()!=ClientState::Connected) {
@@ -52,7 +52,7 @@ class ServerListPing : public Module {
 				
 				//	Log the fact that the client
 				//	pinged
-				RunningServer->WriteLog(
+				Server::Get().WriteLog(
 					String::Format(
 						ping_template,
 						client->IP(),
@@ -76,20 +76,20 @@ class ServerListPing : public Module {
 											<<	null_char
 											<<	ver_num
 											<<	null_char
-											<<	RunningServer->GetMessageOfTheDay()
+											<<	Server::Get().GetMessageOfTheDay()
 											<<	null_char
-											<<	String(RunningServer->Clients.AuthenticatedCount())
+											<<	String(Server::Get().Clients.AuthenticatedCount())
 											<<	null_char
 											<< 	String(
 													//	Minecraft client probably doesn't understand
 													//	that 0 max players = unlimited, so we
 													//	try and transform that into something the
 													//	Minecraft client can understand
-													(RunningServer->MaximumPlayers==0)
+													(Server::Get().MaximumPlayers==0)
 															//	Which probably isn't this but at least
 															//	we tried...
 														?	std::numeric_limits<Word>::max()
-														:	RunningServer->MaximumPlayers
+														:	Server::Get().MaximumPlayers
 												);
 				
 				//	Send and attach

@@ -46,7 +46,7 @@ class OpsInfo : public Module, public InformationProvider {
 		
 		virtual void Install () override {
 		
-			Information->Add(this);
+			Information::Get().Add(this);
 		
 		}
 		
@@ -54,7 +54,7 @@ class OpsInfo : public Module, public InformationProvider {
 		virtual void Execute (ChatMessage & message) const override {
 		
 			//	Get the list of server operators
-			auto ops=Ops->List();
+			auto ops=Ops::Get().List();
 			
 			//	Sort it
 			std::sort(

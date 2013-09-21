@@ -45,7 +45,7 @@ class DataProviderInfo : public Module, public InformationProvider {
 		
 		virtual void Install () override {
 		
-			Information->Add(this);
+			Information::Get().Add(this);
 		
 		}
 		
@@ -54,7 +54,7 @@ class DataProviderInfo : public Module, public InformationProvider {
 		
 			//	Get data about the data provider
 			//	the server is using
-			auto info=RunningServer->Data().GetInfo();
+			auto info=Server::Get().Data().GetInfo();
 			
 			//	Sort the key/value pairs
 			std::sort(

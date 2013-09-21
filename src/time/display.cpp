@@ -63,7 +63,7 @@ class DisplayTime : public Command, public Module {
 		
 		virtual void Install () override {
 		
-			Commands->Add(this);
+			Commands::Get().Add(this);
 		
 		}
 	
