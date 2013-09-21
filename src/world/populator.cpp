@@ -4,28 +4,58 @@
 namespace MCPP {
 
 
-	inline void WorldContainer::start_populating () {
-	
-		populating_lock.Write([&] () {	populating.insert(Thread::ID());	});
+	inline void World::start_populating () {
+		
+		populating_lock.Write([&] () {
+		
+			auto id=Thread::ID();
+		
+			auto iter=populating.find(id);
+			
+			if (iter==populating.end()) populating.emplace(
+				id,
+				1
+			);
+			else ++iter->second;
+		
+		});
 	
 	}
 	
 	
-	inline void WorldContainer::stop_populating () noexcept {
-	
-		populating_lock.Write([&] () {	populating.erase(Thread::ID());	});
+	inline void World::stop_populating () noexcept {
+		
+		populating_lock.Write([&] () {
+		
+			auto iter=populating.find(Thread::ID());
+			
+			if ((--iter->second)==0) populating.erase(iter);
+		
+		});
 	
 	}
 	
 	
-	bool WorldContainer::is_populating () const noexcept {
+	bool World::is_populating () const noexcept {
 	
-		return populating_lock.Read([&] () {	return populating.count(Thread::ID())!=0;	});
+		return populating_lock.Read([&] () {
+		
+			bool retr=populating.count(Thread::ID())!=0;
+			
+			if (!retr) {
+			
+				Server::Get().WriteLog("Huh?",Service::LogType::Debug);
+			
+			}
+			
+			return retr;
+			
+		});
 	
 	}
 
 
-	void WorldContainer::populate (ColumnContainer & column) {
+	void World::populate (ColumnContainer & column) {
 	
 		//	Attempt to retrieve populators
 		//	for this dimension
@@ -39,7 +69,7 @@ namespace MCPP {
 			try {
 
 				//	Loop for each populator and invoke it
-				for (const auto & populator : iter->second) populator(column.ID());
+				for (const auto & populator : iter->second) (*populator.Item<0>())(column.ID());
 				
 			} catch (...) {
 			

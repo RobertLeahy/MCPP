@@ -1100,12 +1100,6 @@ namespace MCPP {
 	/**
 	 *	Provides an interface through which a
 	 *	world generator may be accessed.
-	 *
-	 *	A "world generator" encapsulates the
-	 *	concept of a block generator, which accepts
-	 *	a set of input coordinates and yields a block,
-	 *	and a "biome generator", which takes a set
-	 *	of input coordinates and yields a biome.
 	 */
 	class WorldGenerator {
 	
@@ -1114,37 +1108,37 @@ namespace MCPP {
 		
 		
 			/**
-			 *	When overriden in a derived class,
-			 *	invokes the block generator.
+			 *	Acquires a generated column from
+			 *	the generator.
+			 *
+			 *	\param [in] column
+			 *		A reference to the column to
+			 *		generate.
+			 */
+			virtual void operator () (ColumnContainer & column) const = 0;
+	
+	
+	};
+	
+	
+	/**
+	 *	Provides an interface through which a populator
+	 *	may be accessed.
+	 */
+	class Populator {
+	
+	
+		public:
+		
+		
+			/**
+			 *	Populates a column.
 			 *
 			 *	\param [in] id
-			 *		The ID of the block which shall
-			 *		be generated and returned.
-			 *
-			 *	\return
-			 *		The block given by \em id.
+			 *		The ID of the column which
+			 *		is being populated.
 			 */
-			virtual Block operator () (const BlockID & id) const = 0;
-			/**
-			 *	When overriden in a derived class,
-			 *	invokes the biome generator.
-			 *
-			 *	\param [in] x
-			 *		The x-coordinate of the
-			 *		column-in-question.
-			 *	\param [in] z
-			 *		The z-coordinate of the
-			 *		column-in-question.
-			 *	\param [in] dimension
-			 *		The dimension in which the
-			 *		column-in-question resides.
-			 *
-			 *	\return
-			 *		A byte indicating the biome
-			 *		of the column specified by
-			 *		\em x, \em z.
-			 */
-			virtual Byte operator () (Int32 x, Int32 z, SByte dimension) const = 0;
+			virtual void operator () (ColumnID id) const = 0;
 	
 	
 	};
@@ -1231,7 +1225,7 @@ namespace MCPP {
 			//	Contains loaded world populators
 			std::unordered_map<
 				SByte,
-				Vector<std::function<void (ColumnID)>>
+				Vector<Tuple<const Populator *,Word>>
 			> populators;
 			
 			
@@ -1249,8 +1243,9 @@ namespace MCPP {
 			
 			//	Which threads are currently
 			//	populating?
-			std::unordered_set<
-				decltype(Thread::ID())
+			std::unordered_map<
+				decltype(Thread::ID()),
+				Word
 			> populating;
 			mutable RWLock populating_lock;
 			
@@ -1421,6 +1416,26 @@ namespace MCPP {
 			 *		supply chunks for.
 			 */
 			void Add (const WorldGenerator * generator, String type, SByte dimension);
+			
+			
+			/**
+			 *	Adds a Populator to be used in the population
+			 *	of columns for a certain dimension.
+			 *
+			 *	\param [in] populator
+			 *		A pointer to the Populator.  The caller
+			 *		is responsible for this pointer's lifetime
+			 *		and ensuring that it remains valid until
+			 *		the server is shutdown.
+			 *	\param [in] dimension
+			 *		The dimension in which \em populator may
+			 *		populate columns.
+			 *	\param [in] priority
+			 *		The priority of the populator.  This is the
+			 *		relative order in which it shall be invoked
+			 *		when populating columns for \em dimension.
+			 */
+			void Add (const Populator * populator, SByte dimension, Word priority);
 			
 			
 			/**
