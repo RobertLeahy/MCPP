@@ -31,8 +31,14 @@ namespace MCPP {
 			Dimension
 		};
 		
-		if (X<0) --retr.X;
-		if (Z<0) --retr.Z;
+		if (
+			(X<0) &&
+			((X%16)!=0)
+		) --retr.X;
+		if (
+			(Z<0) &&
+			((Z%16)!=0)
+		) --retr.Z;
 		
 		return retr;
 	
