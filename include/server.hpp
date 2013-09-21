@@ -36,6 +36,7 @@ namespace MCPP {
 #include <http_handler.hpp>
 #include <unordered_set>
 #include <unordered_map>
+#include <atomic>
 
 
 namespace MCPP {
@@ -45,7 +46,7 @@ namespace MCPP {
 	 *	The direction information is travelling
 	 *	over the wire.
 	 */
-	enum class ProtocolDirection {
+	enum class ProtocolDirection : Word {
 	
 		ClientToServer,	/**<	From the client to the server.	*/
 		ServerToClient,	/**<	From the server to the client.	*/
@@ -85,6 +86,22 @@ namespace MCPP {
 			bool is_interactive;
 			
 			
+			//	Logging
+			
+			//	Whether debug logging shall be
+			//	performed at all
+			std::atomic<bool> debug;
+			//	Packet logging
+			std::atomic<Word> direction;
+			std::atomic<bool> log_all_packets;
+			mutable RWLock logged_packets_lock;
+			std::unordered_set<Byte> logged_packets;
+			//	Module verbosity
+			std::atomic<bool> verbose_all;
+			mutable RWLock verbose_lock;
+			std::unordered_set<String> verbose;
+			
+			
 			//					//
 			//	PRIVATE METHODS	//
 			//					//
@@ -103,54 +120,18 @@ namespace MCPP {
 		public:
 		
 		
+			/**
+			 *	Retrieves a reference to a valid
+			 *	instance of this class.
+			 *
+			 *	\return
+			 *		A reference to a valid instance
+			 *		of this class.
+			 */
 			static Server & Get () noexcept;
 		
 		
-			/**
-			 *	Whether protocol analysis shall be
-			 *	performed.
-			 *
-			 *	Protocol analysis logs all packets
-			 *	the server sends and receives, can
-			 *	be hard on the logging mechanism,
-			 *	and should be enabled only if
-			 *	needed.
-			 */
-			bool ProtocolAnalysis;
-			/**
-			 *	If ProtocolAnalysis is \em true, the
-			 *	direction of the traffic which is to
-			 *	be logged.
-			 *
-			 *	Defaults to ProtocolDirection::Both.
-			 */
-			ProtocolDirection Direction;
-			/**
-			 *	If ProtocolAnalysis is \em true, the
-			 *	types of packet that shall be logged.
-			 */
-			std::unordered_set<Byte> LoggedPackets;
-			/**
-			 *	If ProtocolAnalysis is \em true, and this
-			 *	is \em true, all packets shall be logged.
-			 *
-			 *	Defaults to \em false.
-			 */
-			bool LogAllPackets;
-			/**
-			 *	If ProtocolAnalysis is \em true, the
-			 *	modules or components that shall emit
-			 *	verbose output.
-			 */
-			std::unordered_set<String> Verbose;
-			/**
-			 *	If ProtocolAnalysis is \em true, and
-			 *	this is \em true, all modules and
-			 *	components shall emit verbose output.
-			 *
-			 *	Defaults to \em false.
-			 */
-			bool VerboseAll;
+			
 			/**
 			 *	The maxiumum number of bytes which
 			 *	the server shall allow to be buffered
@@ -314,6 +295,12 @@ namespace MCPP {
 			void Panic () noexcept;
 			
 			
+			void SetDebug (bool debug) noexcept;
+			void SetDebugProtocolDirection (ProtocolDirection direction) noexcept;
+			void SetDebugAllPackets (bool log_all_packets) noexcept;
+			void SetDebugPacket (Byte packet_id);
+			void SetVerboseAll (bool verbose_all) noexcept;
+			void SetVerbose (String verbose);
 			/**
 			 *	Whether the packet should be logged.
 			 *

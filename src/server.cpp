@@ -47,12 +47,13 @@ namespace MCPP {
 		Service(service_name),
 		running(false),
 		data(nullptr),
-		ProtocolAnalysis(false),
-		Direction(ProtocolDirection::Both),
-		LogAllPackets(false),
-		VerboseAll(false),
 		Router(true)
 	{
+	
+		debug=false;
+		direction=static_cast<Word>(ProtocolDirection::Both);
+		log_all_packets=false;
+		verbose_all=false;
 		
 		OnReceive=[=] (SmartPointer<Connection> conn, Vector<Byte> & buffer) {
 		
@@ -375,43 +376,89 @@ namespace MCPP {
 	}
 	
 	
+	void Server::SetDebug (bool debug) noexcept {
+	
+		this->debug=debug;
+	
+	}
+	
+	
+	void Server::SetDebugProtocolDirection (ProtocolDirection direction) noexcept {
+	
+		this->direction=static_cast<Word>(direction);
+	
+	}
+	
+	
+	void Server::SetDebugAllPackets (bool log_all_packets) noexcept {
+	
+		this->log_all_packets=log_all_packets;
+	
+	}
+	
+	
+	void Server::SetDebugPacket (Byte packet_id) {
+	
+		logged_packets_lock.Write([&] () {	logged_packets.insert(packet_id);	});
+	
+	}
+	
+	
+	void Server::SetVerboseAll (bool verbose_all) noexcept {
+	
+		this->verbose_all=verbose_all;
+	
+	}
+	
+	
+	void Server::SetVerbose (String verbose) {
+	
+		verbose_lock.Write([&] () {	this->verbose.insert(std::move(verbose));	});
+	
+	}
+	
+	
 	bool Server::LogPacket (Byte type, ProtocolDirection direction) const noexcept {
 	
-		return (
-			//	Protocol analysis has to be on
-			ProtocolAnalysis &&
-			(
-				//	Have to be analyzing traffic in
-				//	the appropriate direction...
-				(Direction==direction) ||
-				//	...or both directions
-				(Direction==ProtocolDirection::Both)
-			) &&
-			(
-				//	We have to either be logging all
-				//	packets...
-				LogAllPackets ||
-				//	...or this packet specifically
-				(LoggedPackets.find(type)!=LoggedPackets.end())
+		//	If we're not debugging at all, short-circuit out
+		if (!debug) return false;
+		
+		auto d=static_cast<ProtocolDirection>(
+			static_cast<Word>(
+				this->direction
 			)
 		);
+		
+		//	We must be either logging packets in both
+		//	directions, or the correct direction, to
+		//	log this packet
+		if (
+			(d!=direction) &&
+			(d!=ProtocolDirection::Both)
+		) return false;
+		
+		//	If we're logging all packets, return true
+		//	immediately
+		if (log_all_packets) return true;
+		
+		//	Lock and determine if we're logging this
+		//	particular packet type
+		return logged_packets_lock.Read([&] () {	return logged_packets.count(type)!=0;	});
 	
 	}
 	
 	
 	bool Server::IsVerbose (const String & key) const noexcept {
 	
-		return (
-			//	Protocol analysis has to be on
-			ProtocolAnalysis &&
-			(
-				//	Either all modules/components are
-				//	verbose...
-				VerboseAll ||
-				//	...or this one specifically is
-				(Verbose.find(key)!=Verbose.end())
-			)
-		);
+		//	If we're not debugging at all, short-circuit out
+		if (!debug) return false;
+		
+		//	If everything is verbose, return true at once
+		if (verbose_all) return true;
+		
+		//	Lock and see if this particular key is
+		//	verbose
+		return verbose_lock.Read([&] () {	return verbose.count(key)!=0;	});
 	
 	}
 
