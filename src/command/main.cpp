@@ -1,6 +1,10 @@
 #include <command/command.hpp>
+#include <singleton.hpp>
 #include <utility>
 #include <algorithm>
+
+
+using namespace MCPP;
 
 
 namespace MCPP {
@@ -23,57 +27,21 @@ namespace MCPP {
 	static const String protocol_error("Protocol error");
 	
 	
-	static Nullable<ModuleLoader> mods;
-	
-	
-	CommandModule::CommandModule () {
-	
-		//	Fire up mod loader
-		mods.Construct(
-			Path::Combine(
-				Path::GetPath(
-					File::GetCurrentExecutableFileName()
-				),
-				mods_dir
-			),
-			[] (const String & message, Service::LogType type) {
-			
-				String log(log_prepend);
-				log << message;
-				
-				RunningServer->WriteLog(
-					log,
-					type
-				);
-			
-			}
-		);
-	
-	}
-	
-	
-	CommandModule::~CommandModule () noexcept {
-	
-		mods->Unload();
-	
-	}
-	
-	
-	const String & CommandModule::Name () const noexcept {
+	const String & Commands::Name () const noexcept {
 	
 		return name;
 	
 	}
 	
 	
-	Word CommandModule::Priority () const noexcept {
+	Word Commands::Priority () const noexcept {
 	
 		return priority;
 	
 	}
 	
 	
-	inline Command * CommandModule::retrieve (const String & id) {
+	inline Command * Commands::retrieve (const String & id) {
 	
 		for (auto * c : commands)
 		if (c->Identifier()==id)
@@ -84,7 +52,7 @@ namespace MCPP {
 	}
 	
 	
-	inline Vector<Command *> CommandModule::retrieve (const Regex & regex) {
+	inline Vector<Command *> Commands::retrieve (const Regex & regex) {
 	
 		Vector<Command *> retr;
 		
@@ -97,7 +65,7 @@ namespace MCPP {
 	}
 	
 	
-	void CommandModule::incorrect_syntax (SmartPointer<Client> client, Command * command) {
+	void Commands::incorrect_syntax (SmartPointer<Client> client, Command * command) {
 	
 		ChatMessage message;
 		message.AddRecipients(std::move(client));
@@ -111,12 +79,12 @@ namespace MCPP {
 				
 		if (command!=nullptr) message << " " << command->Identifier();
 		
-		Chat->Send(message);
+		Chat::Get().Send(message);
 	
 	}
 	
 	
-	void CommandModule::command_dne (SmartPointer<Client> client) {
+	void Commands::command_dne (SmartPointer<Client> client) {
 	
 		ChatMessage message;
 		message.AddRecipients(std::move(client));
@@ -124,12 +92,12 @@ namespace MCPP {
 				<< ChatStyle::Bold
 				<< "Command does not exist";
 				
-		Chat->Send(message);
+		Chat::Get().Send(message);
 	
 	}
 	
 	
-	void CommandModule::insufficient_privileges (SmartPointer<Client> client) {
+	void Commands::insufficient_privileges (SmartPointer<Client> client) {
 	
 		ChatMessage message;
 		message.AddRecipients(std::move(client));
@@ -137,12 +105,12 @@ namespace MCPP {
 				<< ChatStyle::Bold
 				<< "You are not permitted to do that";
 				
-		Chat->Send(message);
+		Chat::Get().Send(message);
 	
 	}
 	
 	
-	void CommandModule::help (SmartPointer<Client> client, const String & id) {
+	void Commands::help (SmartPointer<Client> client, const String & id) {
 	
 		ChatMessage message;
 		message.AddRecipients(client);
@@ -220,28 +188,42 @@ namespace MCPP {
 		
 		}
 		
-		Chat->Send(message);
+		Chat::Get().Send(message);
 	
 	}
 	
 	
-	void CommandModule::Add (Command * command) {
+	void Commands::Add (Command * command) {
 	
-		if (command!=nullptr) commands.Add(command);
+		if (command!=nullptr) {
+		
+			//	Find insertion point
+			Word i=0;
+			for (
+				;
+				(i<commands.Count()) &&
+				(command->Identifier()<commands[i]->Identifier());
+				++i
+			);
+			
+			//	Insert in sorted order
+			commands.Insert(
+				command,
+				i
+			);
+			
+		}
 	
 	}
 	
 	
-	void CommandModule::Install () {
-	
-		//	Get mods
-		mods->Load();
+	void Commands::Install () {
 		
 		//	Install our handlers
 		
 		//	Handle chat events
-		auto chat=std::move(Chat->Chat);
-		Chat->Chat=[=] (SmartPointer<Client> client, const String & msg) {
+		auto chat=std::move(Chat::Get().Chat);
+		Chat::Get().Chat=[=] (SmartPointer<Client> client, const String & msg) {
 		
 			//	Is this chat message a command?
 			auto match=is_command.Match(msg);
@@ -320,7 +302,7 @@ namespace MCPP {
 				
 					message.AddRecipients(std::move(client));
 				
-					Chat->Send(message);
+					Chat::Get().Send(message);
 					
 				}
 			
@@ -337,8 +319,8 @@ namespace MCPP {
 		};
 		
 		//	Handle auto-complete events
-		auto complete=std::move(RunningServer->Router[0xCB]);
-		RunningServer->Router[0xCB]=[=] (SmartPointer<Client> client, Packet packet) {
+		auto complete=std::move(Server::Get().Router[0xCB]);
+		Server::Get().Router[0xCB]=[=] (SmartPointer<Client> client, Packet packet) {
 		
 			typedef PacketTypeMap<0xCB> pt;
 			
@@ -451,27 +433,8 @@ namespace MCPP {
 			}
 		
 		};
-		
-		//	Install mods
-		mods->Install();
-		
-		//	Sort commands so they appear
-		//	in alphabetical order in calls
-		//	to help
-		std::sort(
-			commands.begin(),
-			commands.end(),
-			[] (const Command * a, const Command * b) {
-			
-				return a->Identifier()<b->Identifier();
-			
-			}
-		);
 	
 	}
-	
-	
-	Nullable<CommandModule> Commands;
 	
 	
 	bool Command::Check (SmartPointer<Client>) const {
@@ -486,6 +449,16 @@ namespace MCPP {
 		return Vector<String>();
 	
 	}
+	
+	
+	static Singleton<Commands> singleton;
+	
+	
+	Commands & Commands::Get () noexcept {
+	
+		return singleton.Get();
+	
+	}
 
 
 }
@@ -496,37 +469,14 @@ extern "C" {
 
 	Module * Load () {
 	
-		try {
-		
-			if (Commands.IsNull()) {
-			
-				mods.Destroy();
-				
-				Commands.Construct();
-			
-			}
-			
-			return &(*Commands);
-		
-		} catch (...) { }
-		
-		return nullptr;
+		return &(Commands::Get());
 	
 	}
 	
 	
 	void Unload () {
 	
-		Commands.Destroy();
-		
-		if (!mods.IsNull()) mods->Unload();
-	
-	}
-	
-	
-	void Cleanup () {
-	
-		mods.Destroy();
+		singleton.Destroy();
 	
 	}
 
