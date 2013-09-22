@@ -41,7 +41,7 @@ $(MOD_LIB)
 
 bin/mods/mcpp_world_default_generator.dll: \
 $(MOD_OBJ) \
-obj/populators/surface_decorator/main.o | \
+obj/world_generators/default/main.o | \
 $(MOD_LIB) \
 bin/mods/mcpp_world.dll
 	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_world.dll
