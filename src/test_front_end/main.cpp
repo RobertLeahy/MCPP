@@ -3,69 +3,12 @@
 #include <unordered_map>
 
 
-#ifdef DEBUG
-#include "test.cpp"
-#endif
-
-
 static std::unordered_map<const Connection *, bool> map;
 static Mutex map_lock;
 static Mutex lock;
 static CondVar wait;
-static bool stop;
 static const Word timeout=50;
 static Nullable<ThreadPool> console_write;
-
-
-void thread_func () {
-
-	typedef PacketTypeMap<0x0D> pt;
-
-	Packet packet;
-	packet.SetType<pt>();
-	
-	packet.Retrieve<pt,0>()=0.0;
-	packet.Retrieve<pt,1>()=0.0;
-	packet.Retrieve<pt,2>()=74.0;
-	packet.Retrieve<pt,3>()=0.0;
-	packet.Retrieve<pt,4>()=0.0;
-	packet.Retrieve<pt,5>()=0.0;
-	packet.Retrieve<pt,6>()=true;
-
-	for (;;) {
-	
-		if (lock.Execute([] () {
-		
-			if (stop) return stop;
-		
-			wait.Sleep(lock,timeout);
-			
-			return stop;
-		
-		})) break;
-		
-		RunningServer->Clients.Scan([&] (SmartPointer<Client> & client) {
-		
-			if (client->GetState()==ClientState::Authenticated) {
-			
-				map_lock.Execute([&] () {
-				
-					auto iter=map.find(client->GetConn());
-					
-					if (
-						(iter!=map.end()) &&
-						(iter->second)
-					) client->Send(packet);
-				
-				});
-			
-			}
-		
-		});
-	
-	}
-
-}
 
 
 int Main (const Vector<const String> & args) {
@@ -81,80 +24,37 @@ int Main (const Vector<const String> & args) {
 	console_write.Construct(1);
 	RunningServer.Construct();
 	
-	RunningServer->ProtocolAnalysis=true;
-	RunningServer->LoggedPackets.insert(0x03);
-	RunningServer->OnLogin.Add([] (SmartPointer<Client> client) {
-		
-		typedef PacketTypeMap<0x06> sp;
-		
-		Packet packet;
-		packet.SetType<sp>();
-		
-		packet.Retrieve<sp,0>()=0;
-		packet.Retrieve<sp,1>()=0;
-		packet.Retrieve<sp,2>()=0;
-		
-		client->Send(packet);
-		
-		map_lock.Execute([&] () {
-		
-			auto iter=map.find(client->GetConn());
-			
-			if (iter!=map.end()) iter->second=true;
-		
-		});
+	Server::Get().SetDebug(true);
+	//Server::Get().LoggedPackets.insert(0x0D);
+	//Server::Get().Verbose.insert("raw_send");
+	Server::Get().SetVerbose("world");
 	
-	});
-	
-	RunningServer->OnConnect.Add([] (SmartPointer<Client> client) {
-	
-		map_lock.Execute([&] () {
-		
-			map.emplace(
-				client->GetConn(),
-				false
-			);
-		
-		});
-	
-	});
-	
-	RunningServer->OnDisconnect.Add([] (SmartPointer<Client> client, const String & reason) {
-	
-		map_lock.Execute([&] () {
-		
-			map.erase(client->GetConn());
-		
-		});
-	
-	});
-	
-	RunningServer->OnLog.Add([] (const String & log, Service::LogType) {
+	Server::Get().OnLog.Add([] (const String & log, Service::LogType) {
 	
 		console_write->Enqueue([=] () {	StdOut << log << Newline;	});
 	
 	});
 	
-	Thread t(thread_func);
+	//Thread t(thread_func);
 
-	RunningServer->StartInteractive(args);
+	Server::Get().StartInteractive(args);
 	
 	//	Test
 	/*std::function<void ()> callback;
 	callback=[&] () {
 	
-		RunningServer->WriteLog(
+		Server::Get().WriteLog(
 			"Tick",
 			Service::LogType::Information
 		);
 		
-		RunningServer->Pool().Enqueue(
+		Server::Get().Pool().Enqueue(
 			1000,
 			callback
 		);
 	
 	};
-	RunningServer->Pool().Enqueue(
+	Server::Get().Pool().Enqueue(
 		1000,
 		callback
 	);*/
@@ -173,10 +73,10 @@ int Main (const Vector<const String> & args) {
 	
 	});*/
 	
-	StdIn.ReadLine();
-	//for (;;) Thread::Sleep(1000);
+	//StdIn.ReadLine();
+	for (;;) Thread::Sleep(1000);
 	
-	lock.Execute([] () {
+	/*lock.Execute([] () {
 	
 		stop=true;
 		
@@ -184,7 +84,7 @@ int Main (const Vector<const String> & args) {
 	
 	});
 	
-	t.Join();
+	t.Join();*/
 	
 	RunningServer.Destroy();
 	
