@@ -12,4 +12,4 @@ bin/server.exe: \
 $(OBJ) \
 obj/test_front_end/main.o | \
 $(FE_LIB)
-	$(GPP) -shared -o $@ $^ $(FE_LIB)
+	$(GPP) -o $@ $^ $(FE_LIB)
