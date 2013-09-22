@@ -234,3 +234,4 @@ dep.txt
 terrain.txt
 *_old
 *.ini
+makefiles/
