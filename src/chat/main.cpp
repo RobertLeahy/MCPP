@@ -79,6 +79,11 @@ namespace MCPP {
 			);
 		
 		};
+		
+		//	Make sure that we don't keep
+		//	module assets after the server
+		//	is shutdown
+		Server::Get().OnShutdown.Add([this] () mutable {	Chat=ChatHandler();	});
 	
 	}
 	
