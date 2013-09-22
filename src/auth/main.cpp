@@ -19,6 +19,8 @@ static const String http_request_template("HTTP request ==> {0}");
 static const String http_success_template("HTTP response <== {0} - Status: 200 - Time elapsed: {1}ns - Response body ({2} grapheme{3}, {4} code point{5}):");
 static const String http_fail_template("HTTP response <== {0} - Status: {1} - Time elapsed: {2}ns");
 static const String http_error_template("HTTP response <== {0} - ERROR - Time elapsed: {1}ns");
+static const String http_error("Error communicating with session.minecraft.net after {0}ns");
+static const String http_error_w_status("Error communicating with session.minecraft.net ({0}) after {1}ns");
 static const Word priority=1;
 //	Minecraft.net sends "YES" (3 bytes) or "NO" (2 bytes)
 static const Word max_http_bytes=3;
@@ -483,21 +485,45 @@ class Authentication : public Module {
 								try {
 								
 									timer.Stop();
-								
-									//	Protocol analysis
-									if (Server::Get().IsVerbose(auth_pa_key)) {
+									
+									//	Handle various status codes
+									if (status_code==0) {
+									
+										//	cURL reports an error
+										
+										Server::Get().WriteLog(
+											String::Format(
+												http_error,
+												timer.ElapsedNanoseconds()
+											),
+											Service::LogType::Warning
+										);
+										
+									} else if (
+										(status_code>=500) &&
+										(status_code<600)
+									) {
+									
+										//	5xx server error
+									
+										Server::Get().WriteLog(
+											String::Format(
+												http_error_w_status,
+												status_code,
+												timer.ElapsedNanoseconds()
+											),
+											Service::LogType::Warning
+										);
+									
+									} else if (Server::Get().IsVerbose(auth_pa_key)) {
+									
+										//	Verbose logging
 									
 										String log(pa_banner);
 										log << Newline;
 										
-										//	cURL reports an error
-										if (status_code==0) log << String::Format(
-											http_error_template,
-											request_url,
-											timer.ElapsedNanoseconds()
-										);
 										//	HTTP request succeeded
-										else if (status_code==200) log << String::Format(
+										if (status_code==200) log << String::Format(
 											http_success_template,
 											request_url,
 											timer.ElapsedNanoseconds(),
@@ -544,7 +570,7 @@ class Authentication : public Module {
 										
 											reply.Retrieve<String>(0)=login_error;
 											log_error=String::Format(
-												login_error_log,
+												(status_code==0) ? login_error : login_error_log,
 												status_code
 											);
 										
