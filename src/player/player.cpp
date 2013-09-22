@@ -4,52 +4,15 @@
 namespace MCPP {
 
 
-	static const Word priority=1;
-	static const String name("Player Support");
-
-
-	Nullable<PlayerContainer> Players;
+	Player::~Player () noexcept {
 	
-	
-	const String & PlayerContainer::Name () const noexcept {
-	
-		return name;
-	
-	}
-	
-	
-	Word PlayerContainer::Priority () const noexcept {
-	
-		return priority;
-	
-	}
-	
-	
-	void PlayerContainer::Install () {
-	
-		
-	
-	}
-
-
-}
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (Players.IsNull()) Players.Construct();
-		
-		return &(*Players);
-	
-	}
-	
-	
-	void Unload () {
-	
-		Players.Destroy();
+		//	Drop all columns so that they do
+		//	not spuriously remain loaded
+		for (auto & column : Columns) World::Get().Remove(
+			Conn,
+			column,
+			true
+		);
 	
 	}
 

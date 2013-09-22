@@ -1,4 +1,6 @@
 #include <player/player.hpp>
+#include <fma.hpp>
+#include <cmath>
 
 
 namespace MCPP {
@@ -7,6 +9,7 @@ namespace MCPP {
 	PlayerPosition::PlayerPosition (bool on_ground) noexcept : on_ground(on_ground) {
 	
 		if (!on_ground) on_ground_timer=Timer::CreateAndStart();
+		last_packet_timer=Timer::CreateAndStart();
 	
 	}
 	
@@ -132,9 +135,20 @@ namespace MCPP {
 	}
 	
 	
-	UInt64 PlayerPosition::FromPacket (const Packet & packet) {
+	Tuple<Double,UInt64,UInt64> PlayerPosition::FromPacket (const Packet & packet) {
 	
 		UInt64 time=0;
+		
+		//	Time since last packet
+		UInt64 last=last_packet_timer.ElapsedNanoseconds();
+		last_packet_timer=Timer::CreateAndStart();
+		
+		//	Create local copies of x, y, and z
+		//	coordinates so we can compute the
+		//	distance the player moved
+		Double x=X;
+		Double y=Y;
+		Double z=Z;
 	
 		switch (packet.Type()) {
 		
@@ -186,7 +200,43 @@ namespace MCPP {
 		
 		}
 		
-		return time;
+		//	Calculate distance traveled
+		Double distance;
+		//	If the before/after positions
+		//	are identical, don't do expensive
+		//	computations (sqrt is particularly
+		//	expensive)
+		if ((x==X) && (y==Y) && (z==Z)) {
+		
+			distance=0;
+		
+		} else {
+		
+			//	Deltas
+			Double d_x=X-x;
+			Double d_y=Y-y;
+			Double d_z=Z-z;
+			
+			//	3D Pythagoras
+			distance=sqrt(
+				fma(
+					d_x,
+					d_x,
+					fma(
+						d_y,
+						d_y,
+						d_z*d_z
+					)
+				)
+			);
+		
+		}
+		
+		return Tuple<Double,UInt64,UInt64>(
+			distance,
+			last,
+			time
+		);
 	
 	}
 
