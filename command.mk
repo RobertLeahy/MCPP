@@ -49,7 +49,7 @@ bin/mods/mcpp_op.dll
 
 bin/mods/mcpp_command_op.dll: \
 $(MOD_OBJ) \
-obj/op/command.o \
+obj/op/command.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_op.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
@@ -60,7 +60,7 @@ bin/mods/mcpp_op.dll
 
 bin/mods/mcpp_command_time.dll: \
 $(MOD_OBJ) \
-obj/time/display.o \
+obj/time/display.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_time.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_time.dll
