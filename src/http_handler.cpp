@@ -318,6 +318,10 @@ namespace MCPP {
 							
 							}
 							
+							//	Save handle so it isn't lost when
+							//	cURL cleans up the request
+							auto easy_handle=msg->easy_handle;
+							
 							//	Remove handle
 							if ((result=curl_multi_remove_handle(
 								multi,
@@ -329,7 +333,7 @@ namespace MCPP {
 							);
 							
 							//	Kill the handle
-							requests.erase(msg->easy_handle);
+							requests.erase(easy_handle);
 						
 						}
 					
