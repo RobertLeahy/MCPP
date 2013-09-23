@@ -213,6 +213,8 @@ namespace MCPP {
 	
 	SmartPointer<SendHandle> PluginMessages::Send (SmartPointer<Client> client, String channel, Vector<Byte> buffer) {
 	
+		bool builtin=is_builtin.IsMatch(channel);
+	
 		//	Prepare a packet
 	
 		typedef PacketTypeMap<0xFA> pt;
@@ -224,7 +226,7 @@ namespace MCPP {
 		
 		//	If this is a built-in channel,
 		//	send at once
-		if (is_builtin.IsMatch(channel)) return client->Send(packet);
+		if (builtin) return client->Send(packet);
 	
 		//	Otherwise only send if the client
 		//	has registered for this channel
