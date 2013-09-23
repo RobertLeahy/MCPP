@@ -25,6 +25,7 @@ bin/mods/mcpp_keep_alive.dll \
 bin/mods/mcpp_op.dll \
 bin/mods/mcpp_ping.dll \
 bin/mods/mcpp_player_list.dll \
+bin/mods/mcpp_plugin_message.dll \
 bin/mods/mcpp_time.dll
 
 
@@ -104,6 +105,16 @@ $(MOD_LIB)
 bin/mods/mcpp_player_list.dll: \
 $(MOD_OBJ) \
 obj/player_list/main.o | \
+$(MOD_LIB)
+	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+	
+	
+#	PLUGIN MESSAGE SUPPORT
+
+
+bin/mods/mcpp_plugin_message.dll: \
+$(MOD_OBJ) \
+obj/plugin_message/main.o | \
 $(MOD_LIB)
 	$(GPP) -shared -o $@ $^ $(MOD_LIB)
 	
