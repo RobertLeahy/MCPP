@@ -82,6 +82,12 @@ namespace MCPP {
 			//	Don't saturate
 			concurrency/=2;
 			
+			//	Sane logging -- ConcurrencyManager
+			//	internally avoids errors related to
+			//	this insanity, but we don't want to spit
+			//	garbage out to the log
+			if (concurrency==0) concurrency=1;
+			
 			//	Log
 			Server::Get().WriteLog(
 				String::Format(
