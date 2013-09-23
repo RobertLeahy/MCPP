@@ -89,7 +89,7 @@ class ClientsInfo : public Module, public InformationProvider {
 				String username;
 				if (client->GetState()==ClientState::Authenticated) username=String::Format(
 					username_template,
-					client->GetUsername().ToLower()
+					client->GetUsername()
 				);
 			
 				message	<<	Newline
