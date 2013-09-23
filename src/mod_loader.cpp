@@ -166,9 +166,9 @@ namespace MCPP {
 	
 	
 	//	Does nothing
-	inline void ModuleLoader::begin_load () const noexcept {	}
+	inline void ModuleLoader::begin_load () const {	}
 	//	Does nothing
-	inline void ModuleLoader::end_load () const noexcept {	}
+	inline void ModuleLoader::end_load () const {	}
 	
 	
 	//	Loads a particular SO and returns
@@ -179,7 +179,7 @@ namespace MCPP {
 		auto os_str=filename.ToOSString();
 		
 		//	Attempt to load SO
-		void * retr=dlsym(
+		void * retr=dlopen(
 			reinterpret_cast<char *>(
 				static_cast<Byte *>(
 					os_str
@@ -190,6 +190,8 @@ namespace MCPP {
 		
 		//	Throw on error
 		if (retr==nullptr) throw std::runtime_error(dlerror());
+		
+		return retr;
 	
 	}
 	
@@ -215,7 +217,7 @@ namespace MCPP {
 		);
 	
 		//	Get OS name
-		auto os_str=filename.ToOSString();
+		auto os_str=func.ToOSString();
 		
 		//	Union allows warning-less
 		//	"casting" between pointer-to-function
