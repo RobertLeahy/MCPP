@@ -3,6 +3,8 @@
 
 #ifdef ENVIRONMENT_WINDOWS
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 
@@ -16,6 +18,10 @@ namespace MCPP {
 		SYSTEM_INFO sysinfo;
 		GetSystemInfo(&sysinfo);
 		return sysinfo.dwNumberOfProcessors;
+		
+		#else
+		
+		return sysconf(_SC_NPROCESSORS_ONLN);
 		
 		#endif
 	
