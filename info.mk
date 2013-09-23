@@ -5,6 +5,7 @@ bin/mods/mcpp_info_brand.dll \
 bin/mods/mcpp_info_client.dll \
 bin/mods/mcpp_info_data_provider.dll \
 bin/mods/mcpp_info_mcpp.dll \
+bin/mods/mcpp_info_mods.dll \
 bin/mods/mcpp_info_op.dll \
 bin/mods/mcpp_info_os.dll \
 bin/mods/mcpp_info_pool.dll \
@@ -75,6 +76,16 @@ $(INFO_LIB)
 bin/mods/mcpp_info_mcpp.dll: \
 $(MOD_OBJ) \
 obj/info/mcpp.o | \
+$(INFO_LIB)
+	$(GPP) -shared -o $@ $^ $(INFO_LIB)
+	
+	
+#	MODULES/MODULE LOADER
+
+
+bin/mods/mcpp_info_mods.dll: \
+$(MOD_OBJ) \
+obj/info/mods.o | \
 $(INFO_LIB)
 	$(GPP) -shared -o $@ $^ $(INFO_LIB)
 	

@@ -487,6 +487,15 @@ namespace MCPP {
 		return *pool;
 
 	}
+	
+	
+	ModuleLoader & Server::Loader () {
+	
+		if (mods.IsNull()) throw std::out_of_range(NullPointerError);
+		
+		return *mods;
+	
+	}
 
 		
 	String Server::GetMessageOfTheDay () {

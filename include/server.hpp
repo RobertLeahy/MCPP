@@ -194,6 +194,14 @@ namespace MCPP {
 			 */
 			ThreadPool & Pool ();
 			/**
+			 *	Gets the server's module loader.
+			 *
+			 *	\return
+			 *		A reference to the server's
+			 *		module loader.
+			 */
+			ModuleLoader & Loader ();
+			/**
 			 *	A list of clients connected to the
 			 *	server.
 			 */

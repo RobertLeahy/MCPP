@@ -12,6 +12,53 @@
 
 
 namespace MCPP {
+
+
+	/**
+	 *	Information about a single loaded
+	 *	module.
+	 */
+	class ModuleInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The file the module was loaded from.
+			 */
+			String Filename;
+			/**
+			 *	A handle to the module.
+			 */
+			const Module * Mod;
+	
+	
+	};
+	
+	
+	/**
+	 *	Information about a module loader.
+	 */
+	class ModuleLoaderInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The directory the module loader
+			 *	searches.
+			 */
+			String Directory;
+			/**
+			 *	All modules the module loader has
+			 *	currently loaded.
+			 */
+			Vector<ModuleInfo> Modules;
+	
+	
+	};
 	
 	
 	/**
@@ -143,6 +190,13 @@ namespace MCPP {
 			 *	will first call Unload internally.
 			 */
 			void Load ();
+			
+			
+			/**
+			 *	Retrieves information about this
+			 *	module loader.
+			 */
+			ModuleLoaderInfo GetInfo () const;
 	
 	
 	};

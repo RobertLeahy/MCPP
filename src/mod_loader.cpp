@@ -623,4 +623,23 @@ namespace MCPP {
 	}
 	
 	
+	ModuleLoaderInfo ModuleLoader::GetInfo () const {
+	
+		Vector<ModuleInfo> modules;
+		
+		for (const auto & t : mods) modules.Add(
+			ModuleInfo{
+				t.Item<0>(),
+				t.Item<1>()
+			}
+		);
+		
+		return ModuleLoaderInfo{
+			dir,
+			std::move(modules)
+		};
+	
+	}
+	
+	
 }
