@@ -1,8 +1,6 @@
 @echo off
 
-set rleahylib=../RLeahyLib/release
-
-robocopy %rleahylib%/bin ./bin
+robocopy "Z:\Code Store\RLeahyLib\release\bin" ./bin
 
 echo %ERRORLEVEL%
 
@@ -13,7 +11,7 @@ exit /B 1
 
 :include
 
-robocopy %rleahylib%/include ./include/rleahylib /MIR
+robocopy "Z:\Code Store\RLeahyLib\release\include" ./include/rleahylib /MIR
 
 IF ERRORLEVEL 0 exit /B 0
 IF ERRORLEVEL 1 exit /B 0

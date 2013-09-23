@@ -235,3 +235,5 @@ terrain.txt
 *_old
 *.ini
 makefiles/
+deps/
+gcc48/

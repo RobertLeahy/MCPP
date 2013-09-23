@@ -1,14 +1,14 @@
 SUFFIXES+=.mk
 
 
-INC_CURL:=-I "G:/Downloads/curl-7.30.0-devel-mingw64/curl-7.30.0-devel-mingw64/include"
-INC_OPENSSL:=-I "G:/Downloads/openssl-1.0.1e.tar/openssl-1.0.1e/openssl-1.0.1e/include"
-INC_ZLIB:=-I "G:/Downloads/zlib128-dll/include/"
+INC_CURL:=-I deps/libcurl7300/include
+INC_OPENSSL:=-I deps/openssl101e/include
+INC_ZLIB:=-I deps/zlib128
 INC_MYSQL:=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
 OPTIMIZATION:=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG
 #OPTIMIZATION=-O3 -march=native
 OPTS_SHARED:=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
-GPP:=G:\Downloads\x86_64-w64-mingw32-gcc-4.8.0-win64_rubenvb\mingw64\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
+GPP:=gcc48\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 
 
 #	DEFAULT
