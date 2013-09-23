@@ -564,10 +564,9 @@ namespace MCPP {
 		bool skylight=HasSkylight(id.Dimension);
 		if (skylight) size+=(16*16*16*16)/2;
 		
-		//	Allocate enough space to hold
-		//	the column in Mojang format
-		Vector<Byte> column(size);
-		column.SetCount(size);
+		//	A buffer to hold the Mojang
+		//	format data
+		Byte column [(16*16*16*16*3)+(16*16)];
 		
 		Word offset=0;
 		
@@ -666,8 +665,9 @@ namespace MCPP {
 			sizeof(Biomes)
 		);
 		
-		//	Prepare the final buffer
-		size=(
+		//	Allocate sufficient memory to hold
+		//	the 0x33 packet
+		Vector<Byte> buffer(
 			//	Packet type
 			sizeof(Byte)+
 			//	X-coordinate of this chunk
@@ -684,13 +684,8 @@ namespace MCPP {
 			sizeof(Int32)+
 			//	Largest possible size for
 			//	compressed column data
-			DeflateBound(
-				column.Count()
-			)
+			DeflateBound(size)
 		);
-		
-		//	Allocate sufficient memory
-		Vector<Byte> buffer(size);
 		
 		buffer.Add(0x33);
 		
@@ -723,8 +718,8 @@ namespace MCPP {
 		
 		//	Compress
 		Deflate(
-			column.begin(),
-			column.end(),
+			column,
+			&column[0]+size,
 			&buffer
 		);
 		
