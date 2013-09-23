@@ -19,6 +19,7 @@ include world.mk
 mods: \
 bin/mods/mcpp_auth.dll \
 bin/mods/mcpp_ban.dll \
+bin/mods/mcpp_brand.dll \
 bin/mods/mcpp_disconnect.dll \
 bin/mods/mcpp_entity_id.dll \
 bin/mods/mcpp_keep_alive.dll \
@@ -47,6 +48,17 @@ $(MOD_OBJ) \
 obj/ban/main.o | \
 $(MOD_LIB)
 	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+	
+	
+#	BRAND IDENTIFICATION
+
+
+bin/mods/mcpp_brand.dll: \
+$(MOD_OBJ) \
+obj/brand/main.o | \
+$(MOD_LIB) \
+bin/mods/mcpp_plugin_message.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_plugin_message.dll
 	
 	
 #	DISCONNECT PACKET HANDLING
