@@ -14,7 +14,7 @@ GPP:=gcc48\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 #	DEFAULT
 
 .PHONY: all
-all: | 
+all:
 
 .PHONY: clean
 clean: cleandeps
