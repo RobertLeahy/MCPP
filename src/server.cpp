@@ -302,9 +302,6 @@ namespace MCPP {
 			//	thread pool
 			pool.Destroy();
 			
-			//	Now we unload all modules
-			if (!mods.IsNull()) mods->Unload();
-			
 			//	Clear all events et cetera
 			//	that might have module resources
 			//	loaded into them
@@ -321,6 +318,8 @@ namespace MCPP {
 			}
 			cleanup_events();
 			
+			//	Now we unload all modules
+			if (!mods.IsNull()) mods->Unload();
 			
 			//	Kill all modules
 			mods.Destroy();
