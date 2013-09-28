@@ -33,7 +33,7 @@ namespace MCPP {
 #include <data_provider.hpp>
 #include <event.hpp>
 #include <typedefs.hpp>
-#include <http_handler.hpp>
+#include <exception>
 #include <unordered_set>
 #include <unordered_map>
 #include <atomic>
@@ -55,7 +55,7 @@ namespace MCPP {
 	};
 
 
-	class Server : public Service {
+	class Server {
 	
 	
 		private:
@@ -81,21 +81,14 @@ namespace MCPP {
 			Nullable<ModuleLoader> mods;
 			
 			
-			//	For interactive
-			
-			bool is_interactive;
-			
-			
 			//	Logging
 			
 			//	Whether debug logging shall be
 			//	performed at all
 			std::atomic<bool> debug;
-			//	Packet logging
-			std::atomic<Word> direction;
 			std::atomic<bool> log_all_packets;
 			mutable RWLock logged_packets_lock;
-			std::unordered_set<Byte> logged_packets;
+			std::unordered_map<Byte,ProtocolDirection> logged_packets;
 			//	Module verbosity
 			std::atomic<bool> verbose_all;
 			mutable RWLock verbose_lock;
@@ -108,13 +101,8 @@ namespace MCPP {
 			inline void server_startup();
 			inline void load_mods();
 			inline void cleanup_events () noexcept;
-			
-			
-		protected:
-		
-		
-			virtual void OnStart (const Vector<const String> & args) override;
-			virtual void OnStop () override;
+			inline void stop_impl ();
+			inline void panic_impl (std::exception_ptr except=std::exception_ptr()) noexcept;
 		
 		
 		public:
@@ -129,6 +117,7 @@ namespace MCPP {
 			 *		of this class.
 			 */
 			static Server & Get () noexcept;
+			static void Destroy () noexcept;
 		
 		
 			
@@ -153,30 +142,6 @@ namespace MCPP {
 			 *		The server's message of the day.
 			 */
 			String GetMessageOfTheDay ();
-			/**
-			 *	A listing of the modules loaded by
-			 *	the server.
-			 */
-			Vector<
-				Tuple<
-					//	Actual name of the module
-					String,
-					//	File the module was loaded from
-					String,
-					//	Module handle
-					Library
-				>
-			> Modules;
-			/**
-			 *	Determines whether the server is running
-			 *	in interactive mode or not.
-			 *
-			 *	\return
-			 *		\em true if the server is running
-			 *		in interactive mode, \em false
-			 *		otherwise.
-			 */
-			bool IsInteractive () const noexcept;
 			/**
 			 *	Gets the server's data provider.
 			 *
@@ -219,7 +184,7 @@ namespace MCPP {
 			 *	\return
 			 *		A string of the above format.
 			 */
-			String BuildDate () const;
+			const String & BuildDate () const noexcept;
 			/**
 			 *	Returns a string representing the compiler
 			 *	the server was built with.
@@ -228,7 +193,7 @@ namespace MCPP {
 			 *		A string representing the compiler used
 			 *		to build the server.
 			 */
-			String CompiledWith () const;
+			const String & CompiledWith () const noexcept;
 			
 		
 			Server (const Server &) = delete;
@@ -238,13 +203,20 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Starts the server in interactive mode.
-			 *
-			 *	\param [in] args
-			 *		The command line arguments to pass
-			 *		to the server.
+			 *	Starts the server if it is stopped.
 			 */
-			void StartInteractive (const Vector<const String> & args);
+			void Start ();
+			/**
+			 *	Stops the server if it is running.
+			 */
+			void Stop () noexcept;
+			/**
+			 *	Requests a restart from the front-end.
+			 *
+			 *	If the front-end does not have a restart
+			 *	handler, kills the program.
+			 */
+			void Restart () noexcept;
 		
 		
 			/**
@@ -295,20 +267,97 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Should be called when something has
-			 *	gone fatally and irrecoverably wrong.
-			 *
-			 *	Attempts to shut the server down.
+			 *	Should be called when an irrecoverable
+			 *	error is experienced.
 			 */
 			void Panic () noexcept;
+			/**
+			 *	Should be called when an irrecoverable
+			 *	error is experienced.
+			 *
+			 *	\param [in] reason
+			 *		A reason string which describes
+			 *		the irrecoverable error.
+			 */
+			void Panic (const String & reason) noexcept;
+			/**
+			 *	Should be called when an irrecoverable
+			 *	error is experienced.
+			 *
+			 *	\param [in] except
+			 *		A std::exception_ptr object which
+			 *		points to the exception representing
+			 *		the irrecoverable error.
+			 */
+			void Panic (std::exception_ptr except) noexcept;
 			
 			
+			/**
+			 *	Enables or disables debug logging.
+			 *
+			 *	\param [in] debug
+			 *		\em true to enable debug logging,
+			 *		\em false to disable debug
+			 *		logging.
+			 */
 			void SetDebug (bool debug) noexcept;
-			void SetDebugProtocolDirection (ProtocolDirection direction) noexcept;
+			/**
+			 *	Enables or disables the debug
+			 *	logging of all packets.
+			 *
+			 *	\param [in] log_all_packets
+			 *		\em true if all packets should
+			 *		be logged, \em false otherwise.
+			 */
 			void SetDebugAllPackets (bool log_all_packets) noexcept;
-			void SetDebugPacket (Byte packet_id);
+			/**
+			 *	Enables the debug logging of a
+			 *	certain packet.
+			 *
+			 *	\param [in] packet_id
+			 *		The ID of the packet to log.
+			 *	\param [in] direction
+			 *		The direction in which the
+			 *		packet shall be logged, defaults
+			 *		to ProtocolDirection::Both.
+			 */
+			void SetDebugPacket (Byte packet_id, ProtocolDirection direction=ProtocolDirection::Both);
+			/**
+			 *	Disables the logging of a certain
+			 *	packet.
+			 *
+			 *	\param [in] packet_id
+			 *		The ID of the packet to stop
+			 *		logging.
+			 */
+			void UnsetDebugPacket (Byte packet_id) noexcept;
+			/**
+			 *	Enables or disables debug logging
+			 *	of all keys.
+			 *
+			 *	\param [in] verbose_all
+			 *		\em true if all keys should
+			 *		be logged, \em false otherwise.
+			 */
 			void SetVerboseAll (bool verbose_all) noexcept;
+			/**
+			 *	Enables the debug logging of a 
+			 *	certain key.
+			 *
+			 *	\param [in] verbose
+			 *		The key which shall be debug
+			 *		logged.
+			 */
 			void SetVerbose (String verbose);
+			/**
+			 *	Disables the debug logging of a
+			 *	certain key.
+			 *
+			 *	\param [in] verbose
+			 *		The key which shall no longer
+			 *		be debug logged.
+			 */
+			void UnsetVerbose (const String & verbose);
 			/**
 			 *	Whether the packet should be logged.
 			 *
@@ -335,7 +384,7 @@ namespace MCPP {
 			 *		should be verbose, \em false
 			 *		otherwise.
 			 */
-			bool IsVerbose (const String & key) const noexcept;
+			bool IsVerbose (const String & key) const;
 			
 			
 			//			//
@@ -414,17 +463,17 @@ namespace MCPP {
 			 *	buffer.
 			 */
 			ReceiveCallback OnReceive;
+			/**
+			 *	Invoked when the server panics.
+			 */
+			std::function<void (std::exception_ptr)> OnPanic;
+			/**
+			 *	Invoked to request a restart.
+			 */
+			std::function<void ()> OnRestart;
 	
 	
 	};
-	
-	
-	/**
-	 *	The currently running/extant instance of the
-	 *	MCPP server, or \em null if there is no
-	 *	running/extant instance.
-	 */
-	extern Nullable<Server> RunningServer;
 
 
 }

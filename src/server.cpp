@@ -1,12 +1,10 @@
 #include <server.hpp>
+#include <singleton.hpp>
+#include <cstdlib>
 #include <exception>
 
 
 namespace MCPP {
-
-
-	//	Name of server
-	static const String service_name="Minecraft++";
 	
 	
 	//	Messages
@@ -21,7 +19,6 @@ namespace MCPP {
 	static const String disconnected_with_reason="{{0}}:{{1}} disconnected (with reason: \"{0}\"), there {{3}} now {{2}} client{{4}} connected";
 	static const String error_processing_recv="Error processing received data";
 	static const String buffer_too_long="Buffer too long";
-	static const String panic_message="Panic!";
 	
 	
 	//	Constants
@@ -34,20 +31,15 @@ namespace MCPP {
 	static const String max_bytes_setting="max_bytes";
 	static const Word default_max_players=0;
 	static const String max_players_setting="max_players";
-	
-	
-	Nullable<Server> RunningServer;
 
 
 	Server::Server () :
-		Service(service_name),
 		running(false),
 		data(nullptr),
 		Router(true)
 	{
 	
 		debug=false;
-		direction=static_cast<Word>(ProtocolDirection::Both);
 		log_all_packets=false;
 		verbose_all=false;
 		
@@ -95,7 +87,7 @@ namespace MCPP {
 	
 	Server::~Server () noexcept {
 	
-		OnStop();
+		stop_impl();
 	
 	}
 	
@@ -115,19 +107,68 @@ namespace MCPP {
 	}
 	
 	
-	void Server::StartInteractive (const Vector<const String> & args) {
+	void Server::Stop () noexcept {
 	
-		is_interactive=true;
+		try {
 	
-		OnStart(args);
+			Thread t([this] () mutable {
+			
+				try {
+			
+					stop_impl();
+					
+				} catch (...) {
+				
+					Panic(std::current_exception());
+					
+					throw;
+				
+				}
+			
+			});
+			
+		} catch (...) {
+		
+			Panic(std::current_exception());
+		
+		}
 	
 	}
 	
 	
+	static const String no_restart("Restart requested without a restart handler");
 	
+	
+	void Server::Restart () noexcept {
+	
+		try {
+		
+			Thread t([this] () mutable {
+			
+				try {
 				
+					if (OnRestart) OnRestart();
+					else Panic(no_restart);
+				
+				} catch (...) {
+				
+					Panic(std::current_exception());
+					
+					throw;
+				
+				}
 			
-			
+			});
+		
+		} catch (...) {
+		
+			Panic(std::current_exception());
+		
+		}
+	
+	}
+	
+	
 	void Server::WriteLog (const String & message, Service::LogType type) noexcept {
 	
 		//	Don't throw errors, eat them
@@ -140,12 +181,7 @@ namespace MCPP {
 			
 			} catch (...) {	}
 			
-			//	Use the data provider to log
-			//	if it's present, otherwise
-			//	fall back on default service
-			//	logging
-			if (data==nullptr) Service::WriteLog(message,type);
-			else data->WriteLog(message,type);
+			if (data!=nullptr) data->WriteLog(message,type);
 			
 		} catch (...) {	}
 	
@@ -169,8 +205,6 @@ namespace MCPP {
 			
 			} catch (...) {	}
 			
-			//	If there's no data provider, don't
-			//	try and log at all
 			if (data!=nullptr) data->WriteChatLog(
 				from,
 				to,
@@ -183,7 +217,7 @@ namespace MCPP {
 	}
 	
 	
-	void Server::OnStart (const Vector<const String> & args) {
+	void Server::Start () {
 	
 		//	Hold the state lock while
 		//	changing the server's state
@@ -272,73 +306,59 @@ namespace MCPP {
 	}
 	
 	
-	void Server::OnStop () {
+	void Server::stop_impl () {
 	
 		//	Hold the state lock before
 		//	attempting to change the
 		//	server's state
 		state_lock.Acquire();
 		
-		try {
-		
-			//	Server is already stopped, can't
-			//	stop a stopped server
-			if (!running) {
-			
-				state_lock.Release();
-				
-				return;
-			
-			}
-			
-			//	STOP
-			
-			//	Disconnect all connected clients
-			//	and stop the flow of new connections
-			connections.Destroy();
-			
-			//	Now we wait on all pending
-			//	tasks and then kill the
-			//	thread pool
-			pool.Destroy();
-			
-			//	Clear all events et cetera
-			//	that might have module resources
-			//	loaded into them
-			try {
-			
-				OnShutdown();
-			
-			} catch (...) {
-			
-				Panic();
-				
-				throw;
-			
-			}
-			cleanup_events();
-			
-			//	Now we unload all modules
-			if (!mods.IsNull()) mods->Unload();
-			
-			//	Kill all modules
-			mods.Destroy();
-			
-			//	Clean up data provider
-			delete data;
-			data=nullptr;
-			
-			//	Reset this for next time
-			//	the server is started
-			is_interactive=false;
-			
-		} catch (...) {
+		//	Server is already stopped, can't
+		//	stop a stopped server
+		if (!running) {
 		
 			state_lock.Release();
+			
+			return;
+		
+		}
+		
+		//	STOP
+		
+		//	Disconnect all connected clients
+		//	and stop the flow of new connections
+		connections.Destroy();
+		
+		//	Now we wait on all pending
+		//	tasks and then kill the
+		//	thread pool
+		pool.Destroy();
+		
+		//	Clear all events et cetera
+		//	that might have module resources
+		//	loaded into them
+		try {
+		
+			OnShutdown();
+		
+		} catch (...) {
+		
+			Panic(std::current_exception());
 			
 			throw;
 		
 		}
+		cleanup_events();
+		
+		//	Now we unload all modules
+		if (!mods.IsNull()) mods->Unload();
+		
+		//	Kill all modules
+		mods.Destroy();
+		
+		//	Clean up data provider
+		delete data;
+		data=nullptr;
 		
 		//	Shutdown complete
 		running=false;
@@ -346,6 +366,24 @@ namespace MCPP {
 		state_lock.Release();
 	
 	}
+	
+	
+	inline void Server::panic_impl (std::exception_ptr except) noexcept {
+	
+		if (OnPanic) try {
+		
+			OnPanic(except);
+			
+			return;
+		
+		} catch (...) {	}
+		
+		std::abort();
+	
+	}
+	
+	
+	static const String panic_message="Panic!";
 	
 	
 	void Server::Panic () noexcept {
@@ -358,15 +396,48 @@ namespace MCPP {
 			);
 		
 		} catch (...) {	}
+		
+		panic_impl();
+	
+	}
+	
+	
+	void Server::Panic (const String & reason) noexcept {
 	
 		try {
 		
-			OnStop();
+			WriteLog(
+				reason,
+				Service::LogType::Critical
+			);
 		
 		} catch (...) {	}
 		
-		//	ABORT
-		std::terminate();
+		panic_impl();
+	
+	}
+	
+	
+	void Server::Panic (std::exception_ptr except) noexcept {
+	
+		try {
+		
+			try {
+			
+				std::rethrow_exception(except);
+				
+			} catch (const std::exception & e) {
+			
+				WriteLog(
+					e.what(),
+					Service::LogType::Critical
+				);
+			
+			}
+			
+		} catch (...) {	}
+		
+		panic_impl(except);
 	
 	}
 	
@@ -378,13 +449,6 @@ namespace MCPP {
 	}
 	
 	
-	void Server::SetDebugProtocolDirection (ProtocolDirection direction) noexcept {
-	
-		this->direction=static_cast<Word>(direction);
-	
-	}
-	
-	
 	void Server::SetDebugAllPackets (bool log_all_packets) noexcept {
 	
 		this->log_all_packets=log_all_packets;
@@ -392,9 +456,23 @@ namespace MCPP {
 	}
 	
 	
-	void Server::SetDebugPacket (Byte packet_id) {
+	void Server::SetDebugPacket (Byte packet_id, ProtocolDirection direction) {
 	
-		logged_packets_lock.Write([&] () {	logged_packets.insert(packet_id);	});
+		logged_packets_lock.Write([&] () {
+		
+			auto iter=logged_packets.find(packet_id);
+			
+			if (iter==logged_packets.end()) logged_packets.emplace(packet_id,direction);
+			else iter->second=direction;
+		
+		});
+	
+	}
+	
+	
+	void Server::UnsetDebugPacket (Byte packet_id) noexcept {
+	
+		logged_packets_lock.Write([&] () {	logged_packets.erase(packet_id);	});
 	
 	}
 	
@@ -413,37 +491,43 @@ namespace MCPP {
 	}
 	
 	
+	void Server::UnsetVerbose (const String & verbose) {
+	
+		verbose_lock.Write([&] () {	this->verbose.erase(verbose);	});
+	
+	}
+	
+	
 	bool Server::LogPacket (Byte type, ProtocolDirection direction) const noexcept {
 	
 		//	If we're not debugging at all, short-circuit out
 		if (!debug) return false;
 		
-		auto d=static_cast<ProtocolDirection>(
-			static_cast<Word>(
-				this->direction
-			)
-		);
-		
-		//	We must be either logging packets in both
-		//	directions, or the correct direction, to
-		//	log this packet
-		if (
-			(d!=direction) &&
-			(d!=ProtocolDirection::Both)
-		) return false;
-		
-		//	If we're logging all packets, return true
-		//	immediately
+		//	If we're debugging all packets, return
+		//	true immediately
 		if (log_all_packets) return true;
 		
-		//	Lock and determine if we're logging this
-		//	particular packet type
-		return logged_packets_lock.Read([&] () {	return logged_packets.count(type)!=0;	});
+		//	Lock and determine if we're logging
+		//	this particular packet type in this
+		//	particular direction
+		return logged_packets_lock.Read([&] () {
+		
+			auto iter=logged_packets.find(type);
+			
+			return (
+				(iter!=logged_packets.end()) &&
+				(
+					(direction==ProtocolDirection::Both) ||
+					(direction==iter->second)
+				)
+			);
+		
+		});
 	
 	}
 	
 	
-	bool Server::IsVerbose (const String & key) const noexcept {
+	bool Server::IsVerbose (const String & key) const {
 	
 		//	If we're not debugging at all, short-circuit out
 		if (!debug) return false;
@@ -461,13 +545,6 @@ namespace MCPP {
 	static const String server_id_setting("server_id");
 	static const String motd_setting("motd");
 	static const String default_server_id("Minecraft++");
-
-
-	bool Server::IsInteractive () const noexcept {
-
-		return is_interactive;
-
-	}
 
 
 	DataProvider & Server::Data () {
@@ -508,44 +585,61 @@ namespace MCPP {
 		return *motd;
 
 	}
-
-
-	static const Regex date_trim(" {2,}");
-	static const RegexReplacement date_trim_r(" ");
-	String Server::BuildDate () const {
-
-		return date_trim.Replace(
-			String::Format(
-				"{0} {1}",
-				__DATE__,
-				__TIME__
-			),
-			date_trim_r
-		);
+	
+	
+	static const String build_date(
+		__DATE__
+		" "
+		__TIME__
+	);
+	
+	
+	const String & Server::BuildDate () const noexcept {
+	
+		return build_date;
 
 	}
-
-
-	String Server::CompiledWith () const {
-
+	
+	
+	#define stringify_impl(x) #x
+	#define stringify(x) stringify_impl(x)
+	
+	
+	static const String compiled_with(
 		#ifdef __GNUC__
-		return String::Format(
-			"GNU C++ Compiler (g++) {0}.{1}.{2}",
-			__GNUC__,
-			__GNUC_MINOR__,
-			__GNUC_PATCHLEVEL__
-		);
+		"GNU C++ Compiler (g++) "
+		stringify(__GNUC__)
+		"."
+		stringify(__GNUC_MINOR__)
+		"."
+		stringify(__GNUC_PATCHLEVEL__)
 		#else
-		return "UNKNOWN";
+		"UNKNOWN"
 		#endif
+	);
+
+
+	const String & Server::CompiledWith () const noexcept {
+	
+		return compiled_with;
 
 	}
+	
+	
+	static Singleton<Server> singleton;
 
 
 	Server & Server::Get () noexcept {
+	
+		return singleton.Get();
 
-		return *RunningServer;
-
+	}
+	
+	
+	void Server::Destroy () noexcept {
+	
+		singleton.Destroy();
+	
 	}
 	
 	
