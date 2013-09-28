@@ -1145,6 +1145,99 @@ namespace MCPP {
 	
 	
 	/**
+	 *	A snapshot of information about the
+	 *	world at a single point in time.
+	 */
+	class WorldInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The number of times maintenance has
+			 *	been performed on the world.
+			 */
+			Word Maintenances;
+			/**
+			 *	The number of nanoseconds that have
+			 *	been spent maintaing the world.
+			 */
+			UInt64 Maintaining;
+			
+			
+			/**
+			 *	The number of times a column has
+			 *	been loaded from the backing store.
+			 */
+			Word Loaded;
+			/**
+			 *	The number of nanoseconds that have
+			 *	been spent loading columns from the
+			 *	backing store.
+			 */
+			UInt64 Loading;
+			
+			
+			/**
+			 *	The number of columns which have been
+			 *	unloaded.
+			 */
+			Word Unloaded;
+			
+			
+			/**
+			 *	The number of times a column has been
+			 *	saved to the backing store.
+			 */
+			Word Saved;
+			/**
+			 *	The amount of time that has been spent
+			 *	saving columns to the backing store.
+			 */
+			UInt64 Saving;
+			
+			
+			/**
+			 *	The number of times a column has been
+			 *	generated.
+			 */
+			Word Generated;
+			/**
+			 *	The amount of time spent generating
+			 *	columns.
+			 */
+			UInt64 Generating;
+			
+			
+			/**
+			 *	The number of times a column has been
+			 *	populated.
+			 */
+			Word Populated;
+			/**
+			 *	The amount of time spent populating
+			 *	columns.
+			 */
+			UInt64 Populating;
+			
+			
+			/**
+			 *	The number of currently loaded
+			 *	columns.
+			 */
+			Word Count;
+			/**
+			 *	The number of bytes of memory being
+			 *	used to hold raw column data.
+			 */
+			Word Size;
+	
+	
+	};
+	
+	
+	/**
 	 *	Contains and manages the Minecraft world
 	 *	as a collection of columns.
 	 */
