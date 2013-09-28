@@ -202,7 +202,7 @@ namespace MCPP {
 			for (
 				;
 				(i<commands.Count()) &&
-				(command->Identifier()<commands[i]->Identifier());
+				(command->Identifier()>commands[i]->Identifier());
 				++i
 			);
 			
