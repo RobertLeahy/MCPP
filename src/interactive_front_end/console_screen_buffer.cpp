@@ -107,10 +107,14 @@ inline Word ConsoleScreenBuffer::num_pages () {
 	//	area
 	height-=input_rows;
 	
+	//	Avoid arithmetic error due to
+	//	divide by zero
+	if (height==0) return rows;
+	
 	Word retr=rows/height;
 	//	If there's a remainder we
 	//	take up an extra page
-	if ((retr%height)!=0) ++retr;
+	if ((rows%height)!=0) ++retr;
 	
 	return retr;
 
@@ -430,7 +434,7 @@ inline void ConsoleScreenBuffer::window_setup () {
 }
 
 
-ConsoleScreenBuffer::ConsoleScreenBuffer (HANDLE handle) : handle(handle), ptr(0), first(0), last(0), page(0), output_max(default_output_max) {
+ConsoleScreenBuffer::ConsoleScreenBuffer (HANDLE handle) : handle(handle), ptr(0), first(0), last(0), page(0), output_max(default_output_max), width(0), height(0) {
 
 	//	Setup the viewport
 	window_setup();
@@ -821,7 +825,21 @@ void ConsoleScreenBuffer::Backspace () {
 
 
 void ConsoleScreenBuffer::Resize () {
-
+	
+	//	Get the dimensions of this new
+	//	size
+	Word width;
+	Word height;
+	get_dimensions(width,height);
+	
+	if (
+		(width==this->width) &&
+		(height==this->height)
+	) return;
+	
+	this->width=width;
+	this->height=height;
+	
 	//	Setup the viewport for this new
 	//	size
 	window_setup();
@@ -830,12 +848,6 @@ void ConsoleScreenBuffer::Resize () {
 	//	necessary
 	Word pages=num_pages();
 	if (page>=pages) page=pages-1;
-	
-	//	Get the dimensions of this new
-	//	size
-	Word width;
-	Word height;
-	get_dimensions(width,height);
 	
 	//	Don't bother with pointer
 	//	manipulations in the degenerate

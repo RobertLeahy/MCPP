@@ -166,6 +166,12 @@ static inline HANDLE get_std_handle (DWORD handle) {
 }
 
 
+//	The frequency (in milliseconds) with which
+//	Resize will be called (since there's no way
+//	to have window resize events pushed to us)
+static const DWORD poll_freq=1000/30;
+
+
 void Console::worker_func () noexcept {
 
 	//	STDIN
@@ -252,11 +258,20 @@ void Console::worker_func () noexcept {
 				static_cast<DWORD>(std::extent<decltype(handles)>::value),
 				handles,
 				false,
-				INFINITE
+				poll_freq
 			);
 			
 			//	Did the wait fail?
 			if (result==WAIT_FAILED) raise();
+			
+			//	Did the wait timeout?
+			if (result==WAIT_TIMEOUT) {
+			
+				buffer->Resize();
+				
+				continue;
+			
+			}
 			
 			//	Was the wait awoken by a
 			//	command to stop?

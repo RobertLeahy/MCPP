@@ -54,6 +54,12 @@ class ConsoleScreenBuffer {
 		//	Maximum number of lines to keep in
 		//	the output buffer
 		Word output_max;
+		//	Records the width the last time it
+		//	was checked
+		Word width;
+		//	Records the height the last time
+		//	it was checked
+		Word height;
 		
 		
 		//	STRING INFORMATION
