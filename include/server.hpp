@@ -26,19 +26,20 @@ namespace MCPP {
 
 
 #include <rleahylib/rleahylib.hpp>
-#include <functional>
-#include <utility>
-#include <thread_pool.hpp>
-#include <network.hpp>
 #include <chat_provider.hpp>
 #include <command_interpreter.hpp>
 #include <data_provider.hpp>
 #include <event.hpp>
+#include <network.hpp>
+#include <thread_pool.hpp>
 #include <typedefs.hpp>
+#include <atomic>
 #include <exception>
+#include <functional>
+#include <type_traits>
 #include <unordered_set>
 #include <unordered_map>
-#include <atomic>
+#include <utility>
 
 
 namespace MCPP {
