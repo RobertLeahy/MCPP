@@ -277,6 +277,7 @@ namespace MCPP {
 					}
 					
 					interpreter=nullptr;
+					provider=nullptr;
 					
 					connections.Destroy();
 					pool.Destroy();
@@ -389,6 +390,8 @@ namespace MCPP {
 		
 		//	Clean up command interpreter
 		interpreter=nullptr;
+		//	Clean up chat provider
+		provider=nullptr;
 		
 		//	Shutdown complete
 		running=false;
@@ -997,6 +1000,22 @@ namespace MCPP {
 		if (interpreter==nullptr) throw std::out_of_range(NullPointerError);
 		
 		return *interpreter;
+	
+	}
+	
+	
+	void Server::SetChatProvider (ChatProvider * provider) noexcept {
+	
+		if (provider!=nullptr) this->provider=provider;
+	
+	}
+	
+	
+	ChatProvider & Server::GetChatProvider () const {
+	
+		if (provider==nullptr) throw std::out_of_range(NullPointerError);
+		
+		return *provider;
 	
 	}
 

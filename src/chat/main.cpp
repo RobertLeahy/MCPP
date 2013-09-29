@@ -88,6 +88,9 @@ namespace MCPP {
 	}
 	
 	
+	static const String server("SERVER");
+	
+	
 	static inline void insert_sorted (Vector<Tuple<String,bool>> & list, String username) {
 	
 		for (Word i=0;i<list.Count();++i) {
@@ -99,7 +102,7 @@ namespace MCPP {
 				list.Emplace(
 					i,
 					std::move(username),
-					false
+					username==server
 				);
 				
 				return;
@@ -110,7 +113,7 @@ namespace MCPP {
 		
 		list.EmplaceBack(
 			std::move(username),
-			false
+			username==server
 		);
 	
 	}
@@ -185,11 +188,11 @@ namespace MCPP {
 		//	lookup time
 		for (const auto & s : message.To) insert_sorted(
 			recipients,
-			s.ToLower()
+			(s==server) ? s : s.ToLower()
 		);
 		for (const auto & c : message.Recipients) insert_sorted(
 			recipients,
-			c->GetUsername().ToLower()
+			c.IsNull() ? server : c->GetUsername().ToLower()
 		);
 		
 		//	Scan the list of connected
@@ -217,7 +220,7 @@ namespace MCPP {
 				
 					client->Send(packet);
 				
-				//	See if this recipients is among
+				//	See if this recipient is among
 				//	the intended recipients
 				} else {
 				

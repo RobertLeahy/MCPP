@@ -30,6 +30,7 @@ namespace MCPP {
 #include <utility>
 #include <thread_pool.hpp>
 #include <network.hpp>
+#include <chat_provider.hpp>
 #include <command_interpreter.hpp>
 #include <data_provider.hpp>
 #include <event.hpp>
@@ -84,6 +85,7 @@ namespace MCPP {
 			
 			//	Handlers for the front-end
 			CommandInterpreter * interpreter;
+			ChatProvider * provider;
 			
 			
 			//	Logging
@@ -481,6 +483,24 @@ namespace MCPP {
 			 *		A reference to a command interpreter.
 			 */
 			CommandInterpreter & GetCommandInterpreter () const;
+			/**
+			 *	Sets the server's chat provider.
+			 *
+			 *	\param [in] provider
+			 *		A pointer to the new chat provider to
+			 *		use.
+			 */
+			void SetChatProvider (ChatProvider * provider) noexcept;
+			/**
+			 *	Gets the server's chat provider, or throws
+			 *	if the server has no chat provider.
+			 *
+			 *	\return
+			 *		A reference to a chat provider.
+			 */
+			ChatProvider & GetChatProvider () const;
+			
+			
 			//			//
 			//	EVENTS	//
 			//			//

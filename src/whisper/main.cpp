@@ -128,7 +128,7 @@ class Whisper : public Module, public Command {
 			
 			//	Prepare a message
 			ChatMessage whisper(
-				std::move(client),
+				client,
 				match[1].Value(),
 				match[2].Value()
 			);
@@ -141,9 +141,17 @@ class Whisper : public Module, public Command {
 				//	intended recipient exists)
 				
 				//	Send it back to original sender
-				whisper.Echo=true;
 				
-				message=std::move(whisper);
+				//	If the original sender is the server,
+				//	it'll show up in the chat log, so don't
+				//	echo
+				if (!client.IsNull()) {
+				
+					whisper.Echo=true;
+					
+					message=std::move(whisper);
+					
+				}
 			
 			} else {
 			

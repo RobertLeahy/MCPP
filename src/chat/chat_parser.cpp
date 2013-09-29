@@ -55,7 +55,7 @@ namespace MCPP {
 		
 		for (auto & c : recipients) insert_sorted(
 			sorted,
-			c->GetUsername()
+			c.IsNull() ? from_server : c->GetUsername()
 		);
 		
 		return sorted;

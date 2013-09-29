@@ -1,5 +1,7 @@
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
 #include <chat/chat.hpp>
+#include <chat_provider.hpp>
+#include <mod.hpp>
 #include <utility>
 
 
@@ -10,7 +12,7 @@ namespace MCPP {
 	static const Word priority=1;
 	
 	
-	class BasicChat : public Module {
+	class BasicChat : public ChatProvider, public Module {
 	
 	
 		public:
@@ -44,6 +46,22 @@ namespace MCPP {
 					);
 				
 				};
+				
+				//	Install ourselves as the chat
+				//	handler into the server
+				Server::Get().SetChatProvider(this);
+			
+			}
+			
+			
+			virtual void Send (const String & message) override {
+			
+				Chat::Get().Send(
+					ChatMessage(
+						SmartPointer<Client>(),
+						message
+					)
+				);
 			
 			}
 	
