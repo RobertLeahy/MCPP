@@ -10,7 +10,7 @@ namespace MCPP {
 	static const GraphemeCluster escape(static_cast<CodePoint>(0x00A7));
 	static const String whispers("whispers");
 	static const String whisper("whisper");
-	static const String label_separator(":");
+	static const String label_separator(": ");
 	static const String you("You");
 	static const String recipient_separator(", ");
 	static const String could_not_be_delivered("Delivery failed to the following: ");

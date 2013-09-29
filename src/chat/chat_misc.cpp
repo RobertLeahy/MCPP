@@ -125,7 +125,6 @@ namespace MCPP {
 	
 		Message.EmplaceBack(ChatFormat::Label);
 		Message.EmplaceBack(ChatFormat::LabelSeparator);
-		Message.EmplaceBack(String(" "));
 		Message.EmplaceBack(std::move(message));
 	
 	}
@@ -135,7 +134,6 @@ namespace MCPP {
 	
 		Message.EmplaceBack(ChatFormat::Label);
 		Message.EmplaceBack(ChatFormat::LabelSeparator);
-		Message.EmplaceBack(String(" "));
 		Message.EmplaceBack(std::move(message));
 	
 	}
@@ -148,7 +146,6 @@ namespace MCPP {
 		Message.EmplaceBack(ChatStyle::Pink);
 		Message.EmplaceBack(ChatFormat::Label);
 		Message.EmplaceBack(ChatFormat::LabelSeparator);
-		Message.EmplaceBack(String(" "));
 		Message.EmplaceBack(std::move(message));
 	
 	}
