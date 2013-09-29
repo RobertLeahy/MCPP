@@ -122,6 +122,13 @@ namespace MCPP {
 			 *		of this class.
 			 */
 			static Server & Get () noexcept;
+			/**
+			 *	Destroys the valid instance of this
+			 *	class, causing Get to create a new
+			 *	instance the next time it is invoked.
+			 *
+			 *	Not thread safe.
+			 */
 			static void Destroy () noexcept;
 			
 			
