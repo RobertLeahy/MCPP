@@ -196,6 +196,11 @@ class LogToChat : public Module, public Command {
 		
 		virtual bool Execute (SmartPointer<Client> client, const String &, ChatMessage &) override {
 		
+			//	Guard against nulls (in case this
+			//	command is invoked through the
+			//	interpreter)
+			if (client.IsNull()) return true;
+		
 			lock.Execute([&] () {
 			
 				//	Guard against race conditions
