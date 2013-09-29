@@ -3,6 +3,7 @@ bin/mods/mcpp_command.dll \
 bin/mods/mcpp_command_chat_log.dll \
 bin/mods/mcpp_command_kick.dll \
 bin/mods/mcpp_command_op.dll \
+bin/mods/mcpp_command_shutdown.dll \
 bin/mods/mcpp_command_time.dll \
 bin/mods/mcpp_command_whisper.dll \
 
@@ -50,6 +51,17 @@ bin/mods/mcpp_op.dll
 bin/mods/mcpp_command_op.dll: \
 $(MOD_OBJ) \
 obj/op/command.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_op.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+	
+	
+#	SHUTDOWN/RESTART SERVER
+
+
+bin/mods/mcpp_command_shutdown.dll: \
+$(MOD_OBJ) \
+obj/shutdown/main.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_op.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
