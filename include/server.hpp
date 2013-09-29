@@ -123,7 +123,67 @@ namespace MCPP {
 			 */
 			static Server & Get () noexcept;
 			static void Destroy () noexcept;
-		
+			
+			
+			template <typename T, typename... Args>
+			static auto PanicOnThrow (T && callback, Args &&... args) noexcept(
+				noexcept(callback(std::forward<Args>(args)...))
+			) -> typename std::enable_if<
+				std::is_same<
+					decltype(callback(std::forward<Args>(args)...)),
+					void
+				>::value
+			>::type {
+			
+				try {
+				
+					callback(std::forward<Args>(args)...);
+				
+				} catch (...) {
+				
+					try {
+					
+						Server::Get().Panic(
+							std::current_exception()
+						);
+					
+					} catch (...) {	}
+					
+					throw;
+				
+				}
+			
+			}
+			template <typename T, typename... Args>
+			static auto PanicOnThrow (T && callback, Args &&... args) noexcept(
+				noexcept(callback(std::forward<Args>(args)...))
+			) -> typename std::enable_if<
+				!std::is_same<
+					decltype(callback(std::forward<Args>(args)...)),
+					void
+				>::value,
+				decltype(callback(std::forward<Args>(args)...))
+			>::type {
+			
+				try {
+				
+					return callback(std::forward<Args>(args)...);
+				
+				} catch (...) {
+				
+					try {
+					
+						Server::Get().Panic(
+							std::current_exception()
+						);
+					
+					} catch (...) {	}
+					
+					throw;
+				
+				}
+			
+			}
 		
 			
 			/**
