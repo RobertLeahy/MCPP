@@ -42,6 +42,7 @@ namespace MCPP {
 		debug=false;
 		log_all_packets=false;
 		verbose_all=false;
+		num_shutdowns=0;
 		
 		OnReceive=[=] (SmartPointer<Connection> conn, Vector<Byte> & buffer) {
 		
@@ -88,6 +89,13 @@ namespace MCPP {
 	Server::~Server () noexcept {
 	
 		stop_impl();
+		
+		//	Make sure we don't destroy this
+		//	object while a thread is calling
+		//	Stop on it.
+		shutdown_lock.Acquire();
+		while (num_shutdowns!=0) shutdown_wait.Sleep(shutdown_lock);
+		shutdown_lock.Release();
 	
 	}
 	
@@ -109,6 +117,10 @@ namespace MCPP {
 	
 	void Server::Stop () noexcept {
 	
+		shutdown_lock.Acquire();
+		++num_shutdowns;
+		shutdown_lock.Release();
+	
 		try {
 	
 			Thread t([this] () mutable {
@@ -117,7 +129,16 @@ namespace MCPP {
 			
 					stop_impl();
 					
+					//	None of this can throw
+					shutdown_lock.Acquire();
+					if ((--num_shutdowns)==0) shutdown_wait.WakeAll();
+					shutdown_lock.Release();
+					
 				} catch (...) {
+				
+					shutdown_lock.Acquire();
+					if ((--num_shutdowns)==0) shutdown_wait.WakeAll();
+					shutdown_lock.Release();
 				
 					Panic(std::current_exception());
 					
@@ -128,6 +149,10 @@ namespace MCPP {
 			});
 			
 		} catch (...) {
+		
+			shutdown_lock.Acquire();
+			if ((--num_shutdowns)==0) shutdown_wait.WakeAll();
+			shutdown_lock.Release();
 		
 			Panic(std::current_exception());
 		

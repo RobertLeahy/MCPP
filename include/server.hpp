@@ -94,6 +94,11 @@ namespace MCPP {
 			mutable RWLock verbose_lock;
 			std::unordered_set<String> verbose;
 			
+			//	Shutdown synchronization
+			Word num_shutdowns;
+			Mutex shutdown_lock;
+			CondVar shutdown_wait;
+			
 			
 			//					//
 			//	PRIVATE METHODS	//
