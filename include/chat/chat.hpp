@@ -382,12 +382,16 @@ namespace MCPP {
 			 *
 			 *	\param [in] message
 			 *		A chat message to format.
+			 *	\param [in] json
+			 *		If \em true JSON output shall
+			 *		be generated, otherwise plain
+			 *		text output shall be generated.
 			 *
 			 *	\return
 			 *		\em message formatted as a
 			 *		string.
 			 */
-			static String Format (const ChatMessage & message);
+			static String Format (const ChatMessage & message, bool json=true);
 		
 		
 			/**

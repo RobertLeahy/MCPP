@@ -175,7 +175,7 @@ namespace MCPP {
 	}
 	
 	
-	String Chat::Format (const ChatMessage & message) {
+	String Chat::Format (const ChatMessage & message, bool json) {
 	
 		//	Whether we're in the text
 		//	property of a JSON object
@@ -190,9 +190,12 @@ namespace MCPP {
 		
 		//	String into which output
 		//	will be generated
-		String output("{");
+		String output;
+		if (json) output="{";
 		
 		auto generate_style=[&] (ChatStyle style) {
+		
+			if (!json) return;
 		
 			//	We always generate a nested
 			//	object for styles, which allows
@@ -357,6 +360,14 @@ namespace MCPP {
 		
 		auto generate_string=[&] (const String & str) {
 		
+			if (!json) {
+			
+				output << str;
+				
+				return;
+			
+			}
+		
 			//	If the string is the empty string, do
 			//	nothing
 			if (str.Size()==0) return;
@@ -498,6 +509,8 @@ namespace MCPP {
 		
 		auto pop=[&] () {
 		
+			if (!json) return;
+		
 			//	Popping while there's nothing
 			//	on the stack doesn't make sense,
 			//	so ignore it.
@@ -616,6 +629,10 @@ namespace MCPP {
 			}
 		
 		}
+		
+		//	If we're not outputting JSON
+		//	we're done
+		if (!json) return output;
 		
 		//	Did we output any text?
 		//
