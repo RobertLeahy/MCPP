@@ -119,10 +119,7 @@ namespace MCPP {
 	}
 	
 	
-	bool Information::Execute (SmartPointer<Client> client, const String & args_str, ChatMessage & message) {
-	
-		//	If there's no client, do nothing
-		if (client.IsNull()) return true;
+	bool Information::Execute (SmartPointer<Client>, const String & args_str, ChatMessage & message) {
 		
 		auto args=split.Split(args_str);
 		
