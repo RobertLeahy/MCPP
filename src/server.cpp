@@ -276,6 +276,8 @@ namespace MCPP {
 						
 					}
 					
+					interpreter=nullptr;
+					
 					connections.Destroy();
 					pool.Destroy();
 					
@@ -384,6 +386,9 @@ namespace MCPP {
 		//	Clean up data provider
 		delete data;
 		data=nullptr;
+		
+		//	Clean up command interpreter
+		interpreter=nullptr;
 		
 		//	Shutdown complete
 		running=false;
@@ -976,6 +981,22 @@ namespace MCPP {
 			panic,
 			*pool
 		);
+	
+	}
+	
+	
+	void Server::SetCommandInterpreter (CommandInterpreter * interpreter) noexcept {
+	
+		if (interpreter!=nullptr) this->interpreter=interpreter;
+	
+	}
+	
+	
+	CommandInterpreter & Server::GetCommandInterpreter () const {
+	
+		if (interpreter==nullptr) throw std::out_of_range(NullPointerError);
+		
+		return *interpreter;
 	
 	}
 

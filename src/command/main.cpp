@@ -1,4 +1,5 @@
 #include <command/command.hpp>
+#include <server.hpp>
 #include <singleton.hpp>
 #include <utility>
 #include <algorithm>
@@ -65,10 +66,9 @@ namespace MCPP {
 	}
 	
 	
-	void Commands::incorrect_syntax (SmartPointer<Client> client, Command * command) {
+	ChatMessage Commands::incorrect_syntax (Command * command) {
 	
 		ChatMessage message;
-		message.AddRecipients(std::move(client));
 		message	<< ChatStyle::Red
 				<< ChatStyle::Bold
 				<< "Incorrect syntax"
@@ -79,41 +79,38 @@ namespace MCPP {
 				
 		if (command!=nullptr) message << " " << command->Identifier();
 		
-		Chat::Get().Send(message);
+		return message;
 	
 	}
 	
 	
-	void Commands::command_dne (SmartPointer<Client> client) {
+	ChatMessage Commands::command_dne () {
 	
 		ChatMessage message;
-		message.AddRecipients(std::move(client));
 		message	<< ChatStyle::Red
 				<< ChatStyle::Bold
 				<< "Command does not exist";
 				
-		Chat::Get().Send(message);
+		return message;
 	
 	}
 	
 	
-	void Commands::insufficient_privileges (SmartPointer<Client> client) {
+	ChatMessage Commands::insufficient_privileges () {
 	
 		ChatMessage message;
-		message.AddRecipients(std::move(client));
 		message	<< ChatStyle::Red
 				<< ChatStyle::Bold
 				<< "You are not permitted to do that";
 				
-		Chat::Get().Send(message);
+		return message;
 	
 	}
 	
 	
-	void Commands::help (SmartPointer<Client> client, const String & id) {
+	ChatMessage Commands::help (SmartPointer<Client> client, const String & id) {
 	
 		ChatMessage message;
-		message.AddRecipients(client);
 		message	<< ChatStyle::Yellow
 				<< ChatStyle::Bold
 				<< "====HELP===="
@@ -137,7 +134,10 @@ namespace MCPP {
 				//	Only show the user help for
 				//	commands that they can
 				//	use
-				if (c->Check(client)) {
+				if (
+					client.IsNull() ||
+					c->Check(client)
+				) {
 			
 					message	<< Newline
 							<< ChatStyle::Bold
@@ -158,25 +158,14 @@ namespace MCPP {
 			//	Attempt to retrieve command
 			auto * command=retrieve(id);
 			
-			if (command==nullptr) {
+			//	Command does not exist
+			if (command==nullptr) return command_dne();
 			
-				//	Command does not exist
-			
-				command_dne(std::move(client));
-				
-				return;
-			
-			}
-			
-			if (!command->Check(client)) {
-			
-				//	User cannot use command
-				
-				insufficient_privileges(std::move(client));
-				
-				return;
-			
-			}
+			//	User cannot use this command
+			if (!(
+				client.IsNull() ||
+				command->Check(client)
+			)) return insufficient_privileges();
 			
 			message	<< ChatStyle::Bold
 					<< "/"
@@ -188,7 +177,66 @@ namespace MCPP {
 		
 		}
 		
-		Chat::Get().Send(message);
+		return message;
+	
+	}
+	
+	
+	ChatMessage Commands::execute (SmartPointer<Client> client, const String & cmd, const String & args) {
+	
+		//	Is this help?
+		if (cmd==help_command) return help(
+			std::move(client),
+			args
+		);
+		
+		//	Attempt to retrieve corresponding
+		//	command
+		auto * command=retrieve(cmd);
+		if (command==nullptr) return command_dne();
+		
+		//	Can this user execute this command?
+		if (!(
+			client.IsNull() ||
+			command->Check(client)
+		)) return insufficient_privileges();
+		
+		//	Execute command
+		ChatMessage message;
+		if (!command->Execute(
+			client,
+			args,
+			message
+		)) return incorrect_syntax(command);
+		
+		return message;
+	
+	}
+	
+	
+	ChatMessage Commands::parse_and_execute (SmartPointer<Client> client, const String & args) {
+	
+		//	Attempt to parse
+		auto parsed=parse.Match(args);
+		//	Could not parse -- incorrect syntax
+		if (!parsed.Success()) return incorrect_syntax(nullptr);
+		
+		//	EXECUTE
+		return execute(
+			std::move(client),
+			parsed[1].Value(),
+			(parsed[2].Count()==0) ? String() : parsed[2].Value()
+		);
+	
+	}
+	
+	
+	String Commands::get_command (const String & msg) {
+	
+		auto match=is_command.Match(msg);
+		if (match.Success()) return match[1].Value();
+		
+		return String();
 	
 	}
 	
@@ -226,84 +274,27 @@ namespace MCPP {
 		Chat::Get().Chat=[=] (SmartPointer<Client> client, const String & msg) {
 		
 			//	Is this chat message a command?
-			auto match=is_command.Match(msg);
-			if (match.Success()) {
+			auto cmd=get_command(msg);
+			if (cmd.Size()!=0) {
 			
 				//	YES
 			
-				//	Attempt to parse
-				auto parsed=parse.Match(match[1].Value());
-				if (!parsed.Success()) {
+				auto message=parse_and_execute(client,cmd);
 				
-					//	Could not parse, incorrect syntax
-				
-					incorrect_syntax(std::move(client),nullptr);
-					
-					return;
-				
-				}
-				
-				auto & second=parsed[2];
-				
-				//	Is this help?
-				if (parsed[1].Value()==help_command) {
-				
-					//	Yes
-					
-					help(
-						std::move(client),
-						(second.Count()==0) ? String() : second.Value()
-					);
-					
-					return;
-				
-				}
-				
-				//	Attempt to retrieve corresponding
-				//	command
-				auto * command=retrieve(parsed[1].Value());
-				if (command==nullptr) {
-				
-					//	Command does not exist
-				
-					command_dne(std::move(client));
-					
-					return;
-				
-				}
-				
-				//	Can this user execute this command?
-				if (!command->Check(client)) {
-				
-					//	No, insufficient privileges
-				
-					insufficient_privileges(std::move(client));
-					
-					return;
-				
-				}
-				
-				//	Execute command
-				ChatMessage message;
-				if (!command->Execute(
-					client,
-					(second.Count()==0) ? String() : second.Value(),
-					message
-				)) {
-				
-					//	Incorrect syntax
-					
-					incorrect_syntax(std::move(client),command);
-				
-				}
-				
-				//	Send if appropriate
+				//	If there's a message to send,
+				//	send it
 				if (message.Message.Count()!=0) {
 				
-					message.AddRecipients(std::move(client));
-				
-					Chat::Get().Send(message);
+					//	Don't add on a recipient if the
+					//	command itself already specified
+					//	recipients
+					if (
+						(message.To.Count()==0) &&
+						(message.Recipients.Count()==0)
+					) message.AddRecipients(std::move(client));
 					
+					Chat::Get().Send(message);
+				
 				}
 			
 			//	NO, attempt to forward call through
@@ -318,9 +309,11 @@ namespace MCPP {
 		
 		};
 		
+		auto & server=Server::Get();
+		
 		//	Handle auto-complete events
-		auto complete=std::move(Server::Get().Router[0xCB]);
-		Server::Get().Router[0xCB]=[=] (SmartPointer<Client> client, Packet packet) {
+		auto complete=std::move(server.Router[0xCB]);
+		server.Router[0xCB]=[=] (SmartPointer<Client> client, Packet packet) {
 		
 			typedef PacketTypeMap<0xCB> pt;
 			
@@ -433,6 +426,33 @@ namespace MCPP {
 			}
 		
 		};
+		
+		//	We are the server's command interpreter,
+		//	until and unless we're overwritten by
+		//	another module
+		server.SetCommandInterpreter(this);
+	
+	}
+	
+	
+	Nullable<String> Commands::operator () (const String & command) {
+	
+		//	Execute command
+		auto message=parse_and_execute(
+			SmartPointer<Client>(),
+			command
+		);
+		
+		Nullable<String> retr;
+		
+		if (message.Message.Count()!=0) retr.Construct(
+			Chat::Format(
+				message,
+				false
+			)
+		);
+		
+		return retr;
 	
 	}
 	

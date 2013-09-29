@@ -30,6 +30,7 @@ namespace MCPP {
 #include <utility>
 #include <thread_pool.hpp>
 #include <network.hpp>
+#include <command_interpreter.hpp>
 #include <data_provider.hpp>
 #include <event.hpp>
 #include <typedefs.hpp>
@@ -79,6 +80,10 @@ namespace MCPP {
 			Nullable<ConnectionHandler> connections;
 			Nullable<ThreadPool> pool;
 			Nullable<ModuleLoader> mods;
+			
+			
+			//	Handlers for the front-end
+			CommandInterpreter * interpreter;
 			
 			
 			//	Logging
@@ -459,6 +464,23 @@ namespace MCPP {
 			bool IsVerbose (const String & key) const;
 			
 			
+			/**
+			 *	Sets the server's command interpreter.
+			 *
+			 *	\param [in] interpreter
+			 *		A pointer to the new command interpreter
+			 *		to use.
+			 */
+			void SetCommandInterpreter (CommandInterpreter * interpreter) noexcept;
+			/**
+			 *	Gets the server's command interpreter, or
+			 *	throws if the server has no command
+			 *	interpreter.
+			 *
+			 *	\return
+			 *		A reference to a command interpreter.
+			 */
+			CommandInterpreter & GetCommandInterpreter () const;
 			//			//
 			//	EVENTS	//
 			//			//

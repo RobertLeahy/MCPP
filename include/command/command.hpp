@@ -6,8 +6,10 @@
 #pragma once
 
 
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
 #include <chat/chat.hpp>
+#include <command_interpreter.hpp>
+#include <mod.hpp>
 
 
 namespace MCPP {
@@ -132,7 +134,7 @@ namespace MCPP {
 	 *	for them, autocompletion, and invoking
 	 *	them as necessary.
 	 */
-	class Commands : public Module {
+	class Commands : public CommandInterpreter, public Module {
 	
 	
 		private:
@@ -143,10 +145,17 @@ namespace MCPP {
 			
 			inline Command * retrieve (const String &);
 			inline Vector<Command *> retrieve (const Regex &);
-			void incorrect_syntax (SmartPointer<Client>, Command *);
-			void command_dne (SmartPointer<Client>);
-			void insufficient_privileges (SmartPointer<Client>);
-			void help (SmartPointer<Client>, const String &);
+			
+			
+			static ChatMessage incorrect_syntax (Command *);
+			static ChatMessage command_dne ();
+			static ChatMessage insufficient_privileges ();
+			static String get_command (const String &);
+			ChatMessage help (SmartPointer<Client>, const String &);
+			
+			
+			ChatMessage execute (SmartPointer<Client>, const String &, const String &);
+			ChatMessage parse_and_execute (SmartPointer<Client>, const String &);
 		
 		
 		public:
@@ -171,38 +180,12 @@ namespace MCPP {
 			virtual const String & Name () const noexcept override;
 			virtual Word Priority () const noexcept override;
 			virtual void Install () override;
+			virtual Nullable<String> operator () (const String &) override;
 			
 			
 			/**
 			 *	\endcond
 			 */
-		
-		
-			/**
-			 *	Executes a command.
-			 *
-			 *	\param [in] command
-			 *		The command and all of its
-			 *		arguments.
-			 *
-			 *	\return
-			 *		The result of the command.
-			 */
-			CommandResult Execute (const String & command);
-			/**
-			 *	Executes a command.
-			 *
-			 *	\param [in] id
-			 *		The identifier of the command
-			 *		to execute.
-			 *	\param [in] args
-			 *		The arguments to pass to the
-			 *		specified command.
-			 *
-			 *	\return
-			 *		The result of the command.
-			 */
-			CommandResult Execute (const String & id, const String & args);
 			/**
 			 *	Adds a new command which the module
 			 *	will manage.
