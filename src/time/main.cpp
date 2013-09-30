@@ -529,11 +529,11 @@ namespace MCPP {
 				packet.Retrieve<UInt64>(1)=time;
 				
 				//	Send to all clients
-				Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+				for (auto & client : Server::Get().Clients) {
 				
 					if (client->GetState()==ClientState::Authenticated) client->Send(packet);
 				
-				});
+				}
 				
 				//	Execute tasks
 				

@@ -18,6 +18,7 @@ $(OBJ) \
 obj/aes_128_cfb_8.o \
 obj/client.o \
 obj/client_list.o \
+obj/client_list_iterator.o \
 obj/compression.o \
 obj/concurrency_manager.o \
 obj/hardware_concurrency.o \

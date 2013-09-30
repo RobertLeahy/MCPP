@@ -84,7 +84,7 @@ class ClientsInfo : public Module, public InformationProvider {
 					<< ChatFormat::Pop
 					<< ChatFormat::Pop;
 					
-			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+			for (auto & client : Server::Get().Clients) {
 			
 				String username;
 				if (client->GetState()==ClientState::Authenticated) username=String::Format(
@@ -130,7 +130,7 @@ class ClientsInfo : public Module, public InformationProvider {
 						<<	": "
 						<<	client->Received();
 			
-			});
+			}
 		
 		}
 		

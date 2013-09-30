@@ -81,7 +81,7 @@ class OpCommand : public Command {
 				RegexOptions().SetIgnoreCase()
 			);
 			
-			Server::Get().Clients.Scan([&] (const SmartPointer<Client> & client) {
+			for (auto & client : Server::Get().Clients) {
 			
 				//	Only authenticated users are
 				//	valid chat targets
@@ -110,7 +110,7 @@ class OpCommand : public Command {
 				
 				}
 			
-			});
+			}
 			
 			return retr;
 		

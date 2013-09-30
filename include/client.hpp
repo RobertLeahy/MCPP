@@ -7,14 +7,14 @@
 
 
 #include <rleahylib/rleahylib.hpp>
-#include <network.hpp>
-#include <unordered_map>
-#include <utility>
-#include <packet.hpp>
 #include <aes_128_cfb_8.hpp>
+#include <packet.hpp>
+#include <network.hpp>
 #include <atomic>
 #include <functional>
 #include <type_traits>
+#include <unordered_map>
+#include <utility>
 
 
 namespace MCPP {
@@ -903,12 +903,70 @@ namespace MCPP {
 	
 	
 	/**
+	 *	\cond
+	 */
+	 
+	 
+	class ClientList;
+	
+	
+	class ClientListIterator {
+	
+	
+		friend class ClientList;
+		
+		
+		private:
+		
+		
+			typedef std::unordered_map<
+				const Connection *,
+				SmartPointer<Client>
+			>::iterator iter_type;
+			
+			
+			iter_type iter;
+			ClientList & list;
+			
+			
+			ClientListIterator (ClientList &, iter_type) noexcept;
+			
+			
+		public:
+		
+		
+			ClientListIterator () = delete;
+			~ClientListIterator () noexcept;
+			
+			
+			SmartPointer<Client> & operator * () noexcept;
+			SmartPointer<Client> * operator -> () noexcept;
+			ClientListIterator & operator ++ () noexcept;
+			ClientListIterator operator ++ (int) noexcept;
+			
+			
+			bool operator == (const ClientListIterator &) const noexcept;
+			bool operator != (const ClientListIterator &) const noexcept;
+	
+	
+	};
+	 
+	 
+	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
 	 *	Thread safe container which maps
 	 *	Connection objects to Client objects and
 	 *	allows for threadsafe addition,
 	 *	removal, and retrieval.
 	 */
 	class ClientList {
+	
+	
+		friend class ClientListIterator;
 	
 	
 		private:
@@ -918,7 +976,19 @@ namespace MCPP {
 			mutable RWLock map_lock;
 			
 			
+			//	The number of active iterators
+			//	holding a lock on this object
+			Word iters;
+			Mutex iters_lock;
+			
+			
+			inline void acquire () noexcept;
+			
+			
 		public:
+		
+		
+			ClientList () noexcept;
 		
 		
 			/**
@@ -980,29 +1050,8 @@ namespace MCPP {
 			void Clear () noexcept;
 			
 			
-			/**
-			 *	Scans the client list, iterating
-			 *	over each connected client.
-			 *
-			 *	The collection is guaranteed not
-			 *	to change from the time the scan
-			 *	begins to the time it ends.
-			 *
-			 *	Do not try to modify the collection
-			 *	while scanning, this will lead to
-			 *	a deadlock.
-			 *
-			 *	\param [in] func
-			 *		The callable object which is to be
-			 *		called for each client.  It shall
-			 *		be passed each client in turn.
-			 */
-			template <typename T>
-			void Scan (T && func) {
-			
-				map_lock.Read([&] () mutable {	for (auto & pair : map) func(pair.second);	});
-			
-			}
+			ClientListIterator begin () noexcept;
+			ClientListIterator end () noexcept;
 			
 	
 	};

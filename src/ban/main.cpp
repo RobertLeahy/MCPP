@@ -379,7 +379,7 @@ namespace MCPP {
 			//	which means we need to scan
 			//	connected users and boot
 			//	them if they're on.
-			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+			for (auto & client : Server::Get().Clients) {
 			
 				if (client->GetUsername().ToLower()==username) {
 				
@@ -387,7 +387,7 @@ namespace MCPP {
 				
 				}
 			
-			});
+			}
 		
 		}
 	
@@ -439,11 +439,11 @@ namespace MCPP {
 			//
 			//	Scan all connected users and disconnect
 			//	all who match.
-			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+			for (auto & client : Server::Get().Clients) {
 			
 				if (client->IP()==ip) client->Disconnect(ban_reason);
 			
-			});
+			}
 		
 		}
 	

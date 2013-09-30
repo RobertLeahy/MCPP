@@ -62,8 +62,8 @@ class BrandInfo : public Module, public InformationProvider {
 			message	<<	ChatStyle::Bold
 					<<	brand_banner
 					<<	ChatFormat::Pop;
-		
-			Server::Get().Clients.Scan([&] (const SmartPointer<Client> & client) {
+					
+			for (auto & client : Server::Get().Clients) {
 			
 				//	Ignore unauthenticated users
 				if (client->GetState()==ClientState::Authenticated) {
@@ -83,7 +83,7 @@ class BrandInfo : public Module, public InformationProvider {
 				
 				}
 			
-			});
+			}
 		
 		}
 

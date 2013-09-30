@@ -85,7 +85,7 @@ class Kick : public Module, public Command {
 				RegexOptions().SetIgnoreCase()
 			);
 			
-			Server::Get().Clients.Scan([&] (const SmartPointer<Client> & client) {
+			for (auto & client : Server::Get().Clients) {
 			
 				//	Only authenticated users are
 				//	valid chat targets
@@ -108,7 +108,7 @@ class Kick : public Module, public Command {
 				
 				}
 			
-			});
+			}
 			
 			return retr;
 		
@@ -137,7 +137,7 @@ class Kick : public Module, public Command {
 			bool found=false;
 			
 			//	Scan
-			Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+			for (auto & client : Server::Get().Clients) {
 			
 				if (
 					(client->GetState()==ClientState::Authenticated) &&
@@ -154,7 +154,7 @@ class Kick : public Module, public Command {
 				
 				}
 			
-			});
+			}
 			
 			if (!(found || client.IsNull())) {
 

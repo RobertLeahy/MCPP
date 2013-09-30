@@ -164,7 +164,7 @@ class KeepAlive : public Module {
 			callback=[=] () {
 			
 				//	Loop for all clients
-				Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+				for (auto & client : Server::Get().Clients) {
 				
 					//	How long have they been inactive?
 					Word inactive=client->Inactive();
@@ -253,7 +253,7 @@ class KeepAlive : public Module {
 					
 					}
 				
-				});
+				}
 				
 				//	Enqueue this task again
 				Server::Get().Pool().Enqueue(

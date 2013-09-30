@@ -201,13 +201,13 @@ namespace MCPP {
 		if (
 			(message.To.Count()!=0) ||
 			(message.Recipients.Count()==0)
-		) Server::Get().Clients.Scan([&] (SmartPointer<Client> & client) {
+		) for (auto & client : Server::Get().Clients) {
 		
 			//	Skip all clients we have the handle
 			//	for
 			for (const auto & handle : message.Recipients) {
 			
-				if (static_cast<const Client *>(handle)==static_cast<Client *>(client)) return;
+				if (static_cast<const Client *>(handle)==static_cast<Client *>(client)) continue;
 			
 			}
 			
@@ -244,7 +244,7 @@ namespace MCPP {
 			
 			}
 		
-		});
+		}
 		
 		//	Send to all the people we have the handle
 		//	for

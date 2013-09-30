@@ -5,6 +5,9 @@
 namespace MCPP {
 
 
+	ClientList::ClientList () noexcept : iters(0) {	}
+
+
 	SmartPointer<Client> ClientList::operator [] (const Connection & conn) {
 	
 		Nullable<SmartPointer<Client>> client;
@@ -116,6 +119,39 @@ namespace MCPP {
 		map.clear();
 		
 		map_lock.CompleteWrite();
+	
+	}
+	
+	
+	inline void ClientList::acquire () noexcept {
+	
+		iters_lock.Acquire();
+		if ((iters++)==0) map_lock.Read();
+		iters_lock.Release();
+	
+	}
+	
+	
+	ClientListIterator ClientList::begin () noexcept {
+	
+		acquire();
+	
+		return ClientListIterator(
+			*this,
+			map.begin()
+		);
+	
+	}
+	
+	
+	ClientListIterator ClientList::end () noexcept {
+	
+		acquire();
+		
+		return ClientListIterator(
+			*this,
+			map.end()
+		);
 	
 	}
 
