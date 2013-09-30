@@ -29,12 +29,12 @@ namespace MCPP {
 			//	callback per worker we could wind
 			//	up clogging the thread pool
 			//	waiting for synchronous I/O.
-			Vector<SmartPointer<ColumnContainer>> columns;
+			Vector<ColumnContainer *> columns;
 			lock.Execute([&] () {
 			
-				columns=Vector<SmartPointer<ColumnContainer>>(world.size());
+				columns=Vector<ColumnContainer *>(world.size());
 			
-				for (auto & pair : world) columns.Add(pair.second);
+				for (auto & pair : world) columns.Add(pair.second.get());
 				
 			});
 			
@@ -42,7 +42,7 @@ namespace MCPP {
 			
 				//	Loop and perform maintenance on
 				//	each column
-				for (auto & column : columns) {
+				for (auto column : columns) {
 				
 					//	Save
 					if (save(*column)) ++this_saved;

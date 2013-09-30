@@ -4,11 +4,11 @@
 namespace MCPP {
 
 
-	SmartPointer<ColumnContainer> World::get_column (ColumnID id) {
+	ColumnContainer * World::get_column (ColumnID id) {
 	
 		return lock.Execute([&] () {
 		
-			SmartPointer<ColumnContainer> retr;
+			ColumnContainer * retr;
 		
 			//	Attempt to retrieve column if it
 			//	already exists
@@ -18,19 +18,20 @@ namespace MCPP {
 				//	Column does not exist
 				
 				//	Create a new column
-				retr=SmartPointer<ColumnContainer>::Make(id);
+				std::unique_ptr<ColumnContainer> column(new ColumnContainer(id));
+				retr=column.get();
 				
 				//	Insert it
 				world.emplace(
 					id,
-					retr
+					std::move(column)
 				);
 			
 			} else {
 			
 				//	Column exists, we can just
 				//	return it
-				retr=iter->second;
+				retr=iter->second.get();
 			
 			}
 			

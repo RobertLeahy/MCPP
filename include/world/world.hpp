@@ -7,10 +7,11 @@
 
 
 #include <common.hpp>
+#include <cstddef>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 #include <utility>
-#include <cstddef>
 
 
 namespace MCPP {
@@ -1325,7 +1326,7 @@ namespace MCPP {
 			//	Contains the world
 			std::unordered_map<
 				ColumnID,
-				SmartPointer<ColumnContainer>
+				std::unique_ptr<ColumnContainer>
 			> world;
 			mutable Mutex lock;
 			
@@ -1402,7 +1403,7 @@ namespace MCPP {
 			void set_seed (Nullable<String>);
 			//	Retrieves a column, creating it if it
 			//	doesn't exist
-			SmartPointer<ColumnContainer> get_column (ColumnID);
+			ColumnContainer * get_column (ColumnID);
 			
 			//	EVENT HANDLING
 			
