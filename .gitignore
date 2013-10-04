@@ -237,3 +237,4 @@ terrain.txt
 makefiles/
 deps/
 gcc48/
+Doxyfile
