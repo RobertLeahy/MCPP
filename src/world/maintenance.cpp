@@ -53,13 +53,32 @@ namespace MCPP {
 					
 					column->Acquire();
 					
+					//	If we unload, we keep the
+					//	pointer here, so that it's
+					//	not cleaned up before
+					//	we released the lock
+					std::unique_ptr<ColumnContainer> extend_lifetime;
+					
 					if (column->CanUnload()) {
 					
-						//	We can unload
+						lock.Execute([&] () {
 						
-						did_unload=true;
+							//	Interest could have been acquired
+							//	between checking and acquiring
+							//	the lock, so check again
+							if (column->CanUnload()) {
+							
+								did_unload=true;
+								
+								auto iter=world.find(column->ID());
+								
+								extend_lifetime=std::move(iter->second);
+								
+								world.erase(iter);
+							
+							}
 						
-						lock.Execute([&] () {	world.erase(column->ID());	});
+						});
 						
 					}
 					
