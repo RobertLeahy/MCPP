@@ -1,8 +1,10 @@
 mods: \
 bin/mods/mcpp_command.dll \
 bin/mods/mcpp_command_chat_log.dll \
+bin/mods/mcpp_command_get.dll \
 bin/mods/mcpp_command_kick.dll \
 bin/mods/mcpp_command_op.dll \
+bin/mods/mcpp_command_set.dll \
 bin/mods/mcpp_command_shutdown.dll \
 bin/mods/mcpp_command_time.dll \
 bin/mods/mcpp_command_whisper.dll \
@@ -34,6 +36,17 @@ bin/data_provider.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll bin/data_provider.dll
 	
 	
+#	DISPLAY SETTINGS THROUGH CHAT
+
+
+bin/mods/mcpp_command_get.dll: \
+$(MOD_OBJ) \
+obj/settings/get.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_op.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+	
+	
 #	KICK
 
 
@@ -51,6 +64,17 @@ bin/mods/mcpp_op.dll
 bin/mods/mcpp_command_op.dll: \
 $(MOD_OBJ) \
 obj/op/command.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_op.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+	
+	
+#	CONFIGURATION
+
+
+bin/mods/mcpp_command_set.dll: \
+$(MOD_OBJ) \
+obj/settings/set.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_op.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
