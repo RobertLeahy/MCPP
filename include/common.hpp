@@ -27,7 +27,6 @@ namespace MCPP {	}
 #include <multi_scope_guard.hpp>
 #include <hash.hpp>
 #include <random.hpp>
-#include <noise.hpp>
 #include <mod.hpp>
 #include <url.hpp>
 #include <sha1.hpp>
