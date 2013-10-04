@@ -102,4 +102,30 @@ namespace MCPP {
 	};
 
 
-} 
+}
+
+
+#define INSTALL_MODULE(x) \
+	static Nullable<x> module; \
+	\
+	\
+	extern "C" { \
+		\
+		\
+		Module * Load () { \
+			\
+			if (module.IsNull()) module.Construct(); \
+			\
+			return &(*module); \
+			\
+		} \
+		\
+		\
+		void Unload () { \
+			\
+			module.Destroy(); \
+			\
+		} \
+		\
+		\
+	}
