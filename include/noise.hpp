@@ -7,15 +7,15 @@
  
  
 #include <rleahylib/rleahylib.hpp>
-#include <utility>
-#include <type_traits>
+#include <fma.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <functional>
-#include <algorithm>
 #include <limits>
 #include <unordered_map>
-#include <fma.hpp>
+#include <utility>
+#include <type_traits>
 
 
 #pragma GCC optimize ("fast-math")
