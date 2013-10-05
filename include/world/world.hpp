@@ -625,6 +625,25 @@ namespace MCPP {
 	
 	
 	/**
+	 *	Checks to see if a byte represents a
+	 *	valid biome.
+	 *
+	 *	\param [in] biome
+	 *		The byte to check.
+	 *
+	 *	\return
+	 *		\em true if \em biome represents a
+	 *		valid biome and may be safely cast
+	 *		to the Biome enumeration type.
+	 */
+	inline bool IsValidBiome (Byte biome) noexcept {
+	
+		return biome<=22;
+	
+	}
+	
+	
+	/**
 	 *	Checks to see if a given dimension
 	 *	causes skylight values to be sent
 	 *	to the client.
