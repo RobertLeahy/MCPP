@@ -461,8 +461,8 @@ namespace MCPP {
 	 *		A filtered value from \em func.
 	 */
 	template <typename T, typename... Args>
-	Double Octave (Word octaves, Double persistence, Double frequency, T && func, Args &&...args) noexcept(
-		noexcept(func(std::forward<Args>(args)...))
+	Double Octave (Word octaves, Double persistence, Double frequency, T && func, const Args &... args) noexcept(
+		noexcept(func(args...))
 	) {
 	
 		Double total=0;
@@ -474,7 +474,7 @@ namespace MCPP {
 			total=fma(
 				func(
 					octave_helper(
-						std::forward<Args>(args),
+						args,
 						frequency
 					)...
 				),
