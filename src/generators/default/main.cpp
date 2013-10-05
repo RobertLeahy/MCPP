@@ -17,12 +17,13 @@
 //	Horrible, evil token pasting macros
 //	to make life easier
 #define PASTE(x,y) x ## y
+#define STRINGIFY(x) #x
 #define SETTING_PREFIX "default_generator_"
 #define GET(x,y) x(PASTE(get_,y)(PASTE(x,_key),PASTE(x,_default)))
 #define GET_INT(x) GET(x,int)
 #define GET_DBL(x) GET(x,dbl)
 #define GET_THRSHLD(x) GET(x,thrshld)
-#define DEFAULT_KEY(x) static const String PASTE(x,_key)(SETTING_PREFIX #x)
+#define DEFAULT_KEY(x) static const String PASTE(x,_key)(SETTING_PREFIX STRINGIFY(x))
 #define DEFAULT(x,y,z) DEFAULT_KEY(x); \
 	static const z PASTE(x,_default)=y
 #define DEFAULT_DBL(x,y) DEFAULT(x,y,Double)
