@@ -510,6 +510,11 @@ namespace MCPP {
 	 */
 	inline Double Bias (Double bias, Double input) noexcept {
 	
+		//	Do not do expensive pow + log x2 for
+		//	bias values which would not change
+		//	the input anyway.
+		if (bias==0.5) return input;
+	
 		return pow(
 			input,
 			log(bias)/log(0.5)
@@ -534,6 +539,11 @@ namespace MCPP {
 	 *		A filtered noise value.
 	 */
 	inline Double Gain (Double gain, Double input) noexcept {
+	
+		//	Do not do expensive bias etc. for gain
+		//	values which would not change the input
+		//	anyway
+		if (gain==0.5) return input;
 	
 		Double complement=1-gain;
 		input*=2;
