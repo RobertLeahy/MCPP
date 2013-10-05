@@ -1,6 +1,7 @@
 mods: \
 bin/mods/mcpp_world.dll \
-bin/mods/mcpp_world_default_generator.dll
+bin/mods/mcpp_world_default_generator.dll \
+bin/mods/mcpp_world_superflat_generator.dll
 
 
 #	WORLD
@@ -42,6 +43,17 @@ $(MOD_LIB)
 bin/mods/mcpp_world_default_generator.dll: \
 $(MOD_OBJ) \
 obj/generators/default/main.o | \
+$(MOD_LIB) \
+bin/mods/mcpp_world.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_world.dll
+	
+	
+#	SUPER FLAT GENERATOR
+
+
+bin/mods/mcpp_world_superflat_generator.dll: \
+$(MOD_OBJ) \
+obj/generators/superflat/main.o | \
 $(MOD_LIB) \
 bin/mods/mcpp_world.dll
 	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_world.dll
