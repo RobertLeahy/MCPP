@@ -84,9 +84,8 @@ DEFAULT_DBL(river_thicken_factor,0.03);
 DEFAULT_DBL(river_thin_factor,0.03);
 DEFAULT_DBL(river_delta_factor,0.25);
 DEFAULT_DBL(river_delta_threshold,0.04);
-DEFAULT_DBL(river_depth,6);
-DEFAULT_DBL(river_depth_max,12);
-DEFAULT_DBL(river_depth_min,0);	
+DEFAULT_INT(river_depth_max,12);
+DEFAULT_INT(river_depth_min,0);
 
 
 //	Misc defaults
@@ -607,9 +606,9 @@ class DefaultGenerator : public WorldGenerator {
 		Double river_thin_factor;
 		Double river_delta_factor;
 		Double river_delta_threshold;
-		Double river_depth;
-		Double river_depth_max;
-		Double river_depth_min;
+		Word river_depth;
+		Word river_depth_max;
+		Word river_depth_min;
 		
 		
 		void get_river (Type & type, Double ocean_val, Word & height, Double x, Double z, Double min, Double max, Double height_val) const noexcept {
@@ -717,12 +716,27 @@ class DefaultGenerator : public WorldGenerator {
 			
 			//	River
 			
-			//	Decide on the depth based on
-			//	the value of the noise
-			height=static_cast<Word>(
+			//	Decide how deep the river is at this
+			//	point
+			Word rh=static_cast<Word>(
+				//	We use the intensity of the
+				//	noise to decide where -- between
+				//	the maximum depth and sea level -- to
+				//	place the river bed.  This results
+				//	in smooth, natural-looking river beds.
 				Select(
 					sea_level,
-					sea_level-river_depth,
+					//	We pick the actual depth by picking
+					//	a value between the minimum river
+					//	depth and maximum river depth based
+					//	on how "high" the terrain is.  Therefore
+					//	rivers are deeper in "lower" areas and
+					//	shallower in "higher" areas.
+					sea_level-Select(
+						river_depth_min,
+						river_depth_max,
+						avg
+					),
 					Normalize(
 						rbt,
 						1,
@@ -730,6 +744,34 @@ class DefaultGenerator : public WorldGenerator {
 					)
 				)
 			);
+			
+			//	If we're in a continental shelf, we
+			//	"blend" the ocean floor and riverbed
+			//	together
+			if (type==Type::ContinentalShelf) {
+			
+				//	If the ocean floor is lower
+				//	than the river bed, do nothing
+				if (height<rh) return;
+			
+				//	Gradually make the river shallower
+				//	and shallower until it blends into
+				//	the continental shelf completely
+				rh=static_cast<Word>(
+					Select(
+						height,
+						rh,
+						Normalize(
+							beach_threshold,
+							ocean_threshold,
+							ocean_val
+						)
+					)
+				);
+			
+			}
+			
+			height=rh;
 			
 			type=Type::River;
 		
@@ -807,9 +849,8 @@ class DefaultGenerator : public WorldGenerator {
 				GET_DBL(river_thin_factor),
 				GET_DBL(river_delta_factor),
 				GET_DBL(river_delta_threshold),
-				GET_DBL(river_depth),
-				GET_DBL(river_depth_max),
-				GET_DBL(river_depth_min),
+				GET_INT(river_depth_max),
+				GET_INT(river_depth_min),
 				GET_INT(surface_buffer),
 				GET_INT(grass_height_limit)
 		{
