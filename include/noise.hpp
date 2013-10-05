@@ -250,6 +250,28 @@ namespace MCPP {
 	};
 	
 	
+	/**
+	 *	Selects a value from a range based on
+	 *	a multiplier between 0 and 1.
+	 *
+	 *	\param [in] lo
+	 *		The low end of the range to choose
+	 *		from.
+	 *	\param [in] hi
+	 *		The high end of the range to choose
+	 *		from.
+	 *	\param [in] val
+	 *		A value between zero and one (inclusive).
+	 *		Input values close to one will yield
+	 *		results close to \em hi, input values
+	 *		close to zero will yield results close
+	 *		to \em lo.
+	 *
+	 *	\return
+	 *		A result chosen between \em lo and \em hi
+	 *		according to \em val.  The exact algorithm
+	 *		used shall be equivalent to ((hi-lo)*val)+lo.
+	 */
 	inline Double Select (Double lo, Double hi, Double val) noexcept {
 	
 		return fma(
@@ -261,6 +283,27 @@ namespace MCPP {
 	}
 	
 	
+	/**
+	 *	Normalizes a value, yielding a value between 0
+	 *	and 1 which specifies how far between a maximum
+	 *	and minimum it is.
+	 *
+	 *	\param [in] lo
+	 *		The number a \em val of 0 shall yield.
+	 *	\param [in] hi
+	 *		The number a \em val of 1 shall yield.
+	 *	\param [in] val
+	 *		A number between 0 and 1.
+	 *
+	 *	\return
+	 *		A result chosen between \em lo and \em hi
+	 *		such that this result multiplied by the
+	 *		range gives the distance from \em lo.
+	 *		For values of \em hi, 1 is returned, for
+	 *		values of \em lo, 0 is returned, and all
+	 *		values beteween 0 and 1 are placed proportionally
+	 *		there between.
+	 */
 	inline Double Normalize (Double lo, Double hi, Double val) noexcept {
 	
 		if (lo==hi) {
@@ -296,6 +339,28 @@ namespace MCPP {
 	}
 	
 	
+	/**
+	 *	Given an input on a range, adjusts the value
+	 *	such that it is on a different range.
+	 *
+	 *	\param [in] lo
+	 *		The low end of the desired range.
+	 *	\param [in] hi
+	 *		The high end of the desired range.
+	 *	\param [in] in_lo
+	 *		The low end of the range of the
+	 *		input.
+	 *	\param [in] in_hi
+	 *		The high end of the range of the
+	 *		input.
+	 *	\param [in] in
+	 *		The input.
+	 *
+	 *	\return
+	 *		The value that \em in would have were
+	 *		it on the range given by \em lo, \em hi,
+	 *		as opposed to the range \em in_lo, \em in_hi.
+	 */
 	inline Double Scale (Double lo, Double hi, Double in_lo, Double in_hi, Double in) noexcept {
 	
 		return Select(
@@ -311,6 +376,33 @@ namespace MCPP {
 	}
 	
 	
+	/**
+	 *	Given a simplex noise generator and
+	 *	arguments to forward through to it,
+	 *	adjusts the output of the noise
+	 *	generator to place it on some
+	 *	arbitrary range.
+	 *
+	 *	\tparam Args
+	 *		The types of the arguments which
+	 *		shall be forwarded through to the
+	 *		simplex noise generator.
+	 *
+	 *	\param [in] lo
+	 *		The low end of the desired range.
+	 *	\param [in] hi
+	 *		The high end of the desired range.
+	 *	\param [in] gen
+	 *		A reference to a simplex noise
+	 *		generator.
+	 *	\param [in] args
+	 *		The arguments which shall be forwarded
+	 *		through to \em gen.
+	 *
+	 *	\return
+	 *		A noise value adjusted to the range
+	 *		\em lo, \em hi.
+	 */
 	template <typename... Args>
 	Double Scale (Double lo, Double hi, const Simplex & gen, Args &&... args) noexcept {
 	
@@ -340,6 +432,34 @@ namespace MCPP {
 	 */
 	
 	
+	/**
+	 *	Applies an octave filter to the output
+	 *	of a certain generator.
+	 *
+	 *	\tparam T
+	 *		The type of generator whose output
+	 *		shall be filtered.
+	 *	\tparam Args
+	 *		The types of the arguments to forward
+	 *		through to the generator.
+	 *
+	 *	\param [in] octaves
+	 *		The number of octaves which shall be
+	 *		applied.
+	 *	\param [in] persistence
+	 *		The persistence of the noise from each
+	 *		octave.
+	 *	\param [in] frequency
+	 *		The starting sampling frequency.
+	 *	\param [in] func
+	 *		The generator.
+	 *	\param [in] args
+	 *		The arguments to forward through to
+	 *		\em generator.
+	 *
+	 *	\return
+	 *		A filtered value from \em func.
+	 */
 	template <typename T, typename... Args>
 	Double Octave (Word octaves, Double persistence, Double frequency, T && func, Args &&...args) noexcept(
 		noexcept(func(std::forward<Args>(args)...))
@@ -373,6 +493,21 @@ namespace MCPP {
 	}
 	
 	
+	/**
+	 *	Applies a bias filter to a value.  Given a value
+	 *	on the range [0,1], a bias filter pushes values
+	 *	towards 1 for bias values greater than 0.5,
+	 *	towards 0 for bias values less than 0.5, and
+	 *	does nothing for bias values of exactly 0.5.
+	 *
+	 *	\param [in] bias
+	 *		The bias value.
+	 *	\param [in] input
+	 *		Input on the range [0,1].
+	 *
+	 *	\return
+	 *		A biased noise value.
+	 */
 	inline Double Bias (Double bias, Double input) noexcept {
 	
 		return pow(
@@ -383,6 +518,21 @@ namespace MCPP {
 	}
 	
 	
+	/**
+	 *	Applies a gain filter to a value.  Given a value
+	 *	on the range [0,1], a gain filter pushes values
+	 *	towards 0 and 1 for gain values greater than 0.5,
+	 *	towards 0.5 for gain values less than 0.5, and
+	 *	does nothing for gain values of exactly 0.5.
+	 *
+	 *	\param [in] gain
+	 *		The gain value.
+	 *	\param [in] input
+	 *		Input on the range [0,1].
+	 *
+	 *	\return
+	 *		A filtered noise value.
+	 */
 	inline Double Gain (Double gain, Double input) noexcept {
 	
 		Double complement=1-gain;
@@ -404,6 +554,16 @@ namespace MCPP {
 	}
 	
 	
+	/**
+	 *	Creates a ridged multifractal.
+	 *
+	 *	\param [in] input
+	 *		A particular noise value.
+	 *
+	 *	\return
+	 *		The corresponding value mapped to
+	 *		a ridged multifractal.
+	 */
 	inline Double Ridged (Double input) noexcept {
 	
 		return 1-fabs(input);
