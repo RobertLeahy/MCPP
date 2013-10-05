@@ -1,14 +1,14 @@
-#include <world/world.hpp>
 #include <rleahylib/rleahylib.hpp>
+#include <world/world.hpp>
+#include <fma.hpp>
 #include <mod.hpp>
 #include <noise.hpp>
-#include <fma.hpp>
-#include <type_traits>
-#include <limits>
-#include <utility>
-#include <random>
-#include <cstdlib>
 #include <cmath>
+#include <cstdlib>
+#include <limits>
+#include <random>
+#include <type_traits>
+#include <utility>
 
 
 #pragma GCC optimize ("fast-math")
