@@ -1024,12 +1024,6 @@ class DefaultGenerator : public WorldGenerator {
 					block.SetSkylight(15);
 					block.SetLight(15);
 					
-					if ((y<sea_level) && (block.GetType()==0)) {
-					
-						Server::Get().WriteLog("AAAA",Service::LogType::Debug);
-					
-					}
-					
 					column.Blocks[offset++]=block;
 					
 					//	Set biome if this is the
