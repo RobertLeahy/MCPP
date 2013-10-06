@@ -7,6 +7,7 @@ bin/mods/mcpp_command_op.dll \
 bin/mods/mcpp_command_set.dll \
 bin/mods/mcpp_command_shutdown.dll \
 bin/mods/mcpp_command_time.dll \
+bin/mods/mcpp_command_verbose.dll \
 bin/mods/mcpp_command_whisper.dll \
 
 
@@ -100,6 +101,17 @@ obj/time/display.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_time.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_time.dll
+	
+	
+#	VERBOSE
+
+
+bin/mods/mcpp_command_verbose.dll: \
+$(MOD_OBJ) \
+obj/verbose/main.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_op.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
 	
 	
 #	WHISPERS
