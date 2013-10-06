@@ -37,15 +37,17 @@ $(MOD_LIB)
 	$(GPP) -shared -o $@ $^ $(MOD_LIB)
 	
 	
+WORLD_LIB:=$(MOD_LIB) bin/mods/mcpp_world.dll
+	
+	
 #	DEFAULT GENERATOR
 
 
 bin/mods/mcpp_world_default_generator.dll: \
 $(MOD_OBJ) \
 obj/generators/default/main.o | \
-$(MOD_LIB) \
-bin/mods/mcpp_world.dll
-	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_world.dll
+$(WORLD_LIB)
+	$(GPP) -shared -o $@ $^ $(WORLD_LIB)
 	
 	
 #	SUPER FLAT GENERATOR
@@ -54,6 +56,5 @@ bin/mods/mcpp_world.dll
 bin/mods/mcpp_world_superflat_generator.dll: \
 $(MOD_OBJ) \
 obj/generators/superflat/main.o | \
-$(MOD_LIB) \
-bin/mods/mcpp_world.dll
-	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_world.dll
+$(WORLD_LIB)
+	$(GPP) -shared -o $@ $^ $(WORLD_LIB)
