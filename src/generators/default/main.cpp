@@ -55,7 +55,7 @@ DEFAULT_DBL(perturbate_min,-20);
 DEFAULT_INT(ocean_octaves,4);
 DEFAULT_DBL(ocean_persistence,0.7);
 DEFAULT_DBL(ocean_frequency,0.00005);
-DEFAULT_DBL(continental_shelf_threshold,-0.0075);
+DEFAULT_DBL(continental_shelf_threshold,-0.01);
 DEFAULT_DBL(ocean_threshold,-0.025);
 DEFAULT_DBL(beach_threshold,0);
 DEFAULT_DBL(land_threshold,0.0125);
