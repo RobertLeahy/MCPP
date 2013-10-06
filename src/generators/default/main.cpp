@@ -285,7 +285,6 @@ class DefaultGenerator : public WorldGenerator {
 		
 		Tuple<Double,Double> perturbate (Double x, Byte y, Double z) const noexcept {
 		
-			return Tuple<Double,Double>(x,z);
 		
 			return Tuple<Double,Double>(
 				x+Scale(
