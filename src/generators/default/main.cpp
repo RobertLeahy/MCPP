@@ -283,8 +283,10 @@ class DefaultGenerator : public WorldGenerator {
 		Double perturbate_min;
 		
 		
-		Tuple<Double,Double> perturbate (Double x, Byte y, Double z) const noexcept {
-		
+		Tuple<Double,Double> perturbate (Double x, Double y, Double z) const noexcept {
+			
+			//	Adjust Y value for offset
+			Double dbl_y=y+offset_y;
 		
 			return Tuple<Double,Double>(
 				x+Scale(
@@ -298,7 +300,7 @@ class DefaultGenerator : public WorldGenerator {
 						perturbate_frequency,
 						perturbate_x,
 						x,
-						y,
+						dbl_y,
 						z
 					)
 				),
@@ -313,7 +315,7 @@ class DefaultGenerator : public WorldGenerator {
 						perturbate_frequency,
 						perturbate_z,
 						x,
-						y,
+						dbl_y,
 						z
 					)
 				)
@@ -783,6 +785,7 @@ class DefaultGenerator : public WorldGenerator {
 		
 		
 		Double offset_x;
+		Double offset_y;
 		Double offset_z;
 		
 
@@ -858,6 +861,11 @@ class DefaultGenerator : public WorldGenerator {
 			Double GET_DBL(min_offset);
 			
 			this->offset_x=get_random(
+				gen,
+				min_offset,
+				max_offset
+			);
+			offset_y=get_random(
 				gen,
 				min_offset,
 				max_offset
