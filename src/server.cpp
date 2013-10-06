@@ -550,7 +550,7 @@ namespace MCPP {
 			return (
 				(iter!=logged_packets.end()) &&
 				(
-					(direction==ProtocolDirection::Both) ||
+					(iter->second==ProtocolDirection::Both) ||
 					(direction==iter->second)
 				)
 			);
