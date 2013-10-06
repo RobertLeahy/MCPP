@@ -88,6 +88,28 @@ DEFAULT_INT(river_depth_max,12);
 DEFAULT_INT(river_depth_min,0);
 
 
+//	Cave-related defaults
+DEFAULT_INT(cave_1_octaves,6);
+DEFAULT_DBL(cave_1_persistence,0.4);
+DEFAULT_DBL(cave_1_frequency,0.015);
+DEFAULT_DBL(cave_1_y_scale,2);
+DEFAULT_INT(cave_2_octaves,4);
+DEFAULT_DBL(cave_2_persistence,0.4);
+DEFAULT_DBL(cave_2_frequency,0.015);
+DEFAULT_DBL(cave_2_y_scale,2.25);
+DEFAULT_INT(cave_surface_octaves,4);
+DEFAULT_DBL(cave_surface_persistence,0.4);
+DEFAULT_DBL(cave_surface_frequency,0.01);
+DEFAULT_INT(cave_surface_max,18);
+DEFAULT_INT(cave_surface_min,0);
+DEFAULT_INT(cave_buffer,10);
+DEFAULT_DBL(cave_1_high,0.7);
+DEFAULT_DBL(cave_1_low,0);
+DEFAULT_DBL(cave_2_high,1);
+DEFAULT_DBL(cave_2_low,0.2);
+DEFAULT_INT(ocean_buffer,3);
+
+
 //	Misc defaults
 DEFAULT_INT(sea_level,64);
 DEFAULT_INT(ocean_ceiling,68);
@@ -780,6 +802,154 @@ class DefaultGenerator : public WorldGenerator {
 		
 		
 		//
+		//	CAVES
+		//
+		
+		
+		Simplex cave_1;
+		Word cave_1_octaves;
+		Double cave_1_persistence;
+		Double cave_1_frequency;
+		Double cave_1_y_scale;
+		
+		
+		Double get_cave_1 (Double x, Double y, Double z) const noexcept {
+		
+			return Octave(
+				cave_1_octaves,
+				cave_1_persistence,
+				cave_1_frequency,
+				cave_1,
+				x,
+				y*cave_1_y_scale,
+				z
+			);
+		
+		}
+		
+		
+		Simplex cave_2;
+		Word cave_2_octaves;
+		Double cave_2_persistence;
+		Double cave_2_frequency;
+		Double cave_2_y_scale;
+		
+		
+		Double get_cave_2 (Double x, Double y, Double z) const noexcept {
+		
+			return Octave(
+				cave_2_octaves,
+				cave_2_persistence,
+				cave_2_frequency,
+				cave_2,
+				x,
+				y*cave_2_y_scale,
+				z
+			);
+		
+		}
+		
+		
+		Simplex cave_surface;
+		Word cave_surface_octaves;
+		Double cave_surface_persistence;
+		Double cave_surface_frequency;
+		Word cave_surface_max;
+		Word cave_surface_min;
+		Word cave_buffer;
+		
+		
+		Word get_cave_height (Word height, Double x, Double z) const noexcept {
+		
+			return static_cast<Word>(
+				height+Scale(
+					cave_surface_min,
+					cave_surface_max,
+					-1,
+					1,
+					Octave(
+						cave_surface_octaves,
+						cave_surface_persistence,
+						cave_surface_frequency,
+						cave_surface,
+						x,
+						z
+					)
+				)-cave_buffer
+			);
+		
+		}
+		
+		
+		Double cave_1_high;
+		Double cave_1_low;
+		Double cave_2_high;
+		Double cave_2_low;		
+		Word ocean_buffer;
+		
+		
+		bool get_cave (Type type, Word height, Double x, Byte y, Double z) const noexcept {
+		
+			//	Don't do cave processing unless
+			//	we're at or below the surface
+			if (y>height) return false;
+			
+			//	To allow caves to occasionally
+			//	cut through the surface, we adjust
+			//	the real height by perturbation.
+			height=get_cave_height(
+				height,
+				x,
+				z
+			);
+			
+			if (
+				//	Only proceed if it's low enough
+				//	for caves to form under the new,
+				//	perturbated value
+				(y>height) ||
+				//	To avoid cutting through the bottom
+				//	of rivers and oceans, we leave a buffer
+				//	between caves and bodies of water
+				(
+					(
+						(type==Type::ContinentalShelf) ||
+						(type==Type::Ocean) ||
+						(type==Type::River) ||
+						(type==Type::Beach)
+					) &&
+					(height>=(height-ocean_buffer))
+				)
+			) return false;
+			
+			//	Offset y to get it away from
+			//	the origin
+			Double dbl_y=static_cast<Double>(y)+offset_y;
+			
+			//	Get the first cave noise value
+			auto val_1=get_cave_1(x,dbl_y,z);
+			
+			//	If it's not within bounds,
+			//	this isn't a cave
+			if (!(
+				(val_1>=cave_1_low) &&
+				(val_1<=cave_1_high)
+			)) return false;
+			
+			//	Get the second cave noise value
+			auto val_2=get_cave_2(x,dbl_y,z);
+			
+			//	If it's within bounds, we're
+			//	in a cave
+			return (
+				(val_2>=cave_2_low) &&
+				(val_2<=cave_2_high)
+			);
+		
+		}
+		
+		
+		//
 		//	MISC
 		//
 		
@@ -853,6 +1023,28 @@ class DefaultGenerator : public WorldGenerator {
 				GET_DBL(river_delta_threshold),
 				GET_INT(river_depth_max),
 				GET_INT(river_depth_min),
+				cave_1(gen),
+				GET_INT(cave_1_octaves),
+				GET_DBL(cave_1_persistence),
+				GET_DBL(cave_1_frequency),
+				GET_DBL(cave_1_y_scale),
+				cave_2(gen),
+				GET_INT(cave_2_octaves),
+				GET_DBL(cave_2_persistence),
+				GET_DBL(cave_2_frequency),
+				GET_DBL(cave_2_y_scale),
+				cave_surface(gen),
+				GET_INT(cave_surface_octaves),
+				GET_DBL(cave_surface_persistence),
+				GET_DBL(cave_surface_frequency),
+				GET_INT(cave_surface_max),
+				GET_INT(cave_surface_min),
+				GET_INT(cave_buffer),
+				GET_DBL(cave_1_high),
+				GET_DBL(cave_1_low),
+				GET_DBL(cave_2_high),
+				GET_DBL(cave_2_low),
+				GET_INT(ocean_buffer),
 				GET_INT(surface_buffer),
 				GET_INT(grass_height_limit)
 		{
@@ -958,74 +1150,81 @@ class DefaultGenerator : public WorldGenerator {
 					//	Determine what type of block
 					//	to return
 					Block block=(
-						(
-							(type==Type::River) ||
-							(type==Type::Beach) ||
-							(type==Type::ContinentalShelf) ||
-							(type==Type::Ocean)
-						)
-							//	Ocean logic
-							?	(
-									(y>height)
-										//	We're above this column's height --
-										//	we're returning either water (if
-										//	below sea level) or air (otherwise).
+						//	If we're in a cave, this
+						//	block is unconditionally
+						//	air
+						get_cave(type,height,x,y,z)
+							?	air
+							:	(
+									(
+										(type==Type::River) ||
+										(type==Type::Beach) ||
+										(type==Type::ContinentalShelf) ||
+										(type==Type::Ocean)
+									)
+										//	Ocean logic
 										?	(
-												(y>sea_level)
-													?	air
-													:	water
-											)
-										//	We're at or below the column's
-										//	height -- we're returning either
-										//	sand or dirt (if within a certain
-										//	distance of the height) or stone
-										//	(otherwise).
-										:	(
-												(y<(height-surface_buffer))
-													?	stone
-													//	If the height is above
-													//	sea level -- as in an
-													//	island -- switch to using
-													//	dirt
+												(y>height)
+													//	We're above this column's height --
+													//	we're returning either water (if
+													//	below sea level) or air (otherwise).
+													?	(
+															(y>sea_level)
+																?	air
+																:	water
+														)
+													//	We're at or below the column's
+													//	height -- we're returning either
+													//	sand or dirt (if within a certain
+													//	distance of the height) or stone
+													//	(otherwise).
 													:	(
-															(height>sea_level)
-																?	(
-																		(y==height)
-																			?	grass
-																			:	dirt
+															(y<(height-surface_buffer))
+																?	stone
+																//	If the height is above
+																//	sea level -- as in an
+																//	island -- switch to using
+																//	dirt
+																:	(
+																		(height>sea_level)
+																			?	(
+																					(y==height)
+																						?	grass
+																						:	dirt
+																				)
+																			:	sand
 																	)
-																:	sand
 														)
 											)
-								)
-							//	Land logic
-							:	(
-									(y>height)
-										//	Above the height, return air
-										//	unconditionally
-										?	air
-										//	If the height of this column
-										//	is above a certain threshold,
-										//	we return stone -- grass
-										//	grass does not form above a
-										//	certain elevation
-										:	(height>grass_height_limit)
-												?	stone
-												//	We return grass at the
-												//	surface, dirt within a
-												//	buffer distance to the
-												//	surface, and stone under
-												//	that
-												:	(
-														(y==height)
-															?	grass
+										//	Land logic
+										:	(
+												(y>height)
+													//	Above the height, return air
+													//	unconditionally
+													?	air
+													//	If the height of this column
+													//	is above a certain threshold,
+													//	we return stone -- grass
+													//	grass does not form above a
+													//	certain elevation
+													:	(height>grass_height_limit)
+															?	stone
+															//	We return grass at the
+															//	surface, dirt within a
+															//	buffer distance to the
+															//	surface, and stone under
+															//	that
 															:	(
-																	(y<(height-surface_buffer))
-																		?	stone
-																		:	dirt
+																	(y==height)
+																		?	grass
+																		:	(
+																				(y<(height-surface_buffer))
+																					?	stone
+																					:	dirt
+																			)
 																)
-													)
-								)			
+											)
+								)
 					);
 					
 					block.SetSkylight(15);
