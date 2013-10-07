@@ -63,14 +63,6 @@ class Whisper : public Module, public Command {
 		}
 		
 		
-		virtual bool Check (SmartPointer<Client> client) const override {
-		
-			//	Everyone can send whispers
-			return true;
-		
-		}
-		
-		
 		virtual Vector<String> AutoComplete (const String & args) const override {
 		
 			Vector<String> retr;
@@ -177,26 +169,4 @@ class Whisper : public Module, public Command {
 };
 
 
-static Nullable<Whisper> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(Whisper)
