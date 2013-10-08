@@ -74,37 +74,16 @@ class Whisper : public Module, public Command {
 			//	and there's nothing we can do
 			if (whitespace.IsMatch(args)) return retr;
 			
-			//	Create a regex to match only users
-			//	whose username begins with the
-			//	string we were passed
-			Regex regex(
-				String::Format(
-					"^{0}",
-					Regex::Escape(
-						args
-					)
-				),
-				//	Usernames are not case sensitive
-				RegexOptions().SetIgnoreCase()
+			//	The list of completions is the
+			//	list of users whose usernames
+			//	begin with the specified string
+			auto matches=Server::Get().Clients.Get(
+				args,
+				ClientSearch::Begin
 			);
 			
-			for (auto & client : Server::Get().Clients) {
-			
-				//	Only authenticated users are valid
-				//	chat targets
-				if (
-					(client->GetState()==ClientState::Authenticated) &&
-					regex.IsMatch(client->GetUsername())
-				) {
-				
-					retr.Add(
-						//	Normalize to lower case
-						client->GetUsername().ToLower()
-					);
-				
-				}
-			
-			}
+			//	Extract usernames
+			for (auto & client : matches) retr.Add(client->GetUsername());
 			
 			return retr;
 		

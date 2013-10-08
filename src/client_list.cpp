@@ -154,6 +154,66 @@ namespace MCPP {
 		);
 	
 	}
+	
+	
+	Vector<SmartPointer<Client>> ClientList::Get (const String & str, ClientSearch type) const {
+	
+		Vector<SmartPointer<Client>> retr;
+		
+		//	Choose the regular expression
+		//	pattern that will be used
+		String pattern;
+		String regex_str(Regex::Escape(str));
+		switch (type) {
+		
+			case ClientSearch::Exact:
+			default:
+				pattern=String::Format(
+					"^{0}$",
+					regex_str
+				);
+				break;
+				
+			case ClientSearch::Begin:
+				pattern=String::Format(
+					"^{0}",
+					regex_str
+				);
+				break;
+				
+			case ClientSearch::End:
+				pattern=String::Format(
+					"{0}$",
+					regex_str
+				);
+				break;
+				
+			case ClientSearch::Match:
+				pattern=std::move(regex_str);
+				break;
+		
+		}
+		
+		//	Create the regular expression
+		Regex regex(
+			pattern,
+			RegexOptions().SetIgnoreCase()
+		);
+		
+		//	Loop and search clients
+		for (const auto & client : *const_cast<ClientList *>(this)) if (
+			//	Only match authenticated clients
+			//	(the only kind who have usernames
+			//	anyway)
+			(client->GetState()==ClientState::Authenticated) &&
+			//	Attempt to match against regular
+			//	expression
+			regex.IsMatch(client->GetUsername())
+		) retr.Add(client);
+		
+		return retr;
+	
+	}
 
 
 }

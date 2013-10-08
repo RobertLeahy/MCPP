@@ -955,6 +955,21 @@ namespace MCPP {
 	/**
 	 *	\endcond
 	 */
+	 
+	 
+	/**
+	 *	The type of search that may be
+	 *	performed for a client based on
+	 *	their username.
+	 */
+	enum class ClientSearch {
+	
+		Exact,	/**<	Clients whose usernames match the exact string (ignoring case) provided will be returned.	*/
+		Begin,	/**<	Clients whose usernames begin with the string provided will be returned.	*/
+		End,	/**<	Clients whose usernames end with the exact string provided will be returned.	*/
+		Match	/**<	Clients whose usernames contain the substring provided will be returned.	*/
+	
+	};
 	
 	
 	/**
@@ -1052,6 +1067,24 @@ namespace MCPP {
 			
 			ClientListIterator begin () noexcept;
 			ClientListIterator end () noexcept;
+			
+			
+			/**
+			 *	Retrieves a list of clients whose
+			 *	usernames match a given string.
+			 *
+			 *	\param [in] str
+			 *		The string to match.
+			 *	\param [in] type
+			 *		The type of search to perform.
+			 *
+			 *	\return
+			 *		A collection of all clients
+			 *		whose usernames matched
+			 *		\em str based on the type of
+			 *		match given by \em type.
+			 */
+			Vector<SmartPointer<Client>> Get (const String & str, ClientSearch type=ClientSearch::Exact) const;
 			
 	
 	};
