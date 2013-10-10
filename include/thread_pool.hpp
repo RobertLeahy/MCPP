@@ -473,22 +473,22 @@ namespace MCPP {
 				
 				};
 				
-				//	Create an invocable target
-				//	that takes no arguments
-				std::function<return_type ()> bound(
-					std::bind(
+				//	Build a function that wraps that
+				#pragma GCC diagnostic push
+				#pragma GCC diagnostic ignored "-Wpedantic"
+				return [
+					//	If we capture the smart pointer
+					//	itself then we'll have a
+					//	circular reference so it'll
+					//	never get cleaned up
+					ptr=&(handle->result),
+					//	Create an invocable target
+					//	that takes no arguments
+					bound=std::bind(
 						std::forward<T>(func),
 						std::forward<Args>(args)...
 					)
-				);
-				//	If we capture the smart pointer
-				//	itself then we'll have that
-				//	object with a reference to itself
-				//	so it'll never get cleaned up
-				void ** ptr=&(handle->result);
-				
-				//	Build a function that wraps that
-				return [=] () {
+				] () {
 				
 					//	Create somewhere for the
 					//	object returned to live
@@ -521,6 +521,7 @@ namespace MCPP {
 					}
 				
 				};
+				#pragma GCC diagnostic pop
 			
 			}
 			
