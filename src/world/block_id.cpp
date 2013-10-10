@@ -48,9 +48,9 @@ namespace MCPP {
 	Word BlockID::GetOffset () const noexcept {
 	
 		Int32 x=X%16;
-		if (X<0) x=16-(x*-1);
+		if ((X<0) && (x!=0)) x=16-(x*-1);
 		Int32 z=Z%16;
-		if (Z<0) z=16-(z*-1);
+		if ((Z<0) && (z!=0)) z=16-(z*-1);
 		
 		return static_cast<Word>(x)+(static_cast<Word>(z)*16)+(static_cast<Word>(Y)*16*16);
 	
