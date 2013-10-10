@@ -1,4 +1,5 @@
 #include <world/world.hpp>
+#include <exception>
 
 
 namespace MCPP {
@@ -13,7 +14,7 @@ namespace MCPP {
 	static const String processing_error("Error while processing {0}");
 
 
-	void World::process (ColumnContainer & column) {
+	void World::process (ColumnContainer & column, const WorldHandle * handle) {
 	
 		try {
 	
@@ -131,7 +132,7 @@ namespace MCPP {
 						
 						//	Populate column by invoking
 						//	populators
-						populate(column);
+						populate(column,handle);
 						curr=ColumnState::Populated;
 						
 						//	Stats
@@ -202,7 +203,9 @@ namespace MCPP {
 			//	can't do anything about this
 			} catch (...) {	}
 		
-			Server::Get().Panic();
+			Server::Get().Panic(
+				std::current_exception()
+			);
 		
 			throw;
 		

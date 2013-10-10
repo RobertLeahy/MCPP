@@ -4,71 +4,46 @@
 namespace MCPP {
 
 
-	inline void World::start_populating () {
+	void World::populate (ColumnContainer & column, const WorldHandle * handle) {
+	
+		//	If there's no handle, create one
+		Nullable<WorldHandle> local_handle;
+		if (handle==nullptr) local_handle.Construct(
+			Begin(
+				BlockWriteStrategy::Dirty,
+				BlockAccessStrategy::Generate
+			)
+		);
 		
-		populating_lock.Write([&] () {
-		
-			auto id=Thread::ID();
-		
-			auto iter=populating.find(id);
-			
-			if (iter==populating.end()) populating.emplace(
-				id,
-				1
-			);
-			else ++iter->second;
-		
-		});
-	
-	}
-	
-	
-	inline void World::stop_populating () noexcept {
-		
-		populating_lock.Write([&] () {
-		
-			auto iter=populating.find(Thread::ID());
-			
-			if ((--iter->second)==0) populating.erase(iter);
-		
-		});
-	
-	}
-	
-	
-	bool World::is_populating () const noexcept {
-	
-		return populating_lock.Read([&] () {	return populating.count(Thread::ID())!=0;	});
-	
-	}
-
-
-	void World::populate (ColumnContainer & column) {
+		PopulateEvent event{
+			column.ID(),
+			(handle==nullptr) ? *local_handle : *handle
+		};
 	
 		//	Attempt to retrieve populators
 		//	for this dimension
-		auto iter=populators.find(column.ID().Dimension);
+		auto iter=populators.find(event.ID.Dimension);
 		
 		if (iter!=populators.end()) {
 		
-			//	Start populating
-			start_populating();
+			event.Handle.BeginPopulate();
 			
 			try {
-
-				//	Loop for each populator and invoke it
-				for (const auto & populator : iter->second) (*populator.Item<0>())(column.ID());
+		
+				for (const auto & populator : iter->second) (*populator.Item<0>())(event);
 				
 			} catch (...) {
 			
-				stop_populating();
+				//	Don't leak population
+				//	count
+				event.Handle.EndPopulate();
 				
 				throw;
 			
 			}
 			
-			stop_populating();
-		
+			event.Handle.EndPopulate();
+			
 		}
 	
 	}

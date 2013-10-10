@@ -62,14 +62,6 @@ namespace MCPP {
 	
 	
 	void World::Install () {
-	
-		//	Create world lock now
-		//	that we can grab a reference
-		//	to the server's thread pool
-		wlock.Construct(
-			Server::Get().Pool(),
-			[] () {	Server::Get().Panic();	}
-		);
 		
 		//	Get settings
 		

@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <new>
 #include <unordered_map>
 #include <utility>
 
@@ -908,213 +909,256 @@ namespace MCPP {
 		"ColumnContainer layout incorrect"
 	);
 	#pragma GCC diagnostic pop
-	 
-	 
-	class WorldLock {
-	
-	
-		private:
-		
-		
-			//	The type of a lock request
-			typedef Tuple<
-				//	A callback for asynchronous lock
-				//	requests, an empty std::function
-				//	otherwise
-				std::function<void (bool)>,
-				//	Whether this lock request is for
-				//	an exclusive lock
-				bool,
-				//	A boolean which synchronous lock
-				//	requests will wait on
-				std::atomic<bool> *,
-				//	The thread ID of synchronous lock
-				//	requests
-				decltype(Thread::ID())
-			> wl_tuple;
-		
-		
-			//	Locks currently held
-			std::unordered_map<
-				//	ID of the thread holding
-				//	the lock
-				decltype(Thread::ID()),
-				//	Recursion count
-				Word
-			> locks;
-			//	Number of locks (necessary since
-			//	asynchronous locks will not always
-			//	be in the hash map
-			Word num;
-			//	Whether the currently-held lock
-			//	(if there's just one) is exclusive
-			//	or not
-			bool exclusive;
-			//	List of pending lock requests
-			Vector<wl_tuple> pending;
-			//	The lock that synchronizes access
-			//	to this structure
-			Mutex lock;
-			//	The condvar on which non-exclusive
-			//	requests wait
-			CondVar wait;
-			//	The condvar on which exclusive requests
-			//	wait
-			CondVar ex_wait;
-			//	The thread pool that shall be used for
-			//	asynchronous callbacks
-			ThreadPool & pool;
-			//	The panic callback which shall be invoked
-			//	if something goes wrong with the thread
-			//	pool
-			std::function<void ()> panic;
-			
-			
-			inline void acquire_impl(const std::function<void (bool)> &, decltype(Thread::ID()), bool);
-			void acquire (std::function<void (bool)>, bool);
-			inline bool can_acquire (const wl_tuple &) noexcept;
-			void release ();
-			inline void release_impl () {
-			
-				try {
-				
-					Release();
-					
-				} catch (...) {
-				
-					//	The lock may be in an inconsistent state!
-					try {	if (panic) panic();	} catch (...) {	}
-					
-					//	We don't know what went wrong in Release,
-					//	so we can't attempt recovery, just rethrow
-					
-					throw;
-				
-				}
-			
-			}
-			template <typename T, typename... Args>
-			void acquire_async_impl (bool ex, T && callback, Args &&... args) {
-			
-				auto bound=std::bind(
-					std::forward<T>(callback),
-					std::forward<Args>(args)...
-				);
-				
-				//	If you try and bind bound
-				//	expressions into a new bound
-				//	expression weird stuff happens,
-				//	so I just make this garbage
-				//	intermediary object.
-				//
-				//	If we had capture-by-move
-				//	this wouldn't be an issue,
-				//	but we'll have to wait for C++14
-				//	for that...
-				Tuple<decltype(bound)> wrapped(std::move(bound));
-				
-				acquire(
-					std::bind(
-						[this] (decltype(wrapped) wrapped, bool set) mutable {
-						
-							if (set) {
-							
-								auto id=Thread::ID();
-							
-								lock.Execute([&] () mutable {
-								
-									try {
-									
-										locks.emplace(
-											id,
-											1
-										);
-									
-									} catch (...) {
-									
-										//	The lock may be in an inconsistent
-										//	state!
-										try {	if (panic) panic();	} catch (...) {	}
-										
-										//	Attempt recovery as best we can
-										--num;
-										exclusive=false;
-										
-										throw;
-									
-									}
-								
-								});
-								
-							}
-							
-							try {
-							
-								wrapped.template Item<0>()();
-								
-							} catch (...) {
-							
-								release_impl();
-								
-								throw;
-							
-							}
-							
-							release_impl();
-						
-						},
-						std::move(wrapped),
-						std::placeholders::_1
-					),
-					ex
-				);
-			
-			}
-			
-			
-		public:
-			
-			
-			WorldLock () = delete;
-			WorldLock (
-				ThreadPool & pool,
-				std::function<void ()> panic
-			) noexcept;
-			
-			
-			void Acquire ();
-			void AcquireExclusive ();
-			template <typename T, typename... Args>
-			void Acquire (T && callback, Args &&... args) {
-			
-				acquire_async_impl(
-					false,
-					std::forward<T>(callback),
-					std::forward<Args>(args)...
-				);
-			
-			}
-			template <typename T, typename... Args>
-			void AcquireExclusive (T && callback, Args &&... args) {
-			
-				acquire_async_impl(
-					true,
-					std::forward<T>(callback),
-					std::forward<Args>(args)...
-				);
-			
-			}
-			void Release ();
-			bool Transfer () noexcept;
-			void Resume ();
-	
-	
-	};
 	
 	
 	/**
 	 *	\endcond
 	 */
+	 
+	 
+	/**
+	 *	The different strategies that
+	 *	may be used to write to the
+	 *	world.
+	 */
+	enum class BlockWriteStrategy {
+
+		/**
+		 *	The world's state is guaranteed
+		 *	not to change after the handle
+		 *	is acquired.  Other threads may
+		 *	read from the world, but may not
+		 *	write to it.
+		 */
+		Transactional,
+		/**
+		 *	Other threads may write to and
+		 *	read from the world at any time,
+		 *	but all operations are guaranteed
+		 *	to be thread safe, however no
+		 *	operations are guaranteed to be
+		 *	atomic.
+		 */
+		Dirty
+
+	};
+	
+	
+	/**
+	 *	The different strategies that a
+	 *	WorldHandle may use for dealing with
+	 *	columns that have not been loaded,
+	 *	generated, populated, et cetera.
+	 */
+	enum class BlockAccessStrategy {
+	
+		/**
+		 *	The WorldHandle shall load
+		 *	columns that are not present,
+		 *	but shall fail if loaded columns
+		 *	are not populated.
+		 */
+		Load,
+		/**
+		 *	The WorldHandle shall load
+		 *	columns that are not present,
+		 *	but shall fail if loaded columns
+		 *	are not generated.
+		 *
+		 *	In this mode the WorldHandle will
+		 *	read blocks from columns that have
+		 *	not been populated.
+		 */
+		LoadGenerated,
+		/**
+		 *	The WorldHandle shall load and
+		 *	generate columns that are not
+		 *	present.
+		 *
+		 *	In this mode the WorldHandle will
+		 *	read blocks from columns that have
+		 *	not been populated.
+		 */
+		Generate,
+		/**
+		 *	The WorldHandle shall not load
+		 *	or generate columns that are not
+		 *	present or generated.
+		 *
+		 *	In this mode the WorldHandle will
+		 *	read blocks from columns that have
+		 *	not been populated.
+		 */
+		Generated,
+		/**
+		 *	The WorldHandle shall load,
+		 *	generate, and populate columns
+		 *	that are not present.
+		 */
+		Populate,
+		/**
+		 *	The WorldHandle shall not load,
+		 *	generate, or populate columns
+		 *	that are not present, generated,
+		 *	or populated.
+		 */
+		Populated
+	
+	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	 
+	 
+	class World;
+	
+	
+	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
+	 *	A handle which allows blocks to be
+	 *	written or read according to a certain
+	 *	strategy.
+	 */
+	class WorldHandle {
+	
+	
+		friend class World;
+	
+	
+		private:
+		
+		
+			//	The strategy that this handle
+			//	uses to write to the world
+			BlockWriteStrategy write;
+			//	The strategy that this handle
+			//	uses to access the world
+			BlockAccessStrategy access;
+			//	A pointer to the world object
+			//	that this handle reads from and
+			//	writes to.  If it is null it
+			//	means that this object has been
+			//	moved
+			mutable World * world;
+			//	True if this handle holds the
+			//	world lock, and write operations
+			//	may proceed seamlessly
+			mutable bool locked;
+			//	A pointer to the last column
+			//	that this handle accessed, for
+			//	caching reasons
+			mutable ColumnContainer * cache;
+			//	If greater than zero, this
+			//	handle is being used for
+			//	population.
+			mutable Word populate;
+			
+			
+			WorldHandle (World *, BlockWriteStrategy, BlockAccessStrategy);
+			void BeginPopulate () const noexcept;
+			void EndPopulate () const noexcept;
+			
+			
+			inline void destroy () noexcept;
+			inline ColumnContainer * get_column_impl (ColumnID) const;
+			inline ColumnContainer * get_column (ColumnID, bool) const;
+			inline bool set_impl (ColumnContainer *, BlockID, Block, bool) const;
+			
+			
+		public:
+		
+		
+			WorldHandle () = delete;
+			WorldHandle (const WorldHandle &) = delete;
+			WorldHandle & operator = (const WorldHandle &) = delete;
+			
+			
+			WorldHandle (WorldHandle &&) noexcept;
+			WorldHandle & operator = (WorldHandle &&) noexcept;
+			
+			
+			~WorldHandle () noexcept;
+			
+			
+			/**
+			 *	Attempts to set a block.
+			 *
+			 *	\param [in] id
+			 *		The location at which to set
+			 *		the block.
+			 *	\param [in] block
+			 *		The block to set at the location
+			 *		specified by \em id.
+			 *	\param [in] force
+			 *		If \em true events shall not have
+			 *		the opportunity to block the setting
+			 *		of the block.  Defaults to \em true.
+			 *
+			 *	\return
+			 *		\em true if the block was set, \em false
+			 *		otherwise.
+			 */
+			bool Set (BlockID id, Block block, bool force=true) const;
+			/**
+			 *	Attempts to retrieve a block.
+			 *
+			 *	\exception std::runtime_error
+			 *		Thrown if the requested block
+			 *		could not be retrieved.
+			 *
+			 *	\param [in] id
+			 *		The location of the block to
+			 *		retrieve.
+			 *
+			 *	\return
+			 *		The block at the location specified
+			 *		by \em id.
+			 */
+			Block Get (BlockID id) const;
+			/**
+			 *	Attempts to retrieve a block.
+			 *
+			 *	\param [in] id
+			 *		The location of the block to
+			 *		retrieve.
+			 *	\param [in] no_throw
+			 *		An object of type \em std::nothrow_t
+			 *		which disambiguates this overload.
+			 *
+			 *	\return
+			 *		The block at the location specified
+			 *		by \em id if it could be retrieved,
+			 *		\em null otherwise.
+			 */
+			Nullable<Block> Get (BlockID id, std::nothrow_t no_throw) const;
+			
+			
+			/**
+			 *	Determines whether this handle currently
+			 *	has exclusive access to the world.
+			 *
+			 *	If the return value of this function is
+			 *	\em false, and no other handles are held
+			 *	by the current thread, attempting to
+			 *	acquire a transactional handle, or attempting
+			 *	to write through a different handle is
+			 *	guaranteed not to deadlock.
+			 *
+			 *	\return
+			 *		\em true if this world handle currently
+			 *		holds an exclusive lock on the world,
+			 *		\em false otherwise.
+			 */
+			bool Exclusive () const noexcept;
+	
+	
+	};
 	
 	
 	/**
@@ -1142,6 +1186,30 @@ namespace MCPP {
 	
 	
 	/**
+	 *	Contains all information relevant to a
+	 *	column being populated.
+	 */
+	class PopulateEvent {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The column being populated.
+			 */
+			ColumnID ID;
+			/**
+			 *	A handle through which the world
+			 *	may be accessed.
+			 */
+			const WorldHandle & Handle;
+	
+	
+	};
+	
+	
+	/**
 	 *	Provides an interface through which a populator
 	 *	may be accessed.
 	 */
@@ -1154,11 +1222,12 @@ namespace MCPP {
 			/**
 			 *	Populates a column.
 			 *
-			 *	\param [in] id
-			 *		The ID of the column which
-			 *		is being populated.
+			 *	\param [in] event
+			 *		The event object which contains
+			 *		information about the column to
+			 *		be populated.
 			 */
-			virtual void operator () (ColumnID id) const = 0;
+			virtual void operator () (const PopulateEvent & event) const = 0;
 	
 	
 	};
@@ -1258,10 +1327,52 @@ namespace MCPP {
 	
 	
 	/**
+	 *	Represents an attempt to change one block
+	 *	to another block.
+	 */
+	class BlockSetEvent {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The WorldHandle object which is
+			 *	being used to set this block.
+			 *
+			 *	May be used to atomically modify
+			 *	or read from the world if
+			 *	required.
+			 */
+			const WorldHandle & Handle;
+			/**
+			 *	The ID of the block being set.
+			 */
+			BlockID ID;
+			/**
+			 *	The block that current exists
+			 *	at the location given by \em ID.
+			 */
+			Block From;
+			/**
+			 *	The block that will exist at the
+			 *	location given by \em ID after
+			 *	this event completes.
+			 */
+			Block To;
+	
+	
+	};
+	
+	
+	/**
 	 *	Contains and manages the Minecraft world
 	 *	as a collection of columns.
 	 */
 	class World : public Module {
+	
+	
+		friend class WorldHandle;
 	
 	
 		private:
@@ -1351,16 +1462,7 @@ namespace MCPP {
 			
 			
 			//	World lock
-			Nullable<WorldLock> wlock;
-			
-			
-			//	Which threads are currently
-			//	populating?
-			std::unordered_map<
-				decltype(Thread::ID()),
-				Word
-			> populating;
-			mutable RWLock populating_lock;
+			Mutex wlock;
 			
 			
 			//	Only one thread is allowed to
@@ -1387,7 +1489,7 @@ namespace MCPP {
 			void generate (ColumnContainer &);
 			//	Processes a column up until
 			//	a certain satisfactory point
-			void process (ColumnContainer &);
+			void process (ColumnContainer &, const WorldHandle * handle=nullptr);
 			//	Loads a column from the backing
 			//	store (or attempts to).
 			//
@@ -1395,7 +1497,7 @@ namespace MCPP {
 			//	in after being loaded.
 			ColumnState load (ColumnContainer &);
 			//	Populates a column
-			void populate (ColumnContainer &);
+			void populate (ColumnContainer &, const WorldHandle *);
 			//	Does maintenance work -- scans and
 			//	saves all columns, unloads columns
 			//	that are inactive.
@@ -1422,17 +1524,17 @@ namespace MCPP {
 			void set_seed (Nullable<String>);
 			//	Retrieves a column, creating it if it
 			//	doesn't exist
-			ColumnContainer * get_column (ColumnID);
+			ColumnContainer * get_column (ColumnID, bool create=true);
 			
 			//	EVENT HANDLING
 			
 			//	Determines whether a given block can
 			//	replace another block at a given set
 			//	of coordinates
-			bool can_set (BlockID, Block, Block) noexcept;
+			bool can_set (const BlockSetEvent &) noexcept;
 			//	Fires the event for a given block replacing
 			//	another block at a given set of coordinates
-			void on_set (BlockID, Block, Block);
+			void on_set (const BlockSetEvent &);
 			//	Initializes all event arrays be default
 			//	constructing them
 			void init_events () noexcept;
@@ -1443,12 +1545,6 @@ namespace MCPP {
 			//	so that no module code is loaded
 			//	into them
 			void cleanup_events () noexcept;
-			
-			//	IS POPULATING?
-			
-			bool is_populating () const noexcept;
-			inline void start_populating ();
-			inline void stop_populating () noexcept;
 			
 			//	MISC
 
@@ -1476,14 +1572,14 @@ namespace MCPP {
 			//	EVENTS
 		
 		
-			Event<void (BlockID, Block, Block)> OnSet;
-			Event<void (BlockID, Block, Block)> OnReplace [4096];
-			Event<void (BlockID, Block, Block)> OnPlace [4096];
+			Event<void (const BlockSetEvent &)> OnSet;
+			Event<void (const BlockSetEvent &)> OnReplace [4096];
+			Event<void (const BlockSetEvent &)> OnPlace [4096];
 			
 			
-			Event<bool (BlockID, Block, Block)> CanSet;
-			Event<bool (BlockID, Block, Block)> CanReplace [4096];
-			Event<bool (BlockID, Block, Block)> CanPlace [4096];
+			Event<bool (const BlockSetEvent &)> CanSet;
+			Event<bool (const BlockSetEvent &)> CanReplace [4096];
+			Event<bool (const BlockSetEvent &)> CanPlace [4096];
 			
 			
 			/**
@@ -1655,75 +1751,6 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Begins a transaction against the world.
-			 *
-			 *	Does not return until the lock may be
-			 *	acquired.
-			 *
-			 *	For the duration of the transaction the
-			 *	thread of execution which called this
-			 *	function is the only thread of execution
-			 *	which may perform writes to the world.
-			 *
-			 *	Note that a thread of execution is not
-			 *	necessarily tied to a specific thread.
-			 *	The transaction lock follows the thread
-			 *	of execution through asynchronous callbacks
-			 *	enqueued by whichever thread currently
-			 *	holds the lock.
-			 */
-			void Begin ();
-			/**
-			 *	Asynchronously begins a transaction against
-			 *	the world.
-			 *
-			 *	When the asynchronous callback provided ends,
-			 *	the transaction implicitly ends.
-			 *
-			 *	For the duration of the transaction the
-			 *	thread of execution which called this function
-			 *	is the only thread of execution which
-			 *	may perform writes to the world.
-			 *
-			 *	\tparam T
-			 *		The type of callback to be invoked once
-			 *		the transaction begins.
-			 *	\tparam Args
-			 *		The types of the arguments to be
-			 *		forwarded through to the callback of
-			 *		type \em T.
-			 *
-			 *	\param [in] callback
-			 *		The callback to be invoked once the lock
-			 *		is acquired.
-			 *	\param [in] args
-			 *		The arguments which shall be forwarded
-			 *		to \em callback.
-			 */
-			template <typename T, typename... Args>
-			void Begin (T && callback, Args &&... args) {
-			
-				//	Acquire asynchronously
-				wlock->AcquireExclusive(
-					std::forward<T>(callback),
-					std::forward<Args>(callback)...
-				);
-			
-			}
-			/**
-			 *	Explicitly ends a transaction.
-			 *
-			 *	All synchronously-acquired transactions
-			 *	must be ended this way, unless they are
-			 *	passed off to an asynchronous callback,
-			 *	in which case the transaction will
-			 *	implicitly end once the callback which
-			 *	was invoked last returns.
-			 */
-			void End ();
-			
-			
-			/**
 			 *	Expresses interest in a column, loading
 			 *	it into memory and preventing it from being
 			 *	unloaded for the duration of the interest.
@@ -1747,325 +1774,25 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Synchronously retrieves a block.
+			 *	Begins writing to/reading from the world
+			 *	by creating a handle which allows the
+			 *	world to be written/read according to
+			 *	certain strategies.
 			 *
-			 *	\param [in] id
-			 *		The coordinates of the block which
-			 *		shall be retrieved.
-			 *
-			 *	\return
-			 *		The block at the coordinates
-			 *		given by \em id.
-			 */
-			Block GetBlock (BlockID id);
-			/**
-			 *	Asynchronously retrieves a block.
-			 *
-			 *	\tparam T
-			 *		The type of callback to be invoked once
-			 *		the block-in-question is retrieved.
-			 *	\tparam Args
-			 *		The types of the arguments to be
-			 *		forwarded through to the callback of
-			 *		type \em T.
-			 *
-			 *	\param [in] id
-			 *		The coordinates of the block which
-			 *		shall be retrieved.
-			 *	\param [in] callback
-			 *		The callback which shall be invoked
-			 *		when the block is retrieved.  Its
-			 *		first argument shall be \em id, and
-			 *		its second argument shall be the
-			 *		block which was retrieved.
-			 *	\param [in] args
-			 *		The arguments to forward through to
-			 *		\em callback.
-			 */
-			template <typename T, typename... Args>
-			void GetBlock (BlockID id, T && callback, Args &&... args) {
-			
-				auto bound=std::bind(
-					std::forward<T>(callback),
-					std::placeholders::_1,
-					std::placeholders::_2,
-					std::forward<Args>(args)...
-				);
-				
-				//	Work around limitations of binding
-				//	bound functions
-				Tuple<decltype(bound)> wrapper(std::move(bound));
-				
-				//	Get the column the desired block resides
-				//	in
-				auto column=get_column(id.GetContaining());
-				
-				//	If this thread holds a lock,
-				//	we need to move it, unless
-				//	this thread is populating, in
-				//	which case it needs to keep
-				//	its lock
-				bool resume=wlock->Transfer();
-				
-				try {
-				
-					//	Enqueue
-					if (!column->InvokeWhen(
-						is_populating() ? ColumnState::Generated : ColumnState::Populated,
-						std::bind(
-							[this,resume] (BlockID id, decltype(column) column, decltype(wrapper) wrapper) mutable {
-								
-								if (resume) wlock->Resume();
-								
-								try {
-								
-									wrapper.template Item<0>()(
-										id,
-										column->GetBlock(id)
-									);
-								
-								} catch (...) {	}
-								
-								//	Don't leak interest
-								column->EndInterest();
-								//	Don't leak lock
-								if (resume) try {
-								
-									wlock->Release();
-									
-								} catch (...) {	}
-								
-							},
-							id,
-							column,
-							std::move(wrapper)
-						)
-					)) process(*column);
-				
-				} catch (...) {
-				
-					column->EndInterest();
-					
-					//	Make sure the lock gets
-					//	restored
-					if (resume) try {
-					
-						wlock->Resume();
-						
-					//	Nothing really we can do
-					//	about this...
-					} catch (...) {	}
-					
-					throw;
-				
-				}
-				
-				//	We don't release interest here,
-				//	it's done inside the callback
-			
-			}
-			
-			
-			/**
-			 *	Synchronously sets a block.
-			 *
-			 *	\param [in] id
-			 *		The coordinates of the block to set.
-			 *	\param [in] block
-			 *		The block to set at the coordinates given
-			 *		by \em id.
-			 *	\param [in] force
-			 *		Whether the setting of the block shall be
-			 *		forced.  If setting the block is forced,
-			 *		event handlers shall not have the opportunity
-			 *		to stop the setting of the block, and shall
-			 *		only be informed after it has been set that
-			 *		it has been.  Defaults to \em true.
+			 *	\param [in] write
+			 *		The strategy that shall be used to
+			 *		write to the world.  Defaults to
+			 *		\em BlockWriteStrategy::Dirty.
+			 *	\param [in] access
+			 *		The strategy that shall be used to
+			 *		access the world.  Defaults to
+			 *		\em BlockAccessStrategy::Populate.
 			 *
 			 *	\return
-			 *		\em true if setting the block succeeded,
-			 *		\em false otherwise.  If \em force is
-			 *		\em true, \em true is always returned.
+			 *		A handle through which the world may
+			 *		be read and written.
 			 */
-			bool SetBlock (BlockID id, Block block, bool force=true);
-			/**
-			 *	Asynchronously sets a block.
-			 *
-			 *	\tparam T
-			 *		The type of callback which shall be
-			 *		invoked when the block has been set.
-			 *	\tparam Args
-			 *		The type of arguments which shall be
-			 *		forwarded through to the callback of
-			 *		type \em T.
-			 *
-			 *	\param [in] id
-			 *		The coordinates of the block to set.
-			 *	\param [in] block
-			 *		The block to set at the coordinates given
-			 *		by \em id.
-			 *	\param [in] force
-			 *		Whether the setting of the block shall be
-			 *		forced.  If setting the block is forced,
-			 *		event handlers shall not have the opportunity
-			 *		to stop the setting of the block, and shall
-			 *		only be informed after it has been set that
-			 *		it has been.  Defaults to \em true.
-			 *	\param [in] callback
-			 *		The callback which shall be invoked once the
-			 *		block has been set (or once setting the block
-			 *		has failed).  Shall be passed \em true if the
-			 *		operation succeeds, \em false otherwise, \em id,
-			 *		and \em block.
-			 *	\param [in] args
-			 *		Arguments which shall be forwarded through to
-			 *		\em callback.
-			 */
-			template <typename T, typename... Args>
-			void SetBlock (BlockID id, Block block, bool force, T && callback, Args &&... args) {
-			
-				auto bound=std::bind(
-					std::forward<T>(callback),
-					std::placeholders::_1,
-					id,
-					block,
-					std::forward<Args>(args)...
-				);
-				
-				//	Work around limitations of binding
-				//	bound functions
-				Tuple<decltype(bound)> wrapper(std::move(bound));
-				
-				//	Get the column the desired block resides
-				//	in
-				auto column=get_column(id.GetContaining());
-				
-				try {
-				
-					//	Acquire lock asynchronously
-					wlock->Acquire(
-						[this,id,block,force,column] (decltype(wrapper) wrapper) mutable {
-						
-							//	Lock acquired
-							
-							//	The lock will have to be
-							//	transferred through
-							wlock->Transfer();
-							
-							try {
-							
-								//	Enqueue, process, or dispatch
-								//	immediately, as applicable
-								if (!column->InvokeWhen(
-									ColumnState::Generated,
-									std::bind(
-										[this,id,block,force,column] (decltype(wrapper) wrapper) mutable {
-										
-											//	Resume the lock
-											wlock->Resume();
-											
-											bool success=false;
-											try {
-											
-												try {
-												
-													auto old=column->GetBlock(id);
-												
-													//	Can we set the block?
-													if (force || can_set(id,old,block)) {
-													
-														//	YES
-														
-														success=true;
-														
-														column->SetBlock(id,block);
-														
-														//	Only fire events for columns
-														//	that are populating or populated
-														auto state=column->GetState();
-														if (
-															(state==ColumnState::Populating) ||
-															(state==ColumnState::Populated)
-														) on_set(
-															id,
-															old,
-															block
-														);
-													
-													}
-													
-												} catch (...) {
-												
-													//	Don't leak the lock
-													try {
-													
-														wlock->Release();
-													
-													} catch (...) {	}
-													
-													throw;
-												
-												}
-												
-												wlock->Release();
-												
-											} catch (...) {
-											
-												column->EndInterest();
-												
-												throw;
-											
-											}
-											
-											column->EndInterest();
-											
-											//	Invoke callback
-											try {
-											
-												wrapper.template Item<0>()(success);
-											
-											} catch (...) {	}
-										
-										},
-										std::move(wrapper)
-									)
-								)) process(*column);
-							
-							} catch (...) {
-							
-								column->EndInterest();
-								
-								//	Make sure to resume the lock
-								//	so it can properly be
-								//	released
-								try {
-								
-									wlock->Resume();
-									
-								//	Nothing really we can do about
-								//	this...
-								} catch (...) {	}
-								
-								throw;
-							
-							}
-						
-						},
-						std::move(wrapper)
-					);
-				
-				} catch (...) {
-				
-					column->EndInterest();
-					
-					throw;
-				
-				}
-				
-				//	We don't release interest here, it's done
-				//	within the asynchronous callback
-			
-			}
+			WorldHandle Begin (BlockWriteStrategy write=BlockWriteStrategy::Dirty, BlockAccessStrategy access=BlockAccessStrategy::Populate);
 	
 	
 	};

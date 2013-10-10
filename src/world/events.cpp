@@ -6,26 +6,14 @@
 namespace MCPP {
 
 
-	bool World::can_set (BlockID id, Block from, Block to) noexcept {
+	bool World::can_set (const BlockSetEvent & event) noexcept {
 	
 		try {
 	
 			return (
-				CanSet(
-					id,
-					from,
-					to
-				) &&
-				CanReplace[from.GetType()](
-					id,
-					from,
-					to
-				) &&
-				CanPlace[to.GetType()](
-					id,
-					from,
-					to
-				)
+				CanSet(event) &&
+				CanReplace[event.From.GetType()](event) &&
+				CanPlace[event.To.GetType()](event)
 			);
 			
 		} catch (...) {	}
@@ -35,25 +23,11 @@ namespace MCPP {
 	}
 	
 	
-	void World::on_set (BlockID id, Block from, Block to) {
+	void World::on_set (const BlockSetEvent & event) {
 	
-		OnSet(
-			id,
-			from,
-			to
-		);
-		
-		OnReplace[from.GetType()](
-			id,
-			from,
-			to
-		);
-		
-		OnPlace[to.GetType()](
-			id,
-			from,
-			to
-		);
+		OnSet(event);
+		OnReplace[event.From.GetType()](event);
+		OnPlace[event.To.GetType()](event);
 	
 	}
 	

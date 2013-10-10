@@ -17,10 +17,7 @@ namespace MCPP {
 		
 			try {
 			
-				if (!(
-					is_populating() ||
-					column->WaitUntil(ColumnState::Populated)
-				)) process(*column);
+				if (!column->WaitUntil(ColumnState::Populated)) process(*column);
 			
 			} catch (...) {
 			
