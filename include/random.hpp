@@ -54,7 +54,6 @@ namespace MCPP {
 	}
 	
 
-
 	/**
 	 *	Generates random numbers unsuitable
 	 *	for use in cryptography in a thread
