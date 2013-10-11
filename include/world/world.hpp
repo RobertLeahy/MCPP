@@ -9,10 +9,13 @@
 #include <common.hpp>
 #include <cstddef>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <new>
+#include <random>
 #include <unordered_map>
 #include <utility>
+#include <type_traits>
 
 
 namespace MCPP {
@@ -1729,6 +1732,97 @@ namespace MCPP {
 			 *		The world's seed.
 			 */
 			UInt64 Seed () const noexcept;
+			/**
+			 *	Retrieves a random number generator
+			 *	seeded by the world's seed.
+			 *
+			 *	\tparam T
+			 *		The type of random number generator
+			 *		to create and seed.  Defaults to
+			 *		std::mt19937.
+			 *
+			 *	\return
+			 *		A seeded random number generator of
+			 *		type \em T.
+			 */
+			template <typename T=std::mt19937>
+			T GetRandom () const noexcept(
+				std::is_nothrow_constructible<
+					std::seed_seq,
+					std::initializer_list<Word>
+				>::value &&
+				std::is_nothrow_constructible<
+					T,
+					std::seed_seq
+				>::value
+			) {
+			
+				std::seed_seq seq({seed});
+				
+				return T(seq);
+			
+			}
+			/**
+			 *	Retrieves a random number generator
+			 *	seeded by the world's seed and a
+			 *	column ID.
+			 *
+			 *	\tparam T
+			 *		The type of random number generator
+			 *		to create and seed.  Defaults to
+			 *		std::mt19937.
+			 *
+			 *	\param [in] id
+			 *		A column ID to use to seed the random
+			 *		number generator.
+			 *
+			 *	\return
+			 *		A seeded random number generator of
+			 *		type \em T.
+			 */
+			template <typename T=std::mt19937>
+			T GetRandom (ColumnID id) const noexcept(
+				std::is_nothrow_constructible<
+					std::seed_seq,
+					std::initializer_list<Word>
+				>::value &&
+				std::is_nothrow_constructible<
+					T,
+					std::seed_seq
+				>::value
+			) {
+			
+				Word seed=23;
+				seed*=31;
+				seed+=this->seed;
+				
+				union {
+					UInt32 out;
+					Int32 in;
+				};
+				
+				in=id.X;
+				seed*=31;
+				seed+=out;
+				
+				in=id.Z;
+				seed*=31;
+				seed+=out;
+				
+				union {
+					Byte out_b;
+					SByte in_b;
+				};
+				
+				in_b=id.Dimension;
+				seed*=31;
+				seed+=out_b;
+				
+				std::seed_seq seq({seed});
+				
+				return T(seq);
+			
+			}
 			/**
 			 *	Retrieves the current level
 			 *	type.
