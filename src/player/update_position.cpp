@@ -1,5 +1,7 @@
 #include <player/player.hpp>
+#include <server.hpp>
 #include <multi_scope_guard.hpp>
+#include <exception>
 #include <utility>
 
 
@@ -106,7 +108,21 @@ namespace MCPP {
 		for (auto & id : add) try {
 		
 			cm->Enqueue(
-				[=] (MultiScopeGuard) {	World::Get().Add(player->Conn,id,async);	},
+				[=] (MultiScopeGuard) {
+				
+					try {
+				
+						World::Get().Add(player->Conn,id,async);
+						
+					} catch (...) {
+					
+						Server::Get().Panic(
+							std::current_exception()
+						);
+					
+					}
+					
+				},
 				sg
 			);
 		
