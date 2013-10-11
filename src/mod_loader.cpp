@@ -350,6 +350,8 @@ namespace MCPP {
 			} catch (...) {	}
 		
 		}
+		
+		mods.Clear();
 	
 	}
 	
