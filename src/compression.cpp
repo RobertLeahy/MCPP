@@ -58,7 +58,11 @@ namespace MCPP {
 				
 					//	Wire output buffer into stream
 					stream.next_out=reinterpret_cast<decltype(stream.next_out)>(buffer->end());
-					stream.avail_out=static_cast<decltype(stream.avail_out)>(SafeWord(buffer->Capacity()));
+					stream.avail_out=static_cast<decltype(stream.avail_out)>(
+						SafeWord(
+							buffer->Capacity()-buffer->Count()
+						)
+					);
 					
 					//	Inflate
 					int result=inflate(&stream,Z_FINISH);
@@ -70,14 +74,17 @@ namespace MCPP {
 					//	If so we're done.
 					if (result==Z_STREAM_END) break;
 					
-					//	Did something go wrong?
-					//	If so throw.
-					if (result!=Z_OK) throw std::runtime_error(zlib_error);
+					//	Was more buffer space required?
+					if (result==Z_BUF_ERROR) {
 					
-					//	Buffer needs to be bigger
-					buffer->SetCapacity();
+						buffer->SetCapacity();
+						
+						continue;
 					
-					//	LOOP
+					}
+					
+					//	Something went wrong, throw
+					throw std::runtime_error(zlib_error);
 				
 				}
 				
@@ -184,14 +191,17 @@ namespace MCPP {
 					//	If so we're done
 					if (result==Z_STREAM_END) break;
 					
-					//	Did something go wrong?
-					//	If so throw
-					if (result!=Z_OK) throw std::runtime_error(zlib_error);
+					//	Does the buffer need to be bigger?
+					if (result==Z_BUF_ERROR) {
+
+						buffer->SetCapacity();
+						
+						continue;
+						
+					}
 					
-					//	Buffer needs to be bigger
-					buffer->SetCapacity();
-					
-					//	LOOP
+					//	Error
+					throw std::runtime_error(zlib_error);
 				
 				}
 				
