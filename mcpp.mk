@@ -13,6 +13,11 @@ bin/zlib1.dll
 mcpp: bin/mcpp.dll
 
 
+obj/packet.o:
+	$(call MKDIR,$@)
+	$(GPP) -ftemplate-depth=100000 -c -o $@ src/packet.cpp
+
+
 bin/mcpp.dll: \
 $(OBJ) \
 obj/aes_128_cfb_8.o \
