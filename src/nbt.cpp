@@ -1,7 +1,6 @@
 #include <nbt.hpp>
 #include <cstring>
 #include <type_traits>
-#include <utility>
 
 
 namespace NBT {
@@ -15,6 +14,40 @@ namespace NBT {
 		return what_str;
 	
 	}
+	
+	
+	Tag::Tag (PayloadType payload) noexcept : Payload(std::move(payload)) {	}
+	
+	
+	PayloadType & Tag::operator * () noexcept {
+	
+		return Payload;
+	
+	}
+	
+	
+	const PayloadType & Tag::operator * () const noexcept {
+	
+		return Payload;
+	
+	}
+	
+	
+	PayloadType * Tag::operator -> () noexcept {
+	
+		return &Payload;
+	
+	}
+	
+	
+	const PayloadType * Tag::operator -> () const noexcept {
+	
+		return &Payload;
+	
+	}
+	
+	
+	NamedTag::NamedTag (String name, PayloadType payload) noexcept : Tag(std::move(payload)), Name(std::move(name)) {	}
 	
 	
 	static const char * too_deep="Maximum recursion level exceeded";
@@ -159,7 +192,7 @@ namespace NBT {
 			
 			if (tag.Payload.IsNull()) break;
 			
-			if (!retr) retr=Compound(new std::unordered_map<String,NamedTag>());
+			if (!retr) retr=Compound(new KeyValue());
 			
 			String name=tag.Name;
 			
@@ -259,7 +292,7 @@ namespace NBT {
 				//	Create list
 				retr.Construct<List>();
 				auto & list=retr.Get<List>();
-				list.Type=type;
+				list.Type=static_cast<TagType>(type);
 				
 				//	Get elements
 				for (decltype(len) i=0;i<len;++i) list.Payload.Add(Tag{get_tag_impl(type)});
@@ -566,10 +599,10 @@ namespace NBT {
 			void serialize (const List & list) {
 			
 				//	TAG_End is illegal
-				if (list.Type==0) throw Error(unexpected_tag_end);
+				if (list.Type==TagType::End) throw Error(unexpected_tag_end);
 			
 				//	Write type
-				serialize(list.Type);
+				serialize(static_cast<Byte>(list.Type));
 				//	Write list
 				serialize(Int32(SafeWord(list.Payload.Count())));
 				
@@ -577,7 +610,7 @@ namespace NBT {
 				
 					//	All tags must be of the same
 					//	type
-					if ((tag.Payload.Type()+1)!=list.Type) throw Error(list_type_error);
+					if ((tag.Payload.Type()+1)!=static_cast<Byte>(list.Type)) throw Error(list_type_error);
 					
 					serialize(tag.Payload);
 				
