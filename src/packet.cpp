@@ -191,8 +191,6 @@ namespace MCPP {
 		typedef PacketMap<ps,pd,id> type;
 	
 		if ((ps==state) && (dir==pd) && (i==id)) {
-		
-			if (type::Count==0) BadPacketID::Raise();
 			
 			container.Imbue(
 				destroy<type>,
@@ -262,7 +260,13 @@ namespace MCPP {
 				//	Attempt to populate remainder
 				//	of packet
 				container.FromBytes(begin,end);
-				//container.FromBytes(begin,end);
+				
+				//	Check to make sure we consumed
+				//	as many bytes as the length
+				//	header specified
+				Word consumed=static_cast<Word>(begin-buffer.begin());
+				
+				if (consumed!=waiting_for) BadFormat::Raise();
 				
 				//	Put the ID in place
 				container.Get().ID=id;
@@ -274,7 +278,7 @@ namespace MCPP {
 				//	buffer
 				buffer.Delete(
 					0,
-					static_cast<Word>(begin-buffer.begin())
+					consumed
 				);
 			
 			} else {

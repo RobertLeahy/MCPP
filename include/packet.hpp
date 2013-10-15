@@ -14,6 +14,7 @@
 #include <limits>
 #include <new>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 
@@ -76,6 +77,9 @@ namespace MCPP {
 		Both
 	
 	};
+	
+	
+	typedef std::unordered_map<Byte,Variant<Byte,Int16,Int32,Single,String,Tuple<Int32,Int32,Int32>>> Metadata;
 	
 	
 	class Packet {
@@ -339,17 +343,110 @@ namespace MCPP {
 		template <> class PacketMap<PL,CB,0x06> : public PacketType<Single,Int16,Single> {	};
 		template <> class PacketMap<PL,CB,0x07> : public PacketType<Int32,Byte,Byte> {	};
 		template <> class PacketMap<PL,CB,0x08> : public PacketType<Int32,Int32,Int32,Single,Single,bool> {	};
-		template <> class PacketMap<PL,CB,0x09> : public PacketType<SByte> {	};
+		template <> class PacketMap<PL,CB,0x09> : public PacketType<Byte> {	};
 		template <> class PacketMap<PL,CB,0x0A> : public PacketType<Int32,Int32,Byte,Int32> {	};
 		template <> class PacketMap<PL,CB,0x0B> : public PacketType<Int32,Byte> {	};
 		template <> class PacketMap<PL,CB,0x0C> : public PacketType<VarInt<UInt32>,String,String,Int32,Int32,Int32,SByte,SByte,Int16,PLACEHOLDER> {	};
 		template <> class PacketMap<PL,CB,0x0D> : public PacketType<Int32,Int32> {	};
-		template <> class PacketMap<PL,CB,0x0E> : public PacketType<VarInt<UInt32>,SByte,Int32,Int32,Int32,SByte,SByte,PLACEHOLDER> {	};
-		template <> class PacketMap<PL,CB,0x0F> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,SByte,Int16,Int16,Int16,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,CB,0x0E> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,Variant<Int32,Tuple<Int32,Int16,Int16,Int16>>> {	};
+		template <> class PacketMap<PL,CB,0x0F> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,SByte,Int16,Int16,Int16,Metadata> {	};
 		template <> class PacketMap<PL,CB,0x10> : public PacketType<VarInt<UInt32>,String,Int32,Int32,Int32,Int32> {	};
 		template <> class PacketMap<PL,CB,0x11> : public PacketType<VarInt<UInt32>,Int32,Int32,Int32,Int16> {	};
-		template <> class PacketMap<PL,CB,0x12> : public PacketType<VarInt<UInt32>,Int16,Int16,Int16> {	};
-		template <> class PacketMap<PL,CB,0x13> : public PacketType<VarInt<UInt32>,Array<SByte,Int32>> {	};
+		template <> class PacketMap<PL,CB,0x12> : public PacketType<Int32,Int16,Int16,Int16> {	};
+		template <> class PacketMap<PL,CB,0x13> : public PacketType<Array<SByte,Int32>> {	};
+		template <> class PacketMap<PL,CB,0x14> : public PacketType<Int32> {	};
+		template <> class PacketMap<PL,CB,0x15> : public PacketType<Int32,SByte,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x16> : public PacketType<Int32,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x17> : public PacketType<Int32,SByte,SByte,SByte,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x18> : public PacketType<Int32,Int32,Int32,Int32,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x19> : public PacketType<Int32,SByte> {	};
+		template <> class PacketMap<PL,CB,0x1A> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,CB,0x1B> : public PacketType<Int32,Int32,bool> {	};
+		template <> class PacketMap<PL,CB,0x1C> : public PacketType<Int32,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,CB,0x1D> : public PacketType<Int32,Byte,Byte,Int16> {	};
+		template <> class PacketMap<PL,CB,0x1E> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,CB,0x1F> : public PacketType<Single,Int16,Int16> {	};
+		//	0x20
+		template <> class PacketMap<PL,CB,0x21> : public PacketType<Int32,Int32,bool,UInt16,UInt16,Array<Int32,Byte>> {	};
+		//	0x22
+		template <> class PacketMap<PL,CB,0x23> : public PacketType<Int32,Byte,UInt32,VarInt<UInt32>,Byte> {	};
+		template <> class PacketMap<PL,CB,0x24> : public PacketType<Int32,Int16,Int32,Byte,Byte,VarInt<UInt32>> {	};
+		template <> class PacketMap<PL,CB,0x25> : public PacketType<VarInt<UInt32>,Int32,Int32,Int32,Byte> {	};
+		//	0x26
+		template <> class PacketMap<PL,CB,0x27> : public PacketType<Single,Single,Single,Single,Array<Int32,Tuple<SByte,SByte,SByte>>,Single,Single,Single> {	};
+		template <> class PacketMap<PL,CB,0x28> : public PacketType<Int32,Int32,Byte,Int32,Int32,bool> {	};
+		template <> class PacketMap<PL,CB,0x29> : public PacketType<String,Int32,Int32,Int32,Single,Byte,Byte> {	};
+		template <> class PacketMap<PL,CB,0x2A> : public PacketType<Single,Single,Single,Single,Single,Single,Single,Single,Int32> {	};
+		template <> class PacketMap<PL,CB,0x2B> : public PacketType<Byte,Single> {	};
+		template <> class PacketMap<PL,CB,0x2C> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32> {	};
+		template <> class PacketMap<PL,CB,0x2D> : public PacketType<Byte,Byte,String,Byte,bool,Int32> {	};
+		template <> class PacketMap<PL,CB,0x2E> : public PacketType<Byte> {	};
+		template <> class PacketMap<PL,CB,0x2F> : public PacketType<Byte,Int16,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,CB,0x30> : public PacketType<Byte,Array<Int16,PLACEHOLDER>> {	};
+		template <> class PacketMap<PL,CB,0x31> : public PacketType<Byte,Int16,Int16> {	};
+		template <> class PacketMap<PL,CB,0x32> : public PacketType<Byte,Int16,bool> {	};
+		template <> class PacketMap<PL,CB,0x33> : public PacketType<Int32,Int16,Int32,String,String,String,String> {	};
+		template <> class PacketMap<PL,CB,0x34> : public PacketType<VarInt<UInt32>,Array<Int16,Byte>> {	};
+		template <> class PacketMap<PL,CB,0x35> : public PacketType<Int32,Int16,Int32,Byte,Array<Int16,Byte>> {	};
+		template <> class PacketMap<PL,CB,0x36> : public PacketType<Int32,Int32,Int32> {	};
+		template <> class PacketMap<PL,CB,0x37> : public PacketType<VarInt<UInt32>,Tuple<String,VarInt<UInt32>>> {	};
+		template <> class PacketMap<PL,CB,0x38> : public PacketType<String,bool,Int16> {	};
+		template <> class PacketMap<PL,CB,0x39> : public PacketType<Byte,Single,Single> {	};
+		template <> class PacketMap<PL,CB,0x3A> : public PacketType<Array<VarInt<UInt32>,String>> {	};
+		template <> class PacketMap<PL,CB,0x3B> : public PacketType<String,String,Byte> {	};
+		template <> class PacketMap<PL,CB,0x3C> : public PacketType<String,Byte,String,Int32> {	};
+		template <> class PacketMap<PL,CB,0x3D> : public PacketType<Byte,String> {	};
+		template <> class PacketMap<PL,CB,0x3E> : public PacketType<String,Byte,String,String,String,Byte,Array<Int16,String>> {	};
+		template <> class PacketMap<PL,CB,0x3F> : public PacketType<String,Array<Int16,Byte>> {	};
+		template <> class PacketMap<PL,CB,0x40> : public PacketType<String> {	};
+		
+		//	SERVERBOUND
+		
+		template <> class PacketMap<PL,SB,0x00> : public PacketType<Int32> {	};
+		template <> class PacketMap<PL,SB,0x01> : public PacketType<JSON::Value> {	};
+		template <> class PacketMap<PL,SB,0x02> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,SB,0x03> : public PacketType<bool> {	};
+		template <> class PacketMap<PL,SB,0x04> : public PacketType<Double,Double,Double,Double,bool> {	};
+		template <> class PacketMap<PL,SB,0x05> : public PacketType<Single,Single,bool> {	};
+		template <> class PacketMap<PL,SB,0x06> : public PacketType<Double,Double,Double,Double,Single,Single,bool> {	};
+		template <> class PacketMap<PL,SB,0x07> : public PacketType<Byte,Int32,Byte,Int32,Byte> {	};
+		template <> class PacketMap<PL,SB,0x08> : public PacketType<Int32,Byte,Int32,SByte,PLACEHOLDER,SByte,SByte,SByte> {	};
+		template <> class PacketMap<PL,SB,0x09> : public PacketType<Int16> {	};
+		template <> class PacketMap<PL,SB,0x0A> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,SB,0x0B> : public PacketType<Int32,Byte,Int32> {	};
+		template <> class PacketMap<PL,SB,0x0C> : public PacketType<Single,Single,bool,bool> {	};
+		template <> class PacketMap<PL,SB,0x0D> : public PacketType<Byte> {	};
+		template <> class PacketMap<PL,SB,0x0E> : public PacketType<Byte,Int16,Byte,Int16,Byte,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,SB,0x0F> : public PacketType<Byte,Int16,bool> {	};
+		template <> class PacketMap<PL,SB,0x10> : public PacketType<Int16,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,SB,0x11> : public PacketType<Byte,Byte> {	};
+		template <> class PacketMap<PL,SB,0x12> : public PacketType<Int32,Int16,Int32,String,String,String,String> {	};
+		template <> class PacketMap<PL,SB,0x13> : public PacketType<Byte,Single,Single> {	};
+		template <> class PacketMap<PL,SB,0x14> : public PacketType<String> {	};
+		template <> class PacketMap<PL,SB,0x15> : public PacketType<String,Byte,Byte,bool,Byte,bool> {	};
+		template <> class PacketMap<PL,SB,0x16> : public PacketType<Byte> {	};
+		template <> class PacketMap<PL,SB,0x17> : public PacketType<String,Array<Int16,Byte>> {	};
+		
+		//	STATUS
+		
+		//	CLIENTBOUND
+		template <> class PacketMap<ST,CB,0x00> : public PacketType<JSON::Value> {	};
+		template <> class PacketMap<ST,CB,0x01> : public PacketType<Int64> {	};
+		
+		//	SERVERBOUND
+		template <> class PacketMap<ST,SB,0x00> : public PacketType<> {	};
+		template <> class PacketMap<ST,SB,0x01> : public PacketType<Int64> {	};
+		
+		//	LOGIN
+		
+		//	CLIENTBOUND
+		template <> class PacketMap<LI,CB,0x00> : public PacketType<JSON::Value> {	};
+		template <> class PacketMap<LI,CB,0x01> : public PacketType<String,Array<Int16,Byte>,Array<Int16,Byte>> {	};
+		template <> class PacketMap<LI,CB,0x02> : public PacketType<String> {	};
+		
+		//	SERVERBOUND
+		template <> class PacketMap<LI,SB,0x00> : public PacketType<String> {	};
+		template <> class PacketMap<LI,SB,0x01> : public PacketType<Array<Int16,Byte>,Array<Int16,Byte>> {	};
 		
 		
 		constexpr UInt32 LargestID=0x40;
@@ -491,34 +588,32 @@ namespace MCPP {
 				}
 				
 				
-				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) noexcept {
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
 				
 					//	Make sure there's enough space
 					//	to extract an object of this
 					//	type from the buffer
 					if ((end-begin)<sizeof(T)) InsufficientBytes::Raise();
 					
-					//	Copy bytes from the buffer
-					//	to the object pointer
-					std::memcpy(ptr,begin,sizeof(T));
+					if (Endianness::IsBigEndian<T>()) {
 					
-					//	Advance the begin pointer
-					begin+=sizeof(T);
+						//	If the system is big endian, simply
+						//	copy directly from the buffer to
+						//	the object pointer
 					
-					//	If the system is not big endian,
-					//	reverse bytes so in memory
-					//	representation is of the proper
-					//	endianness
-					if (!Endianness::IsBigEndian<T>()) {
+						std::memcpy(ptr,begin,sizeof(T));
 					
-						Byte * byte_ptr=reinterpret_cast<Byte *>(ptr);
+					} else {
+					
+						//	Otherwise reverse byte order as we
+						//	copy
 						
-						for (Word i=0;i<(sizeof(T)/2);++i) std::swap(
-							byte_ptr[i],
-							byte_ptr[sizeof(T)-i-1]
-						);
+						for (Word i=0;i<sizeof(T);++i) reinterpret_cast<Byte *>(ptr)[i]=begin[sizeof(T)-i-1];
 					
 					}
+					
+					//	Advance pointer
+					begin+=sizeof(T);
 				
 				}
 				
@@ -530,15 +625,15 @@ namespace MCPP {
 					
 					auto end=buffer.end();
 					
-					//	Copy bytes
-					std::memcpy(end,&obj,sizeof(T));
-					
-					//	If system is not big endian, we
-					//	must reverse bytes in the buffer
-					if (!Endianness::IsBigEndian<T>()) for (Word i=0;i<(sizeof(T)/2);++i) std::swap(
-						end[i],
-						end[sizeof(T)-i-1]
-					);
+					//	If the system is big endian, we can
+					//	copy directly, otherwise reverse
+					//	byte order as we copy
+					if (Endianness::IsBigEndian<T>()) std::memcpy(end,&obj,sizeof(T));
+					else for (Word i=0;i<sizeof(T);++i) end[i]=reinterpret_cast<const Byte *>(
+						reinterpret_cast<const void *>(
+							&obj
+						)
+					)[sizeof(T)-i-1];
 					
 					//	Set buffer count
 					buffer.SetCount(buffer.Count()+sizeof(T));
@@ -887,7 +982,7 @@ namespace MCPP {
 			public:
 			
 			
-				constexpr static Word Size (const JSON::Value &) {
+				constexpr static Word Size (const JSON::Value &) noexcept {
 				
 					//	This is unknowable without actually
 					//	serializing
@@ -928,10 +1023,10 @@ namespace MCPP {
 			public:
 			
 			
-				constexpr static Word Size (ProtocolState) {
+				constexpr static Word Size (ProtocolState) noexcept {
 				
 					//	Only ever 1 byte
-					return 0;
+					return 1;
 				
 				}
 				
@@ -1181,6 +1276,272 @@ namespace MCPP {
 				
 				}
 			
+		
+		};
+		
+		
+		template <>
+		class Serializer<Variant<Int32,Tuple<Int32,Int16,Int16,Int16>>> {
+		
+		
+			private:
+			
+			
+				typedef Tuple<Int32,Int16,Int16,Int16> inner;
+				typedef Variant<Int32,inner> type;
+		
+		
+			public:
+			
+			
+				static Word Size (const type & obj) {
+				
+					if (obj.Is<Int32>()) return Serializer<Int32>::Size(obj.Get<Int32>());
+					
+					return Serializer<inner>::Size(obj.Get<inner>());
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Always begins with a 32-bit
+					//	signed integer
+					auto leading=Deserialize<Int32>(begin,end);
+					
+					//	If it's zero, nothing follows
+					if (leading==0) {
+					
+						new (ptr) type (leading);
+						
+						return;
+					
+					}
+					
+					//	Otherwise a tuple follows
+					
+					new (ptr) type ();
+					type & obj=*reinterpret_cast<type *>(ptr);
+					
+					//	We're responsible for the lifetime
+					//	of the variant
+					try {
+					
+						obj.Construct<inner>();
+						auto & t=obj.Get<inner>();
+						
+						t.Item<0>()=leading;
+						t.Item<1>()=Deserialize<Int16>(begin,end);
+						t.Item<2>()=Deserialize<Int16>(begin,end);
+						t.Item<3>()=Deserialize<Int16>(begin,end);
+					
+					} catch (...) {
+					
+						obj.~type();
+						
+						throw;
+					
+					}
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const type & obj) {
+				
+					//	Get/send the leading integer
+				
+					auto leading=obj.Is<Int32>() ? obj.Get<Int32>() : obj.Get<inner>().Item<0>();
+					
+					Serializer<Int32>::ToBytes(buffer,leading);
+					
+					if (leading==0) return;
+					
+					//	If the leading integer is not
+					//	zero, we must send a tuple
+					//	regardless of the in memory
+					//	structure
+					
+					Tuple<Int16,Int16,Int16> t(0,0,0);
+					
+					if (obj.Is<inner>()) {
+					
+						auto & i=obj.Get<inner>();
+						
+						t.Item<0>()=i.Item<1>();
+						t.Item<1>()=i.Item<2>();
+						t.Item<2>()=i.Item<3>();
+					
+					}
+					
+					Serializer<decltype(t)>::ToBytes(buffer,t);
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
+		class Serializer<Metadata> {
+		
+		
+			private:
+			
+			
+				typedef Metadata::value_type::second_type inner;
+				typedef Tuple<Int32,Int32,Int32> coord;
+		
+		
+			public:
+			
+			
+				constexpr static Word Size () noexcept {
+				
+					//	Too expensive to calculate, just
+					//	return zero
+					return 0;
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					new (ptr) Metadata ();
+					Metadata & dict=*reinterpret_cast<Metadata *>(ptr);
+					
+					//	We're responsible for this
+					//	object's lifetime
+					try {
+					
+						//	Parse until 127 is read
+						Byte b;
+						while ((b=Deserialize<Byte>(begin,end))!=127) {
+						
+							//	Decompose byte
+							Byte key=b&31;
+							
+							//	If the key already exists in the
+							//	dictionary, bail out immediately
+							if (dict.count(key)!=0) BadFormat::Raise();
+							
+							Byte type=b&224;
+							
+							inner variant;
+							
+							switch (type) {
+							
+								//	Byte
+								case 0:
+									variant=Deserialize<Byte>(begin,end);
+									break;
+								//	Signed 16-bit integer
+								case 1:
+									variant=Deserialize<Int16>(begin,end);
+									break;
+								//	Signed 32-bit integer
+								case 2:
+									variant=Deserialize<Int32>(begin,end);
+									break;
+								//	Single-precision floating point number
+								case 3:
+									variant=Deserialize<Single>(begin,end);
+									break;
+								//	String
+								case 4:
+									variant=Deserialize<String>(begin,end);
+									break;
+								//	Slot data
+								case 5:break;
+								//	Coordinates
+								case 6:
+									variant=Deserialize<coord>(begin,end);
+									break;
+								default:
+									BadFormat::Raise();
+							
+							}
+							
+							dict.emplace(
+								key,
+								std::move(variant)
+							);
+						
+						}
+					
+					} catch (...) {
+					
+						dict.~Metadata();
+						
+						throw;
+					
+					}
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const Metadata & obj) {
+				
+					//	Loop over each pair
+					for (const auto & pair : obj) {
+					
+						auto & v=pair.second;
+					
+						if (
+							//	If the key is over 31, we can't
+							//	encode
+							(pair.first>31) ||
+							//	We have no way of representing
+							//	nulls
+							v.IsNull()
+						) BadFormat::Raise();
+						
+						//	Get the type of this object
+						Byte type=static_cast<Byte>(v.Type());
+						
+						//	Output key and type packed
+						//	into a single byte
+						Serializer<Byte>::ToBytes(buffer,pair.first|type);
+						
+						//	Serialize/get type
+						switch (type) {
+
+							//	Byte
+							case 0:
+								Serializer<Byte>::ToBytes(buffer,v.Get<Byte>());
+								break;
+							//	Signed 16-bit integer
+							case 1:
+								Serializer<Int16>::ToBytes(buffer,v.Get<Int16>());
+								break;
+							//	Signed 32-bit integer
+							case 2:
+								Serializer<Int32>::ToBytes(buffer,v.Get<Int32>());
+								break;
+							//	Single-precision floating point number
+							case 3:
+								Serializer<Single>::ToBytes(buffer,v.Get<Single>());
+								break;
+							//	String
+							case 4:
+								Serializer<String>::ToBytes(buffer,v.Get<String>());
+								break;
+							//	Slot data
+							case 5:break;
+							//	Coordinates
+							case 6:
+							default:
+								Serializer<coord>::ToBytes(buffer,v.Get<coord>());
+								break;
+						
+						}
+					
+					}
+					
+					//	Write a terminating 127 byte
+					Serializer<Byte>::ToBytes(buffer,127);
+				
+				}
+		
 		
 		};
 	
@@ -1480,6 +1841,322 @@ namespace MCPP {
 						Single Health;
 						Int16 Food;
 						Single Saturation;
+				
+				
+				};
+				
+				
+				class Respawn : public Base, public IDPacket<0x07> {
+				
+				
+					public:
+					
+					
+						Int32 Dimension;
+						Byte Difficulty;
+						Byte GameMode;
+				
+				
+				};
+				
+				
+				class PlayerPositionAndLook : public Base, public IDPacket<0x08> {
+				
+				
+					public:
+					
+					
+						Double X;
+						Double Y;
+						Double Z;
+						Single Yaw;
+						Single Pitch;
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class HeldItemChange : public Base, public IDPacket<0x09> {
+				
+				
+					public:
+					
+					
+						Byte Selected;
+				
+				
+				};
+				
+				
+				class UseBed : public Base, public IDPacket<0x0A> {
+				
+				
+					public:
+					
+					
+						Int32 EntityID;
+						Int32 X;
+						Byte Y;
+						Int32 Z;
+				
+				
+				};
+				
+				
+				class Animation : public Base, public IDPacket<0x0B> {
+				
+				
+					public:
+					
+					
+						Int32 EntityID;
+						Byte AnimationID;
+				
+				
+				};
+				
+				
+				class SpawnPlayer : public Base, public IDPacket<0x0C> {
+				
+				
+					public:
+					
+					
+						UInt32 EntityID;
+						String UUID;
+						String Name;
+						Int32 X;
+						Int32 Y;
+						Int32 Z;
+						Single Yaw;
+						Single Pitch;
+						Int16 CurrentItem;
+				
+				
+				};
+				
+				
+				class CollectItem : public Base, public IDPacket<0x0D> {
+				
+				
+					public:
+					
+					
+						Int32 Collected;
+						Int32 Collector;
+				
+				
+				};
+				
+				
+				class SpawnObject : public Base, public IDPacket<0x0E> {
+				
+				
+					public:
+					
+					
+						UInt32 EntityID;
+						Byte Type;
+						Int32 X;
+						Int32 Y;
+						Int32 Z;
+						Byte Pitch;
+						Byte Yaw;
+						Variant<
+							Int32,
+							Tuple<Int32,Int16,Int16,Int16>
+						> Data;
+				
+				
+				};
+			
+			
+			}
+		
+		
+		}
+	
+	
+		namespace Status {
+		
+		
+			namespace Clientbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public STPacket, public CBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class Response : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						JSON::Value Value;
+				
+				
+				};
+				
+				
+				class Ping : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						Int64 Time;
+				
+				
+				};
+			
+			
+			}
+			
+			
+			namespace Serverbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public STPacket, public SBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class Request : public Base, public IDPacket<0x00> {	};
+				
+				
+				class Ping : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						Int64 Time;
+				
+				
+				};
+			
+			
+			}
+		
+		
+		}
+		
+		
+		namespace Login {
+		
+		
+			namespace Clientbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public LIPacket, public CBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class Disconnect : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						JSON::Value Value;
+				
+				
+				};
+				
+				
+				class EncryptionResponse : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						String ServerID;
+						Vector<Byte> PublicKey;
+						Vector<Byte> VerifyToken;
+				
+				
+				};
+				
+				
+				class LoginSuccess : public Base, public IDPacket<0x02> {
+				
+				
+					public:
+					
+					
+						String UUID;
+				
+				
+				};
+			
+			
+			}
+			
+			
+			namespace Serverbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public LIPacket, public CBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class LoginStart : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						String Name;
+				
+				
+				};
+				
+				
+				class EncryptionRequest : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						Vector<Byte> PublicKey;
+						Vector<Byte> VerifyToken;
 				
 				
 				};
