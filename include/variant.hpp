@@ -245,11 +245,20 @@ namespace MCPP {
 	 *	\endcond
 	 */
 	 
-	 
+	
+	/**
+	 *	Thrown when an illegal operation
+	 *	is undertaken on a Variant.
+	 */
 	class BadVariantOperation : public std::exception {
 	
 	
 		public:
+		
+		
+			/**
+			 *	\cond
+			 */
 		
 		
 			__attribute__((noreturn))
@@ -258,11 +267,27 @@ namespace MCPP {
 				throw BadVariantOperation();
 			
 			}
+			
+			
+			/**
+			 *	\endcond
+			 */
 	
 	
 	};
 	
 	
+	/**
+	 *	An object which may be imbued with
+	 *	any one of a number of types.
+	 *
+	 *	This object does not use or allocate
+	 *	heap memory for internal storage
+	 *	of stored objects, rather it contains
+	 *	an internal buffer with the necessary
+	 *	size and alignment to contain any
+	 *	of its possible types.
+	 */
 	template <typename... Args>
 	class Variant {
 	
@@ -526,9 +551,23 @@ namespace MCPP {
 		public:
 		
 		
+			/**
+			 *	Creates an empty Variant.
+			 */
 			Variant () noexcept : engaged(false) {	}
 			
 			
+			/**
+			 *	Creates a variant by moving another
+			 *	Variant.
+			 *
+			 *	\except BadVariantOperation
+			 *		Thrown if \em other is currently
+			 *		of a type which cannot be moved.
+			 *
+			 *	\param [in] other
+			 *		The Variant to move.
+			 */
 			Variant (Variant && other) noexcept(
 				info::NoThrowMovable
 			) : engaged(false) {
@@ -538,6 +577,17 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Creates a variant by copying another
+			 *	Variant.
+			 *
+			 *	\except BadVariantOperation
+			 *		Thrown if \em other is currently
+			 *		of a type which cannot be copied.
+			 *
+			 *	\param [in] other
+			 *		The Variant to copy.
+			 */
 			Variant (const Variant & other) noexcept(
 				info::NoThrowCopyable
 			) : engaged(false) {
@@ -547,6 +597,14 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Creates a variant by imbuing it with a
+			 *	certain object of a type which it may
+			 *	contain.
+			 *
+			 *	\param [in] item
+			 *		The object to create this Variant from.
+			 */
 			template <typename T>
 			Variant (T && item) noexcept(
 				info::NoThrowMovable && info::NoThrowCopyable
@@ -557,6 +615,21 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Assigns an item or another Variant to
+			 *	this object.
+			 *
+			 *	\except BadVariantOperation
+			 *		Thrown if \em item is a Variant, and
+			 *		the object within that Variant cannot
+			 *		be copied or moved (as applicable).
+			 *
+			 *	\param [in] item
+			 *		The item to assign to this Variant.
+			 *
+			 *	\return
+			 *		A reference to this Variant.
+			 */
 			template <typename T>
 			Variant & operator = (T && item) noexcept(
 				info::NoThrowMovable && info::NoThrowCopyable
@@ -589,6 +662,10 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Destroys this Variant and any object
+			 *	contained within.
+			 */
 			~Variant () noexcept {
 			
 				destroy();
@@ -596,6 +673,9 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Destroys the object within this Variant.
+			 */
 			void Destroy () noexcept {
 			
 				destroy();
@@ -603,6 +683,14 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Determines whether or not this Variant
+			 *	currently contains an object.
+			 *
+			 *	\return
+			 *		\em true if this Variant does not
+			 *		contain an object, \em false otherwise.
+			 */
 			bool IsNull () const noexcept {
 			
 				return !engaged;
@@ -610,6 +698,18 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Determines whether this Variant currently
+			 *	contains an object of type \em T.
+			 *
+			 *	\tparam T
+			 *		The type-in-question.
+			 *
+			 *	\return
+			 *		\em true if this Variant contains an
+			 *		object of type \em T, \em false
+			 *		otherwise.
+			 */
 			template <typename T>
 			bool Is () const noexcept {
 			
@@ -618,6 +718,36 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Returns the zero-relative index of the
+			 *	type this Variant currently contains.
+			 *
+			 *	If this Variant is empty, the behaviour
+			 *	of this function is undefined.
+			 *
+			 *	\return
+			 *		The zero-relative index of the type
+			 *		this Variant currently contains.
+			 */
+			Word Type () const noexcept {
+			
+				return active;
+			
+			}
+			
+			
+			/**
+			 *	Gets a reference to the object contained
+			 *	within the variant.
+			 *
+			 *	If the Variant is empty, or does not contain
+			 *	an object of type \em T, the behaviour of
+			 *	this function is undefined.
+			 *
+			 *	\return
+			 *		A reference to the object stored within
+			 *		this Variant.
+			 */
 			template <typename T>
 			T & Get () noexcept {
 			
@@ -626,6 +756,18 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Gets a reference to the object contained
+			 *	within the variant.
+			 *
+			 *	If the Variant is empty, or does not contain
+			 *	an object of type \em T, the behaviour of
+			 *	this function is undefined.
+			 *
+			 *	\return
+			 *		A reference to the object stored within
+			 *		this Variant.
+			 */
 			template <typename T>
 			const T & Get () const noexcept {
 			
