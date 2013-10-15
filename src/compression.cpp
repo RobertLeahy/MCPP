@@ -184,7 +184,13 @@ namespace MCPP {
 					if (result==Z_STREAM_END) break;
 					
 					//	Does the buffer need to be bigger?
-					if (result==Z_BUF_ERROR) {
+					if (
+						(result==Z_OK) ||
+						(
+							(result==Z_BUF_ERROR) &&
+							(stream.avail_out==0)
+						)
+					) {
 
 						buffer->SetCapacity();
 						
