@@ -7,6 +7,8 @@
 
 
 #include <rleahylib/rleahylib.hpp>
+#include <compression.hpp>
+#include <nbt.hpp>
 #include <json.hpp>
 #include <traits.hpp>
 #include <cstddef>
@@ -79,7 +81,22 @@ namespace MCPP {
 	};
 	
 	
-	typedef std::unordered_map<Byte,Variant<Byte,Int16,Int32,Single,String,Tuple<Int32,Int32,Int32>>> Metadata;
+	class Slot {
+	
+	
+		public:
+		
+		
+			Int16 ItemID;
+			Byte Count;
+			Int16 Damage;
+			NBT::NamedTag Data;
+	
+	
+	};
+	
+	
+	typedef std::unordered_map<Byte,Variant<Byte,Int16,Int32,Single,String,Nullable<Slot>,Tuple<Int32,Int32,Int32>>> Metadata;
 	
 	
 	class Packet {
@@ -338,7 +355,7 @@ namespace MCPP {
 		template <> class PacketMap<PL,CB,0x01> : public PacketType<Int32,Byte,SByte,Byte,Byte> {	};
 		template <> class PacketMap<PL,CB,0x02> : public PacketType<JSON::Value> {	};
 		template <> class PacketMap<PL,CB,0x03> : public PacketType<Int64,Int64> {	};
-		template <> class PacketMap<PL,CB,0x04> : public PacketType<Int32,Int16,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,CB,0x04> : public PacketType<Int32,Int16,Nullable<Slot>> {	};
 		template <> class PacketMap<PL,CB,0x05> : public PacketType<Int32,Int32,Int32> {	};
 		template <> class PacketMap<PL,CB,0x06> : public PacketType<Single,Int16,Single> {	};
 		template <> class PacketMap<PL,CB,0x07> : public PacketType<Int32,Byte,Byte> {	};
@@ -1382,6 +1399,208 @@ namespace MCPP {
 		
 		
 		template <>
+		class Serializer<NBT::NamedTag> {
+		
+		
+			private:
+			
+			
+				//	Maximum recursive depth to which the
+				//	NBT parser will descend.
+				constexpr static Word max_recursion=10;
+		
+		
+			public:
+			
+			
+				constexpr static Word Size (const NBT::NamedTag &) noexcept {
+				
+					//	We'd have to parse out the whole
+					//	thing and compress it -- just return
+					//	zero
+					return 0;
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Read length
+					auto len=Deserialize<Int16>(begin,end);
+					
+					//	Is there NBT data to read?
+					if (len<0) {
+					
+						//	NO
+						
+						new (ptr) NBT::NamedTag ();
+						
+						return;
+					
+					}
+					
+					//	YES
+					
+					//	Is there a sufficient number of bytes?
+					if ((end-begin)<len) InsufficientBytes::Raise();
+					
+					//	Decompress and parse
+					
+					auto decompressed=Inflate(begin,begin+len);
+					
+					const Byte * nbt_begin=decompressed.begin();
+					
+					new (ptr) NBT::NamedTag (
+						NBT::Parse(
+							nbt_begin,
+							decompressed.end(),
+							max_recursion
+						)
+					);
+					
+					//	Advance pointer
+					begin+=len;
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const NBT::NamedTag & obj) {
+				
+					//	If there's no data, we just write out
+					//	-1 as the length and bail out
+					if (obj.Payload.IsNull()) {
+					
+						Serializer<Int16>::ToBytes(buffer,-1);
+						
+						return;
+					
+					}
+					
+					//	There's NBT data to write
+					
+					Int16 size;
+					
+					//	Make enough space for the size
+					//	(since it's unknown at the present
+					//	time we'll add it after serializing
+					//	and compressing)
+					while ((buffer.Capacity()-buffer.Count())<Serializer<Int16>::Size(size)) buffer.SetCapacity();
+					//	Record position so we can come back
+					//	here after serializing and compressing
+					Word size_pos=buffer.Count();
+					//	Advance position
+					buffer.SetCount(buffer.Count()+Serializer<Int16>::Size(size));
+					//	Record start of NBT for size calculation
+					Word nbt_start=buffer.Count();
+					
+					//	Serialize
+					auto nbt=NBT::Serialize(obj);
+					
+					//	Compress (GZip)
+					Deflate(nbt.begin(),nbt.end(),&buffer,true);
+					
+					//	Output size
+					size=Int16(SafeWord(buffer.Count()-nbt_start));
+					Word nbt_end=buffer.Count();
+					buffer.SetCount(size_pos);
+					Serializer<Int16>::ToBytes(buffer,size);
+					buffer.SetCount(nbt_end);
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
+		class Serializer<Nullable<Slot>> {
+		
+		
+			public:
+			
+			
+				static Word Size (const Nullable<Slot> & obj) {
+				
+					if (obj.IsNull()) return Serializer<Int16>::Size(-1);
+					
+					SafeWord size(Serializer<Int16>::Size(obj->ItemID));
+					size+=Serializer<Byte>::Size(obj->Count);
+					size+=Serializer<Int16>::Size(obj->Damage);
+					
+					//	Don't bother with the NBT, we'd
+					//	have to serialize and compress it,
+					//	too expensive
+					
+					return Word(size);
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Get the item ID
+					auto id=Deserialize<Int16>(begin,end);
+					
+					//	Initialize item nulled
+					new (ptr) Nullable<Slot> ();
+					
+					//	If the item ID is negative,
+					//	there's no slot data
+					if (id<0) return;
+					
+					auto & slot=*reinterpret_cast<Nullable<Slot> *>(ptr);
+					
+					//	We're responsible for the
+					//	above placement new constructed
+					//	object's lifetime
+					try {
+					
+						//	Default construct the slot
+						//	object
+						slot.Construct();
+						
+						slot->ItemID=id;
+						slot->Count=Deserialize<Byte>(begin,end);
+						slot->Damage=Deserialize<Int16>(begin,end);
+						slot->Data=Deserialize<NBT::NamedTag>(begin,end);
+					
+					} catch (...) {
+					
+						slot.~Nullable<Slot>();
+						
+						throw;
+					
+					}
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const Nullable<Slot> & obj) {
+				
+					//	If the slot is null, just write -1
+					//	and bail out
+					if (obj.IsNull()) {
+					
+						Serializer<Int16>::ToBytes(buffer,-1);
+						
+						return;
+					
+					}
+					
+					//	Otherwise we have to write out the
+					//	whole object
+					Serializer<Int16>::ToBytes(buffer,obj->ItemID);
+					Serializer<Byte>::ToBytes(buffer,obj->Count);
+					Serializer<Int16>::ToBytes(buffer,obj->Damage);
+					Serializer<NBT::NamedTag>::ToBytes(buffer,obj->Data);
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
 		class Serializer<Metadata> {
 		
 		
@@ -1451,7 +1670,10 @@ namespace MCPP {
 									variant=Deserialize<String>(begin,end);
 									break;
 								//	Slot data
-								case 5:break;
+								case 5:
+									variant=Deserialize<Nullable<Slot>>(begin,end);
+									break;
+								break;
 								//	Coordinates
 								case 6:
 									variant=Deserialize<coord>(begin,end);
@@ -1526,7 +1748,9 @@ namespace MCPP {
 								Serializer<String>::ToBytes(buffer,v.Get<String>());
 								break;
 							//	Slot data
-							case 5:break;
+							case 5:
+								Serializer<Nullable<Slot>>::ToBytes(buffer,v.Get<Nullable<Slot>>());
+								break;
 							//	Coordinates
 							case 6:
 							default:
@@ -1813,6 +2037,8 @@ namespace MCPP {
 					
 					
 						Int32 EntityID;
+						Int16 EquipmentSlot;
+						Nullable<Slot> Data;
 				
 				
 				};
