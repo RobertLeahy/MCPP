@@ -29,7 +29,6 @@ obj/concurrency_manager.o \
 obj/hardware_concurrency.o \
 obj/http_handler.o \
 obj/http_request.o \
-obj/metadata.o \
 obj/mod.o \
 obj/mod_loader.o \
 obj/multi_scope_guard.o \
