@@ -23,82 +23,161 @@
 namespace MCPP {
 
 
+	/**
+	 *	Thrown when a packet contains incorrectly
+	 *	formatted data.
+	 */
 	class BadFormat : public std::exception {
 	
 	
 		public:
 		
 		
+			/**
+			 *	\cond
+			 */
+		
+		
 			[[noreturn]]
 			static void Raise ();
+			
+			
+			/**
+			 *	\endcond
+			 */
 	
 	
 	};
 	
 	
+	/**
+	 *	Thrown when insufficient bytes
+	 *	are provided to deserialize a
+	 *	packet.
+	 *
+	 *	Represents a corrupted/bad length
+	 *	header.
+	 */
 	class InsufficientBytes : public std::exception {
 	
 	
 		public:
 		
 		
+			/**
+			 *	\cond
+			 */
+		
+		
 			[[noreturn]]
 			static void Raise ();
+			
+			
+			/**
+			 *	\endcond
+			 */
 	
 	
 	};
 	
 	
+	/**
+	 *	Thrown when a bad packet ID is
+	 *	detected.
+	 */
 	class BadPacketID : public std::exception {
 	
 	
 		public:
 		
 		
+			/**
+			 *	\cond
+			 */
+		
+		
 			[[noreturn]]
 			static void Raise ();
+			
+			
+			/**
+			 *	\endcond
+			 */
 	
 	
 	};
 
 
+	/**
+	 *	Represents the states that the protocol
+	 *	may be in.
+	 */
 	enum class ProtocolState {
 	
-		Handshaking,
-		Play,
-		Status,
-		Login
+		Handshaking,	/**<	The client has just connected, and must specify which state it wishes to transition to.	*/
+		Play,			/**<	The client is in game.	*/
+		Status,			/**<	The client is requesting server status.	*/
+		Login			/**<	The client is logging in.	*/
 	
 	};
 	
 	
+	/**
+	 *	Represents the direction that the protocol
+	 *	may travel in.
+	 */
 	enum class ProtocolDirection {
 	
-		Clientbound,
-		Serverbound,
-		Both
+		Clientbound,	/**<	Server to client.	*/
+		Serverbound,	/**<	Client to server.	*/
+		Both			/**<	Server to client and client to server.	*/
 	
 	};
 	
 	
+	/**
+	 *	Contains data about an item.
+	 */
 	class Slot {
 	
 	
 		public:
 		
 		
+			/**
+			 *	The ID of the item.
+			 */
 			Int16 ItemID;
+			/**
+			 *	The number of the item in
+			 *	this stack.
+			 */
 			Byte Count;
+			/**
+			 *	The damage value of the item.
+			 */
 			Int16 Damage;
+			/**
+			 *	Any NBT data associated with the
+			 *	item.
+			 */
 			NBT::NamedTag Data;
 	
 	
 	};
 	
 	
+	/**
+	 *	A type which may contain entity
+	 *	metadata.
+	 */
 	typedef std::unordered_map<Byte,Variant<Byte,Int16,Int32,Single,String,Nullable<Slot>,Tuple<Int32,Int32,Int32>>> Metadata;
 	
 	
+	/**
+	 *	The base class from which all packets
+	 *	are derived.
+	 */
 	class Packet {
 	
 	
@@ -120,9 +199,27 @@ namespace MCPP {
 			Packet () = delete;
 		
 		
+			/**
+			 *	The ID of this packet.
+			 */
 			UInt32 ID;
 			
 			
+			/**
+			 *	Retrieves a reference to a particular
+			 *	kind of packet.
+			 *
+			 *	If the packet being retrieved does not
+			 *	have the ID given by ID, the behaviour
+			 *	of this function is undefined.
+			 *
+			 *	\tparam T
+			 *		The type of the packet to retrieve.
+			 *
+			 *	\return
+			 *		A reference to a packet of type
+			 *		\em T.
+			 */
 			template <typename T>
 			typename std::enable_if<
 				std::is_base_of<Packet,T>::value,
@@ -138,6 +235,21 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Retrieves a reference to a particular
+			 *	kind of packet.
+			 *
+			 *	If the packet being retrieved does not
+			 *	have the ID given by ID, the behaviour
+			 *	of this function is undefined.
+			 *
+			 *	\tparam T
+			 *		The type of the packet to retrieve.
+			 *
+			 *	\return
+			 *		A reference to a packet of type
+			 *		\em T.
+			 */
 			template <typename T>
 			const typename std::enable_if<
 				std::is_base_of<Packet,T>::value,
@@ -1777,7 +1889,10 @@ namespace MCPP {
 	 *	\endcond
 	 */
 	 
-	 
+	
+	/**
+	 *	Parses packets from a buffer of bytes.
+	 */
 	class PacketParser {
 	
 	
@@ -1792,13 +1907,67 @@ namespace MCPP {
 		public:
 		
 		
+			/**
+			 *	Creates a new packet parser.
+			 */
 			PacketParser () noexcept;
 		
 		
+			/**
+			 *	Attempts to construct a packet from
+			 *	a buffer of bytes.
+			 *
+			 *	\param [in,out] buffer
+			 *		A buffer of bytes.  Consumed bytes
+			 *		will be removed.
+			 *	\param [in] state
+			 *		The current state of the protocol.
+			 *	\param [in] direction
+			 *		The direction of the buffer of bytes
+			 *		to parse.
+			 *
+			 *	\return
+			 *		\em true if a packet was parsed,
+			 *		\em false otherwise.  Whether \em true
+			 *		or \em false is returned, \em buffer
+			 *		may have been altered.
+			 */
 			bool FromBytes (Vector<Byte> & buffer, ProtocolState state, ProtocolDirection direction);
 			
 			
+			/**
+			 *	Returns a reference to the internally
+			 *	allocated packet.
+			 *
+			 *	The reference returned by this function
+			 *	always refers to the internally allocated
+			 *	packet, therefore accessing it, and calling
+			 *	this function, is only defined while this
+			 *	object exists, and after a call to FromBytes
+			 *	returns \em true, and before a subsequenc call
+			 *	to FromBytes.
+			 *
+			 *	\return
+			 *		A reference to an internally allocated
+			 *		packet.
+			 */
 			Packet & Get () noexcept;
+			/**
+			 *	Returns a reference to the internally
+			 *	allocated packet.
+			 *
+			 *	The reference returned by this function
+			 *	always refers to the internally allocated
+			 *	packet, therefore accessing it, and calling
+			 *	this function, is only defined while this
+			 *	object exists, and after a call to FromBytes
+			 *	returns \em true, and before a subsequenc call
+			 *	to FromBytes.
+			 *
+			 *	\return
+			 *		A reference to an internally allocated
+			 *		packet.
+			 */
 			const Packet & Get () const noexcept;
 	
 	
@@ -2477,6 +2646,20 @@ namespace MCPP {
 	 */
 	
 	
+	/**
+	 *	Serializes a packet to bytes.
+	 *
+	 *	\tparam T
+	 *		The type of packet to serialize.
+	 *
+	 *	\param [in] packet
+	 *		The packet to serialize.
+	 *
+	 *	\return
+	 *		A buffer of bytes containing the
+	 *		Minecraft protocol representation
+	 *		of \em packet.
+	 */
 	template <typename T>
 	typename std::enable_if<
 		PacketImpl::PacketMap<T::State,T::Direction,T::PacketID>::Count!=0,
