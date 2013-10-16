@@ -2489,8 +2489,12 @@ namespace MCPP {
 		typedef Serializer<VarInt<UInt32>> serializer;
 		
 		const void * ptr=&packet;
+		
+		//	Get the ID of this packet
 		const VarInt<UInt32> & id=*reinterpret_cast<const VarInt<UInt32> *>(ptr);
 		
+		//	Obtain a buffer reasonably sized
+		//	for the packet-in-question
 		Vector<Byte> buffer(
 			Word(
 				SafeWord(SizeImpl<0,type>(ptr))+
@@ -2498,36 +2502,51 @@ namespace MCPP {
 			)
 		);
 		
+		//	Place the ID in the buffer
 		serializer::ToBytes(buffer,id);
 		
+		//	Place all elements in the buffer
 		SerializeImpl<0,type>(buffer,ptr);
 		
+		//	Get the length of the buffer,
+		//	for the length header
 		UInt32 len=UInt32(
 			SafeWord(
 				buffer.Count()
 			)
 		);
 		
-		Word final_len=Word(
-			SafeWord(serializer::Size(len))+
+		//	Determine how many bytes it will
+		//	take to serialize this length
+		Word len_len=serializer::Size(len);
+		
+		//	Calculate final size of the buffer
+		Word final_count=Word(
+			SafeWord(len_len)+
 			SafeWord(buffer.Count())
 		);
 		
-		Vector<Byte> retr(final_len);
+		//	Make sure there's enough
+		//	space for that plus the payload
+		//	in the buffer
+		buffer.SetCapacity(final_count);
 		
-		serializer::ToBytes(retr,len);
-		
-		Word len_count=retr.Count();
-		
-		std::memcpy(
-			retr.end(),
+		//	Move the contents of the buffer
+		//	backwards to make space for the
+		//	length header at the beginning
+		std::memmove(
+			buffer.begin()+len_len,
 			buffer.begin(),
 			buffer.Count()
 		);
 		
-		retr.SetCount(len_count+buffer.Count());
+		//	Serialize the length header to
+		//	the beginning of the buffer
+		buffer.SetCount(0);
+		serializer::ToBytes(buffer,len);
+		buffer.SetCount(final_count);
 		
-		return retr;
+		return buffer;
 	
 	}
 
