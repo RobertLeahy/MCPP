@@ -2661,10 +2661,7 @@ namespace MCPP {
 	 *		of \em packet.
 	 */
 	template <typename T>
-	typename std::enable_if<
-		PacketImpl::PacketMap<T::State,T::Direction,T::PacketID>::Count!=0,
-		Vector<Byte>
-	>::type Serialize (const T & packet) {
+	Vector<Byte> Serialize (const T & packet) {
 	
 		using namespace PacketImpl;
 	
