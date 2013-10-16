@@ -29,7 +29,7 @@ namespace MCPP {
 		public:
 		
 		
-			__attribute__((noreturn))
+			[[noreturn]]
 			static void Raise ();
 	
 	
@@ -42,7 +42,7 @@ namespace MCPP {
 		public:
 		
 		
-			__attribute__((noreturn))
+			[[noreturn]]
 			static void Raise ();
 	
 	
@@ -55,7 +55,7 @@ namespace MCPP {
 		public:
 		
 		
-			__attribute__((noreturn))
+			[[noreturn]]
 			static void Raise ();
 	
 	

@@ -261,7 +261,7 @@ namespace MCPP {
 			 */
 		
 		
-			__attribute__((noreturn))
+			[[noreturn]]
 			static void Raise () {
 			
 				throw BadVariantOperation();
