@@ -3,7 +3,8 @@ SUFFIXES+=.mk
 
 OPTIMIZATION:=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG -fsanitize=address -fno-omit-frame-pointer
 #OPTIMIZATION=-O3 -march=native
-OPTS_SHARED:=-static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include -Dlinux -fPIC
+#-static-libgcc -static-libstdc++
+OPTS_SHARED:=-Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include -Dlinux -fPIC
 GPP:=g++ $(OPTS_SHARED) $(OPTIMIZATION)
 comma:=,
 LINK=-Wl,-rpath,'$$ORIGIN' -Wl,-rpath-link,bin -Wl,-rpath-link,bin/mods $(if $(1),-Wl$(comma)-soname$(comma)$(notdir $(1)))
