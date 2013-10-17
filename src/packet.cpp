@@ -74,22 +74,14 @@ namespace MCPP {
 		
 		Packet & PacketContainer::Get () noexcept {
 		
-			return *reinterpret_cast<Packet *>(
-				reinterpret_cast<void *>(
-					storage
-				)
-			);
+			return packet;
 		
 		}
 		
 		
 		const Packet & PacketContainer::Get () const noexcept {
 		
-			return *reinterpret_cast<const Packet *>(
-				reinterpret_cast<const void *>(
-					storage
-				)
-			);
+			return packet;
 		
 		}
 		

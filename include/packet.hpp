@@ -683,7 +683,10 @@ namespace MCPP {
 				destroy_type destroy;
 				from_bytes_type from_bytes;
 				bool engaged;
-				alignas(Packet) Byte storage [Largest];
+				union {
+					Byte storage [Largest];
+					Packet packet;
+				};
 				
 				
 				inline void destroy_impl () noexcept;
