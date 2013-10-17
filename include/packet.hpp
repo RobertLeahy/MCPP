@@ -675,9 +675,6 @@ namespace MCPP {
 			
 				typedef void (*destroy_type) (void *);
 				typedef void (*from_bytes_type) (const Byte * &, const Byte *, void *);
-		
-		
-			protected:
 			
 			
 				destroy_type destroy;
