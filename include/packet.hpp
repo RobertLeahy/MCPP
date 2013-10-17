@@ -934,42 +934,14 @@ namespace MCPP {
 					//	we didn't finish
 					if (!complete) InsufficientBytes::Raise();
 					
-					T final;
+					//	Convert bitwise representation over
+					//	to signed if necessary
+					union {
+						type built;
+						T final;
+					};
 					
-					//	If value is signed, use zig zag
-					//	encoding
-					if (is_signed) {
-					
-						//	Zero is always zero
-						if (value==0) {
-						
-							final=static_cast<T>(value);
-							
-						} else {
-						
-							final=static_cast<T>(value/2);
-						
-							if ((value%2)==1) {
-							
-								//	Value is negative
-								
-								final=(
-									(value==std::numeric_limits<type>::max())
-										?	std::numeric_limits<T>::min()
-										:	((final*-1)-1)
-								);
-							
-							}
-							
-						}
-					
-					//	If value is unsigned, just take
-					//	value as it is
-					} else {
-					
-						final=static_cast<T>(value);
-					
-					}
+					built=value;
 					
 					new (ptr) VarInt<T> (final);
 				
@@ -984,21 +956,6 @@ namespace MCPP {
 					};
 					
 					s_value=obj;
-					
-					//	Zig zag encode if value is
-					//	signed
-					if (is_signed) {
-					
-						//	Zero is left alone
-					
-						if (s_value<0) value=(
-							(s_value==std::numeric_limits<T>::min())
-								?	std::numeric_limits<type>::max()
-								:	((static_cast<type>(s_value*-1)*2)-1)
-						);
-						else if (s_value>0) value*=2;
-						
-					}
 					
 					do {
 					
