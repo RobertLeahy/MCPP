@@ -191,13 +191,19 @@ namespace MCPP {
 		typedef PacketMap<ps,pd,id> type;
 	
 		if ((ps==state) && (dir==pd) && (i==id)) {
-			
-			container.Imbue(
-				destroy<type>,
-				deserialize<type>
-			);
 		
-			return true;
+			if (type::IsValid) {
+			
+				container.Imbue(
+					destroy<type>,
+					deserialize<type>
+				);
+				
+				return true;
+				
+			}
+			
+			BadPacketID::Raise();
 		
 		}
 	

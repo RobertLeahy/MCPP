@@ -419,6 +419,9 @@ namespace MCPP {
 				
 				
 				constexpr static Word Size=sizeof(MimicLayout<sizeof...(Args),id_type,Args...>);
+				
+				
+				constexpr static bool IsValid=true;
 		
 		
 		};
@@ -438,7 +441,16 @@ namespace MCPP {
 		
 		
 		template <ProtocolState, ProtocolDirection, UInt32>
-		class PacketMap : public PacketType<> {	};
+		class PacketMap : public PacketType<> {
+		
+		
+			public:
+			
+			
+				constexpr static bool IsValid=false;
+		
+		
+		};
 		
 		
 		constexpr ProtocolState HS=ProtocolState::Handshaking;
@@ -2661,32 +2673,30 @@ namespace MCPP {
 	 *		of \em packet.
 	 */
 	template <typename T>
-	Vector<Byte> Serialize (const T & packet) {
+	typename std::enable_if<
+		PacketImpl::PacketMap<T::State,T::Direction,T::PacketID>::IsValid,
+		Vector<Byte>
+	>::type Serialize (const T & packet) {
 	
 		using namespace PacketImpl;
 	
 		typedef PacketMap<T::State,T::Direction,T::PacketID> type;
 		typedef Serializer<VarInt<UInt32>> serializer;
 		
-		const void * ptr=&packet;
-		
-		//	Get the ID of this packet
-		const VarInt<UInt32> & id=*reinterpret_cast<const VarInt<UInt32> *>(ptr);
-		
 		//	Obtain a buffer reasonably sized
 		//	for the packet-in-question
 		Vector<Byte> buffer(
 			Word(
-				SafeWord(SizeImpl<0,type>(ptr))+
-				SafeWord(serializer::Size(id))
+				SafeWord(SizeImpl<0,type>(&packet))+
+				SafeWord(serializer::Size(T::PacketID))
 			)
 		);
 		
 		//	Place the ID in the buffer
-		serializer::ToBytes(buffer,id);
+		serializer::ToBytes(buffer,T::PacketID);
 		
 		//	Place all elements in the buffer
-		SerializeImpl<0,type>(buffer,ptr);
+		SerializeImpl<0,type>(buffer,&packet);
 		
 		//	Get the length of the buffer,
 		//	for the length header
