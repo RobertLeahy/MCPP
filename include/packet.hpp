@@ -174,6 +174,9 @@ namespace MCPP {
 	typedef std::unordered_map<Byte,Variant<Byte,Int16,Int32,Single,String,Nullable<Slot>,Tuple<Int32,Int32,Int32>>> Metadata;
 	
 	
+	typedef Variant<Int32,Tuple<Int32,Int16,Int16,Int16>> ObjectData;
+	
+	
 	/**
 	 *	The base class from which all packets
 	 *	are derived.
@@ -489,7 +492,7 @@ namespace MCPP {
 		template <> class PacketMap<PL,CB,0x0B> : public PacketType<Int32,Byte> {	};
 		template <> class PacketMap<PL,CB,0x0C> : public PacketType<VarInt<UInt32>,String,String,Int32,Int32,Int32,SByte,SByte,Int16,PLACEHOLDER> {	};
 		template <> class PacketMap<PL,CB,0x0D> : public PacketType<Int32,Int32> {	};
-		template <> class PacketMap<PL,CB,0x0E> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,Variant<Int32,Tuple<Int32,Int16,Int16,Int16>>> {	};
+		template <> class PacketMap<PL,CB,0x0E> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,ObjectData> {	};
 		template <> class PacketMap<PL,CB,0x0F> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,SByte,Int16,Int16,Int16,Metadata> {	};
 		template <> class PacketMap<PL,CB,0x10> : public PacketType<VarInt<UInt32>,String,Int32,Int32,Int32,Int32> {	};
 		template <> class PacketMap<PL,CB,0x11> : public PacketType<VarInt<UInt32>,Int32,Int32,Int32,Int16> {	};
@@ -1379,20 +1382,19 @@ namespace MCPP {
 		
 		
 		template <>
-		class Serializer<Variant<Int32,Tuple<Int32,Int16,Int16,Int16>>> {
+		class Serializer<ObjectData> {
 		
 		
 			private:
 			
 			
 				typedef Tuple<Int32,Int16,Int16,Int16> inner;
-				typedef Variant<Int32,inner> type;
 		
 		
 			public:
 			
 			
-				static Word Size (const type & obj) {
+				static Word Size (const ObjectData & obj) {
 				
 					if (obj.Is<Int32>()) return Serializer<Int32>::Size(obj.Get<Int32>());
 					
@@ -1410,7 +1412,7 @@ namespace MCPP {
 					//	If it's zero, nothing follows
 					if (leading==0) {
 					
-						new (ptr) type (leading);
+						new (ptr) ObjectData (leading);
 						
 						return;
 					
@@ -1418,8 +1420,8 @@ namespace MCPP {
 					
 					//	Otherwise a tuple follows
 					
-					new (ptr) type ();
-					type & obj=*reinterpret_cast<type *>(ptr);
+					new (ptr) ObjectData ();
+					ObjectData & obj=*reinterpret_cast<ObjectData *>(ptr);
 					
 					//	We're responsible for the lifetime
 					//	of the variant
@@ -1435,7 +1437,7 @@ namespace MCPP {
 					
 					} catch (...) {
 					
-						obj.~type();
+						obj.~ObjectData();
 						
 						throw;
 					
@@ -1444,7 +1446,7 @@ namespace MCPP {
 				}
 				
 				
-				static void ToBytes (Vector<Byte> & buffer, const type & obj) {
+				static void ToBytes (Vector<Byte> & buffer, const ObjectData & obj) {
 				
 					//	Get/send the leading integer
 				
