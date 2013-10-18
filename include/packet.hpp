@@ -2698,6 +2698,74 @@ namespace MCPP {
 		return buffer;
 	
 	}
+	
+	
+	/**
+	 *	Generates a string representation of
+	 *	a packet.
+	 *
+	 *	\param [in] packet
+	 *		The packet to represent.
+	 *	\param [in] state
+	 *		The state \em packet requires
+	 *		the protocol to be in to be valid.
+	 *	\param [in] dir
+	 *		The direction the protocol may
+	 *		move in the protocol.
+	 *
+	 *	\return
+	 *		A string representation of
+	 *		\em packet.
+	 */
+	String ToString (const Packet & packet, ProtocolState state, ProtocolDirection dir);
+	/**
+	 *	Retrieves a string representation of
+	 *	a member of the ProtocolState
+	 *	enumeration.
+	 *
+	 *	\param [in] state
+	 *		A protocol state.
+	 *
+	 *	\return
+	 *		A string representation of \em state.
+	 */
+	const String & ToString (ProtocolState state);
+	/**
+	 *	Retrieves a string representation of
+	 *	a member of the ProtocolDirection
+	 *	enumeration.
+	 *
+	 *	\param [in] dir
+	 *		A protocol direction.
+	 *
+	 *	\return
+	 *		A string representation of \em dir.
+	 */
+	const String & ToString (ProtocolDirection dir);
+	/**
+	 *	Generates a string representation of a
+	 *	packet.
+	 *
+	 *	\tparam T
+	 *		The type of \em packet, which must
+	 *		derive from the Packet class.
+	 *
+	 *	\param [in] packet
+	 *		The packet of type \em T to
+	 *		represent.
+	 *
+	 *	\return
+	 *		A string representation of \em packet.
+	 */
+	template <typename T>
+	typename std::enable_if<
+		std::is_base_of<Packet,T>::value,
+		String
+	>::type ToString (const T & packet) {
+	
+		return ToString(packet,T::State,T::Direction);
+	
+	}
 
 
 }
