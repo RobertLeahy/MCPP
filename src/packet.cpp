@@ -206,7 +206,7 @@ namespace MCPP {
 	
 	template <ProtocolState ps, ProtocolDirection pd, UInt32 id>
 	static typename std::enable_if<
-		(ps==LI) && (pd==BO) && (id==Largest)
+		(ps==LI) && (pd==BO) && (id==LargestID)
 	>::type imbue_container (ProtocolState state, ProtocolDirection dir, UInt32 i, PacketContainer & container) {
 	
 		if (!check<ps,pd,id>(state,dir,i,container)) BadPacketID::Raise();
@@ -216,13 +216,13 @@ namespace MCPP {
 	
 	template <ProtocolState ps, ProtocolDirection pd, UInt32 id>
 	static typename std::enable_if<
-		!((ps==LI) && (pd==BO) && (id==Largest))
+		!((ps==LI) && (pd==BO) && (id==LargestID))
 	>::type imbue_container (ProtocolState state, ProtocolDirection dir, UInt32 i, PacketContainer & container) {
 	
 		if (!check<ps,pd,id>(state,dir,i,container)) imbue_container<
-			((pd==BO) && (id==Largest)) ? Next(ps) : ps,
-			(id==Largest) ? Next(pd) : pd,
-			(id==Largest) ? 0 : (id+1)
+			((pd==BO) && (id==LargestID)) ? Next(ps) : ps,
+			(id==LargestID) ? Next(pd) : pd,
+			(id==LargestID) ? 0 : (id+1)
 		>(state,dir,i,container);
 	
 	}
