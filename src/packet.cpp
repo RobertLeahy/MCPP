@@ -235,7 +235,6 @@ namespace MCPP {
 	
 		//	Prepare iterators for deserialization
 		const Byte * begin=buffer.begin();
-		const Byte * end=buffer.end();
 	
 		if (in_progress) {
 		
@@ -248,6 +247,11 @@ namespace MCPP {
 			
 				//	Sufficient bytes -- attempt to
 				//	deserialize packet
+				
+				//	Set the end pointer to the number
+				//	of bytes past the beginning specified
+				//	in the length header
+				auto end=begin+waiting_for;
 			
 				//	Get the ID
 				UInt32 id=Deserialize<PacketImpl::VarInt<UInt32>>(begin,end);
@@ -262,9 +266,7 @@ namespace MCPP {
 				//	Check to make sure we consumed
 				//	as many bytes as the length
 				//	header specified
-				Word consumed=static_cast<Word>(begin-buffer.begin());
-				
-				if (consumed!=waiting_for) BadFormat::Raise();
+				if (begin!=end) BadFormat::Raise();
 				
 				//	Put the ID in place
 				container.Get().ID=id;
@@ -276,7 +278,7 @@ namespace MCPP {
 				//	buffer
 				buffer.Delete(
 					0,
-					consumed
+					begin-buffer.begin()
 				);
 			
 			} else {
@@ -298,7 +300,7 @@ namespace MCPP {
 		try {
 		
 			//	Get the length header
-			waiting_for=Deserialize<PacketImpl::VarInt<UInt32>>(begin,end);
+			waiting_for=Deserialize<PacketImpl::VarInt<UInt32>>(begin,buffer.end());
 		
 		} catch (const InsufficientBytes &) {
 		
@@ -318,7 +320,7 @@ namespace MCPP {
 		//	the buffer
 		buffer.Delete(
 			0,
-			static_cast<Word>(begin-buffer.begin())
+			begin-buffer.begin()
 		);
 		
 		//	Recurse to see if we can parse the
