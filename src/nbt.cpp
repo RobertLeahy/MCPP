@@ -112,7 +112,10 @@ namespace NBT {
 	template <typename T>
 	T Parser::get () {
 	
-		alignas(T) Byte buffer [sizeof(T)];
+		union {
+			T retr;
+			Byte buffer [sizeof(T)];
+		};
 		
 		for (Word i=0;i<sizeof(T);++i) {
 		
@@ -127,11 +130,7 @@ namespace NBT {
 		
 		}
 		
-		return *reinterpret_cast<T *>(
-			reinterpret_cast<void *>(
-				buffer
-			)
-		);
+		return retr;
 	
 	}
 	
