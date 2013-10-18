@@ -35,7 +35,6 @@ namespace MCPP {	}
 #include <rsa_key.hpp>
 #include <compression.hpp>
 #include <client.hpp>
-#include <metadata.hpp>
 #include <packet.hpp>
 #include <packet_router.hpp>
 #include <typedefs.hpp>
