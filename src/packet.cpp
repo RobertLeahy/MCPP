@@ -16,7 +16,7 @@ namespace MCPP {
 	
 	void InsufficientBytes::Raise () {
 	
-		throw BadFormat();
+		throw InsufficientBytes();
 	
 	}
 	
