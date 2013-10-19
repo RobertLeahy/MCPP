@@ -486,11 +486,11 @@ namespace MCPP {
 		template <> class PacketMap<PL,CB,0x05> : public PacketType<Int32,Int32,Int32> {	};
 		template <> class PacketMap<PL,CB,0x06> : public PacketType<Single,Int16,Single> {	};
 		template <> class PacketMap<PL,CB,0x07> : public PacketType<Int32,Byte,Byte> {	};
-		template <> class PacketMap<PL,CB,0x08> : public PacketType<Int32,Int32,Int32,Single,Single,bool> {	};
+		template <> class PacketMap<PL,CB,0x08> : public PacketType<Double,Double,Double,Single,Single,bool> {	};
 		template <> class PacketMap<PL,CB,0x09> : public PacketType<Byte> {	};
 		template <> class PacketMap<PL,CB,0x0A> : public PacketType<Int32,Int32,Byte,Int32> {	};
-		template <> class PacketMap<PL,CB,0x0B> : public PacketType<Int32,Byte> {	};
-		template <> class PacketMap<PL,CB,0x0C> : public PacketType<VarInt<UInt32>,String,String,Int32,Int32,Int32,SByte,SByte,Int16,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,CB,0x0B> : public PacketType<VarInt<UInt32>,Byte> {	};
+		template <> class PacketMap<PL,CB,0x0C> : public PacketType<VarInt<UInt32>,String,String,Int32,Int32,Int32,SByte,SByte,Int16,Metadata> {	};
 		template <> class PacketMap<PL,CB,0x0D> : public PacketType<Int32,Int32> {	};
 		template <> class PacketMap<PL,CB,0x0E> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,ObjectData> {	};
 		template <> class PacketMap<PL,CB,0x0F> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,SByte,Int16,Int16,Int16,Metadata> {	};
@@ -506,11 +506,11 @@ namespace MCPP {
 		template <> class PacketMap<PL,CB,0x19> : public PacketType<Int32,SByte> {	};
 		template <> class PacketMap<PL,CB,0x1A> : public PacketType<Int32,Byte> {	};
 		template <> class PacketMap<PL,CB,0x1B> : public PacketType<Int32,Int32,bool> {	};
-		template <> class PacketMap<PL,CB,0x1C> : public PacketType<Int32,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,CB,0x1C> : public PacketType<Int32,Metadata> {	};
 		template <> class PacketMap<PL,CB,0x1D> : public PacketType<Int32,Byte,Byte,Int16> {	};
 		template <> class PacketMap<PL,CB,0x1E> : public PacketType<Int32,Byte> {	};
 		template <> class PacketMap<PL,CB,0x1F> : public PacketType<Single,Int16,Int16> {	};
-		//	0x20
+		template <> class PacketMap<PL,CB,0x20> : public PacketType<Int32,Array<Int32,Tuple<String,Double,Array<Int16,Tuple<UInt128,Double,Byte>>>>> {	};
 		template <> class PacketMap<PL,CB,0x21> : public PacketType<Int32,Int32,bool,UInt16,UInt16,Array<Int32,Byte>> {	};
 		//	0x22
 		template <> class PacketMap<PL,CB,0x23> : public PacketType<Int32,Byte,UInt32,VarInt<UInt32>,Byte> {	};
@@ -520,27 +520,28 @@ namespace MCPP {
 		template <> class PacketMap<PL,CB,0x27> : public PacketType<Single,Single,Single,Single,Array<Int32,Tuple<SByte,SByte,SByte>>,Single,Single,Single> {	};
 		template <> class PacketMap<PL,CB,0x28> : public PacketType<Int32,Int32,Byte,Int32,Int32,bool> {	};
 		template <> class PacketMap<PL,CB,0x29> : public PacketType<String,Int32,Int32,Int32,Single,Byte,Byte> {	};
-		template <> class PacketMap<PL,CB,0x2A> : public PacketType<Single,Single,Single,Single,Single,Single,Single,Single,Int32> {	};
+		template <> class PacketMap<PL,CB,0x2A> : public PacketType<String,Single,Single,Single,Single,Single,Single,Single,Int32> {	};
 		template <> class PacketMap<PL,CB,0x2B> : public PacketType<Byte,Single> {	};
 		template <> class PacketMap<PL,CB,0x2C> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32> {	};
 		template <> class PacketMap<PL,CB,0x2D> : public PacketType<Byte,Byte,String,Byte,bool,Int32> {	};
 		template <> class PacketMap<PL,CB,0x2E> : public PacketType<Byte> {	};
-		template <> class PacketMap<PL,CB,0x2F> : public PacketType<Byte,Int16,PLACEHOLDER> {	};
-		template <> class PacketMap<PL,CB,0x30> : public PacketType<Byte,Array<Int16,PLACEHOLDER>> {	};
+		template <> class PacketMap<PL,CB,0x2F> : public PacketType<Byte,Int16,Nullable<Slot>> {	};
+		template <> class PacketMap<PL,CB,0x30> : public PacketType<Byte,Array<Int16,Nullable<Slot>>> {	};
 		template <> class PacketMap<PL,CB,0x31> : public PacketType<Byte,Int16,Int16> {	};
 		template <> class PacketMap<PL,CB,0x32> : public PacketType<Byte,Int16,bool> {	};
 		template <> class PacketMap<PL,CB,0x33> : public PacketType<Int32,Int16,Int32,String,String,String,String> {	};
 		template <> class PacketMap<PL,CB,0x34> : public PacketType<VarInt<UInt32>,Array<Int16,Byte>> {	};
-		template <> class PacketMap<PL,CB,0x35> : public PacketType<Int32,Int16,Int32,Byte,Array<Int16,Byte>> {	};
+		template <> class PacketMap<PL,CB,0x35> : public PacketType<Int32,Int16,Int32,Byte,NBT::NamedTag> {	};
 		template <> class PacketMap<PL,CB,0x36> : public PacketType<Int32,Int32,Int32> {	};
-		template <> class PacketMap<PL,CB,0x37> : public PacketType<VarInt<UInt32>,Tuple<String,VarInt<UInt32>>> {	};
+		template <> class PacketMap<PL,CB,0x37> : public PacketType<Array<VarInt<UInt32>,Tuple<String,VarInt<UInt32>>>> {	};
 		template <> class PacketMap<PL,CB,0x38> : public PacketType<String,bool,Int16> {	};
 		template <> class PacketMap<PL,CB,0x39> : public PacketType<Byte,Single,Single> {	};
 		template <> class PacketMap<PL,CB,0x3A> : public PacketType<Array<VarInt<UInt32>,String>> {	};
 		template <> class PacketMap<PL,CB,0x3B> : public PacketType<String,String,Byte> {	};
 		template <> class PacketMap<PL,CB,0x3C> : public PacketType<String,Byte,String,Int32> {	};
 		template <> class PacketMap<PL,CB,0x3D> : public PacketType<Byte,String> {	};
-		template <> class PacketMap<PL,CB,0x3E> : public PacketType<String,Byte,String,String,String,Byte,Array<Int16,String>> {	};
+		//	Conditional parsing mess
+		//template <> class PacketMap<PL,CB,0x3E> : public PacketType<String,Byte,String,String,String,Byte,Array<Int16,String>> {	};
 		template <> class PacketMap<PL,CB,0x3F> : public PacketType<String,Array<Int16,Byte>> {	};
 		template <> class PacketMap<PL,CB,0x40> : public PacketType<String> {	};
 		
@@ -554,15 +555,15 @@ namespace MCPP {
 		template <> class PacketMap<PL,SB,0x05> : public PacketType<Single,Single,bool> {	};
 		template <> class PacketMap<PL,SB,0x06> : public PacketType<Double,Double,Double,Double,Single,Single,bool> {	};
 		template <> class PacketMap<PL,SB,0x07> : public PacketType<Byte,Int32,Byte,Int32,Byte> {	};
-		template <> class PacketMap<PL,SB,0x08> : public PacketType<Int32,Byte,Int32,SByte,PLACEHOLDER,SByte,SByte,SByte> {	};
+		template <> class PacketMap<PL,SB,0x08> : public PacketType<Int32,Byte,Int32,SByte,Nullable<Slot>,SByte,SByte,SByte> {	};
 		template <> class PacketMap<PL,SB,0x09> : public PacketType<Int16> {	};
 		template <> class PacketMap<PL,SB,0x0A> : public PacketType<Int32,Byte> {	};
 		template <> class PacketMap<PL,SB,0x0B> : public PacketType<Int32,Byte,Int32> {	};
 		template <> class PacketMap<PL,SB,0x0C> : public PacketType<Single,Single,bool,bool> {	};
 		template <> class PacketMap<PL,SB,0x0D> : public PacketType<Byte> {	};
-		template <> class PacketMap<PL,SB,0x0E> : public PacketType<Byte,Int16,Byte,Int16,Byte,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,SB,0x0E> : public PacketType<Byte,Int16,Byte,Int16,Byte,Nullable<Slot>> {	};
 		template <> class PacketMap<PL,SB,0x0F> : public PacketType<Byte,Int16,bool> {	};
-		template <> class PacketMap<PL,SB,0x10> : public PacketType<Int16,PLACEHOLDER> {	};
+		template <> class PacketMap<PL,SB,0x10> : public PacketType<Int16,Nullable<Slot>> {	};
 		template <> class PacketMap<PL,SB,0x11> : public PacketType<Byte,Byte> {	};
 		template <> class PacketMap<PL,SB,0x12> : public PacketType<Int32,Int16,Int32,String,String,String,String> {	};
 		template <> class PacketMap<PL,SB,0x13> : public PacketType<Byte,Single,Single> {	};

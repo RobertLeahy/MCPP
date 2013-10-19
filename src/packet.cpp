@@ -408,11 +408,11 @@ namespace MCPP {
 	}
 	
 	
-	/*static String print_type (const NBT::NamedTag &) {
+	static String print_type (const NBT::NamedTag &) {
 	
 		return "NBT";
 	
-	}*/
+	}
 	
 	
 	template <typename... Args>
