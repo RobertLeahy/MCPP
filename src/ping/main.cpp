@@ -1,5 +1,11 @@
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
+#include <json.hpp>
+#include <mod.hpp>
+#include <server.hpp>
 #include <utility>
+
+
+using namespace MCPP;
 
 
 static const String protocol_error("Protocol error");
@@ -30,81 +36,99 @@ class ServerListPing : public Module {
 		
 		virtual void Install () override {
 		
-			PacketHandler prev(std::move(Server::Get().Router[0xFE]));
-		
-			Server::Get().Router[0xFE]=[=] (SmartPointer<Client> client, Packet packet) {
+			//	Get a reference to the packet router
+			auto & router=Server::Get().Router;
 			
-				//	Is this client in the right state?
-				if (client->GetState()!=ClientState::Connected) {
+			//	Install handler for the status
+			//	request packet
+			router(0,ProtocolState::Status)=[] (ReceiveEvent event) {
+			
+				auto & server=Server::Get();
+			
+				//	Get list of players currently on-line
+				//	and number of players currently on-line
+				//	for the "players" JSON object
 				
-					//	Not for us, chain through if possible
-					if (prev) prev(
-						std::move(client),
-						std::move(packet)
-					);
-					//	Nothing to chain through to, kill the
-					//	client
-					else client->Disconnect(protocol_error);
+				JSON::Array arr;
+				Word player_count=0;
 				
-					return;
+				for (auto & client : server.Clients) {
 				
+					if (client->GetState()==ProtocolState::Play) {
+					
+						JSON::Object obj;		
+						obj.Add(
+							String("name"),client->GetUsername(),
+							String("id"),String()
+						);
+						
+						arr.Values.Add(std::move(obj));
+						
+						++player_count;
+						
+					}
+					
 				}
 				
-				//	Log the fact that the client
-				//	pinged
-				Server::Get().WriteLog(
-					String::Format(
-						ping_template,
-						client->IP(),
-						client->Port()
-					),
-					Service::LogType::Information
+				//	Determine maximum number of players
+				Word max_players=server.MaximumPlayers;
+				Double json_max_players=(max_players==0) ? std::numeric_limits<Double>::max() : Double(max_players);
+				
+				//	Create "players" object
+				JSON::Object players;
+				players.Add(
+					String("max"),json_max_players,
+					String("online"),Double(player_count),
+					String("sample"),std::move(arr)
 				);
 				
-				//	Make a version number string
-				String ver_num(MinecraftMajorVersion);
-				ver_num << "." << String(MinecraftMinorVersion);
-				if (MinecraftSubminorVersion!=0) ver_num << "." << String(MinecraftSubminorVersion);
+				//	Add "players" object to the
+				//	root object
+				JSON::Object root;
+				root.Add(
+					String("players"),std::move(players)
+				);
+				
+				//	Add "version" object
+				JSON::Object version;
+				version.Add(
+					String("name"),String("MCPP"),
+					String("protocol"),Double(1)
+				);
+				
+				root.Add(
+					String("version"),std::move(version)
+				);
+				
+				//	Add "description" object
+				JSON::Object description;
+				description.Add(
+					String("text"),server.GetMessageOfTheDay()
+				);
+				
+				root.Add(
+					String("description"),std::move(description)
+				);
+				
+				//	Create and send reply
+				Packets::Status::Clientbound::Response packet;
+				packet.Value=std::move(root);
+				
+				event.From->Send(packet);
 			
-				//	Prepare the packet
-				GraphemeCluster null_char('\0');
-				Packet reply;
-				reply.SetType<PacketTypeMap<0xFF>>();
-				reply.Retrieve<String>(0)	<< "§1"
-											<<	null_char
-											<<	String(ProtocolVersion)
-											<<	null_char
-											<<	ver_num
-											<<	null_char
-											<<	Server::Get().GetMessageOfTheDay()
-											<<	null_char
-											<<	String(Server::Get().Clients.AuthenticatedCount())
-											<<	null_char
-											<< 	String(
-													//	Minecraft client probably doesn't understand
-													//	that 0 max players = unlimited, so we
-													//	try and transform that into something the
-													//	Minecraft client can understand
-													(Server::Get().MaximumPlayers==0)
-															//	Which probably isn't this but at least
-															//	we tried...
-														?	std::numeric_limits<Word>::max()
-														:	Server::Get().MaximumPlayers
-												);
+			};
+			
+			//	Install handler for the ping request
+			router(1,ProtocolState::Status)=[] (ReceiveEvent event) {
+			
+				auto & packet=event.Data.Get<Packets::Status::Serverbound::Ping>();
 				
-				//	Send and attach
-				//	callback to disconnect
-				//	client after
-				//	the packet is on
-				//	the wire
-				client->Send(reply)->AddCallback([=] (SendState) mutable {	client->Disconnect();	});
-		
-				//	Chain to previous callback
-				//	if it exists
-				if (prev) prev(
-					std::move(client),
-					std::move(packet)
-				);
+				//	Just send the time right back
+				//	to the client
+				Packets::Status::Clientbound::Ping reply;
+				reply.Time=packet.Time;
+				
+				event.From->Send(reply);
 			
 			};
 		
@@ -114,36 +138,4 @@ class ServerListPing : public Module {
 };
 
 
-static Module * mod_ptr=nullptr;
-
-
-extern "C" {
-	
-	
-	Module * Load () {
-
-		try {
-		
-			if (mod_ptr==nullptr) mod_ptr=new ServerListPing();
-		
-		} catch (...) {	}
-		
-		return mod_ptr;
-	
-	}
-	
-	
-	void Unload () {
-	
-		if (mod_ptr!=nullptr) {
-		
-			delete mod_ptr;
-		
-			mod_ptr=nullptr;
-		
-		}
-	
-	}
-	
-	
-}
+INSTALL_MODULE(ServerListPing)

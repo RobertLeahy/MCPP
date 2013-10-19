@@ -35,8 +35,7 @@ namespace MCPP {
 
 	Server::Server () :
 		running(false),
-		data(nullptr),
-		Router(true)
+		data(nullptr)
 	{
 	
 		debug=false;
@@ -50,9 +49,15 @@ namespace MCPP {
 			
 				auto client=Clients[*conn];
 				
-				//	Loop while there's a packet to
-				//	extract
-				while (client->Receive(&buffer)) Router(client,client->CompleteReceive());
+				//	Loop while a packet can be
+				//	parsed
+				while (client->Receive(buffer)) Router(
+					{
+						client,
+						client->GetPacket()
+					},
+					client->GetState()
+				);
 				
 				//	Check buffer
 				//	if it's gotten bigger than
@@ -66,12 +71,6 @@ namespace MCPP {
 						(client->Count()>MaximumBytes)
 					)
 				) client->Disconnect(buffer_too_long);
-			
-			} catch (const std::exception & e) {
-			
-				conn->Disconnect(error_processing_recv);
-				
-				throw;
 			
 			} catch (...) {
 			

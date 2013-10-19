@@ -1,4 +1,7 @@
 #include <packet_router.hpp>
+#include <type_traits>
+#include <new>
+#include <utility>
 
 
 namespace MCPP {
@@ -7,29 +10,43 @@ namespace MCPP {
 	static const String packet_dne="Packet 0x{0} has no recognized handler";
 	
 	
+	template <typename T, Word n>
+	void init_array (T (& arr) [n]) noexcept(std::is_nothrow_constructible<T>::value) {
+	
+		for (auto & i : arr) new (&i) T ();
+	
+	}
+	
+	
+	template <typename T, Word n>
+	void destroy_array (T (& arr) [n]) noexcept {
+	
+		for (auto & i : arr) i.~T();
+	
+	}
+	
+	
 	inline void PacketRouter::destroy () noexcept {
 	
-		for (Word i=0;i<std::numeric_limits<Byte>::max();++i) {
-		
-			routes[i].~PacketHandler();
-		
-		}
+		destroy_array(play_routes);
+		destroy_array(status_routes);
+		destroy_array(login_routes);
+		destroy_array(handshake_routes);
 	
 	}
 	
 	
 	inline void PacketRouter::init () noexcept {
 	
-		for (Word i=0;i<std::numeric_limits<Byte>::max()+1;++i) {
-		
-			new (&routes[i]) PacketHandler ();
-		
-		}
+		init_array(play_routes);
+		init_array(status_routes);
+		init_array(login_routes);
+		init_array(handshake_routes);
 	
 	}
 
 
-	PacketRouter::PacketRouter (bool ignore_dne) noexcept : ignore_dne(ignore_dne) {
+	PacketRouter::PacketRouter () noexcept {
 	
 		init();
 	
@@ -43,51 +60,41 @@ namespace MCPP {
 	}
 	
 	
-	PacketHandler & PacketRouter::operator [] (Byte type) noexcept {
+	auto PacketRouter::operator () (UInt32 id, ProtocolState state) noexcept -> Type & {
 	
-		return routes[type];
+		switch (state) {
+		
+			case ProtocolState::Handshaking:return handshake_routes[id];
+			case ProtocolState::Status:return status_routes[id];
+			case ProtocolState::Login:return login_routes[id];
+			case ProtocolState::Play:
+			default:return play_routes[id];
+		
+		}
 	
 	}
 	
 	
-	void PacketRouter::operator () (SmartPointer<Client> client, Packet packet) const {
+	auto PacketRouter::operator () (UInt32 id, ProtocolState state) const noexcept -> const Type & {
 	
-		auto & dispatch=routes[packet.Type()];
-	
-		//	Check that a valid route exists
-		if (dispatch) {
+		switch (state) {
 		
-			//	Dispatch
-			dispatch(
-				std::move(client),
-				std::move(packet)
-			);
-		
-		//	No valid route and we're
-		//	supposed to kick offenders
-		} else if (!ignore_dne) {
-		
-			String reason;
-			try {
-			
-				reason=String::Format(
-					packet_dne,
-					String(packet.Type(),16)
-				);
-			
-			} catch (...) {
-			
-				//	We need to make sure this gets
-				//	done...
-				client->Disconnect(reason);
-				
-				throw;
-			
-			}
-			
-			client->Disconnect(reason);
+			case ProtocolState::Handshaking:return handshake_routes[id];
+			case ProtocolState::Status:return status_routes[id];
+			case ProtocolState::Login:return login_routes[id];
+			case ProtocolState::Play:
+			default:return play_routes[id];
 		
 		}
+	
+	}
+	
+	
+	void PacketRouter::operator () (ReceiveEvent event, ProtocolState state) const {
+	
+		auto & callback=(*this)(event.Data.ID,state);
+		
+		if (callback) callback(std::move(event));
 	
 	}
 	

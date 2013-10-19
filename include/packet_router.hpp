@@ -4,17 +4,36 @@
  
  
 #include <rleahylib/rleahylib.hpp>
-#include <packet.hpp>
 #include <client.hpp>
-#include <limits>
+#include <packet.hpp>
 #include <functional>
-#include <new>
 
 
 namespace MCPP {
 
 
-	typedef std::function<void (SmartPointer<Client>, Packet)> PacketHandler;
+	/**
+	 *	Encapsulates information about a packet
+	 *	being received from a client.
+	 */
+	class ReceiveEvent {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The client from which the packet was
+			 *	received.
+			 */
+			SmartPointer<Client> & From;
+			/**
+			 *	The packet which was received.
+			 */
+			Packet & Data;
+	
+	
+	};
 
 
 	/**
@@ -24,16 +43,24 @@ namespace MCPP {
 	class PacketRouter {
 	
 	
+		public:
+		
+		
+			/**
+			 *	The type of callback which may subscribe
+			 *	to receive events.
+			 */
+			typedef std::function<void (ReceiveEvent)> Type;
+	
+	
 		private:
 		
 		
-			//	An array of routes
-			PacketHandler routes [std::numeric_limits<Byte>::max()+1];
-			//	Whether packets destined for
-			//	non-existent routes should
-			//	cause the offending client to
-			//	be kicked
-			bool ignore_dne;
+			//	Routes
+			Type play_routes [PacketImpl::LargestID+1];
+			Type status_routes [PacketImpl::LargestID+1];
+			Type login_routes [PacketImpl::LargestID+1];
+			Type handshake_routes [PacketImpl::LargestID+1];
 			
 			
 			inline void destroy () noexcept;
@@ -46,14 +73,8 @@ namespace MCPP {
 			/**
 			 *	Creates a new packet router with no
 			 *	routes.
-			 *
-			 *	\param [in] ignore_dne
-			 *		\em true if the router should ignore
-			 *		incoming packets with no handler,
-			 *		\em false if the router should kill
-			 *		offending clients.  Defaults to \em true.
 			 */
-			PacketRouter (bool ignore_dne=false) noexcept;
+			PacketRouter () noexcept;
 			
 			
 			/**
@@ -65,27 +86,44 @@ namespace MCPP {
 			/**
 			 *	Fetches a packet route.
 			 *
-			 *	\param [in] offset
-			 *		The packet type to retrieve the
-			 *		route for.
+			 *	\param [in] id
+			 *		The ID of the packet whole route
+			 *		shall be retrieved.
+			 *	\param [it] state
+			 *		The state of the packet whose route
+			 *		shall be retreived.
 			 *
 			 *	\return
-			 *		The currently installed route
-			 *		for those types of packets.
+			 *		A reference to the requested route.
 			 */
-			PacketHandler & operator [] (Byte type) noexcept;
+			Type & operator () (UInt32 id, ProtocolState state) noexcept;
+			/**
+			 *	Fetches a packet route.
+			 *
+			 *	\param [in] id
+			 *		The ID of the packet whole route
+			 *		shall be retrieved.
+			 *	\param [it] state
+			 *		The state of the packet whose route
+			 *		shall be retreived.
+			 *
+			 *	\return
+			 *		A reference to the requested route.
+			 */
+			const Type & operator () (UInt32 id, ProtocolState state) const noexcept;
 			
 			
 			/**
 			 *	Dispatches a packet to the appropriate
 			 *	handler.
 			 *
-			 *	\param [in] client
-			 *		The client the packet is from.
-			 *	\param [in] packet
-			 *		The packet-in-question.
+			 *	\param [in] event
+			 *		The event object which represents
+			 *		this receive event.
+			 *	\param [in] state
+			 *		The state the protocol is in.
 			 */
-			void operator () (SmartPointer<Client> client, Packet packet) const;
+			void operator () (ReceiveEvent event, ProtocolState state) const;
 			
 			
 			/**

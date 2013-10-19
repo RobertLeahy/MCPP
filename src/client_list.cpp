@@ -101,7 +101,7 @@ namespace MCPP {
 		
 		for (const auto & pair : map) {
 		
-			if (pair.second->GetState()==ClientState::Authenticated) ++count;
+			if (pair.second->GetState()==ProtocolState::Play) ++count;
 		
 		}
 		
@@ -205,7 +205,7 @@ namespace MCPP {
 			//	Only match authenticated clients
 			//	(the only kind who have usernames
 			//	anyway)
-			(client->GetState()==ClientState::Authenticated) &&
+			(client->GetState()==ProtocolState::Play) &&
 			//	Attempt to match against regular
 			//	expression
 			regex.IsMatch(client->GetUsername())

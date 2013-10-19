@@ -30,7 +30,9 @@ namespace MCPP {
 #include <command_interpreter.hpp>
 #include <data_provider.hpp>
 #include <event.hpp>
+#include <mod_loader.hpp>
 #include <network.hpp>
+#include <packet_router.hpp>
 #include <thread_pool.hpp>
 #include <typedefs.hpp>
 #include <atomic>
@@ -43,19 +45,6 @@ namespace MCPP {
 
 
 namespace MCPP {
-
-
-	/**
-	 *	The direction information is travelling
-	 *	over the wire.
-	 */
-	enum class ProtocolDirection : Word {
-	
-		ClientToServer,	/**<	From the client to the server.	*/
-		ServerToClient,	/**<	From the server to the client.	*/
-		Both			/**<	Both	*/
-	
-	};
 
 
 	class Server {

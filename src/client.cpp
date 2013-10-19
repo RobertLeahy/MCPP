@@ -68,9 +68,7 @@ namespace MCPP {
 
 	Client::Client (SmartPointer<Connection> conn)
 		:	conn(std::move(conn)),
-			packet_in_progress(false),
-			packet_encrypted(false),
-			state(ClientState::Connected),
+			state(ProtocolState::Handshaking),
 			inactive(Timer::CreateAndStart()),
 			connected(Timer::CreateAndStart())
 	{
@@ -110,68 +108,6 @@ namespace MCPP {
 		
 		//	Enable encryption
 		encryptor.Construct(key,iv);
-	
-	}
-	
-	
-	SmartPointer<SendHandle> Client::send (const Packet & packet) {
-	
-		//	Protocol analysis
-		if (Server::Get().LogPacket(
-			packet.Type(),
-			ProtocolDirection::ServerToClient
-		)) {
-		
-			String log(pa_banner);
-			log	<<	Newline
-				<<	String::Format(
-						send_pa_template,
-						IP(),
-						Port(),
-						byte_format(packet.Type())
-					)
-				<<	Newline
-				<<	packet.ToString();
-				
-			Server::Get().WriteLog(
-				log,
-				Service::LogType::Debug
-			);
-		
-		}
-		
-		auto buffer=packet.ToBytes();
-		SmartPointer<SendHandle> retr;
-		
-		if (encryptor.IsNull()) {
-		
-			retr=conn->Send(std::move(buffer));
-		
-		} else {
-		
-			encryptor->BeginEncrypt();
-			
-			try {
-			
-				retr=conn->Send(
-					encryptor->Encrypt(
-						std::move(buffer)
-					)
-				);
-			
-			} catch (...) {
-			
-				encryptor->EndEncrypt();
-				
-				throw;
-			
-			}
-			
-			encryptor->EndEncrypt();
-		
-		}
-		
-		return retr;
 	
 	}
 	
@@ -242,13 +178,6 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Client::Send (const Packet & packet) {
-	
-		return read([&] () {	return send(packet);	});
-	
-	}
-	
-	
 	void Client::Disconnect () noexcept {
 	
 		conn->Disconnect();
@@ -270,10 +199,7 @@ namespace MCPP {
 	}
 	
 	
-	bool Client::Receive (Vector<Byte> * buffer) {
-	
-		//	Check for null
-		if (buffer==nullptr) throw std::out_of_range(NullPointerError);
+	bool Client::Receive (Vector<Byte> & buffer) {
 		
 		//	This is activity
 		Active();
@@ -282,57 +208,29 @@ namespace MCPP {
 		//	state doesn't change
 		return read([&] () {
 		
-			//	There's no encryption if...
-			if (
-				(
-					//	A packet is in progress and...
-					packet_in_progress &&
-					//	...that packet started out unencrypted
-					!packet_encrypted
-				//	or
-				) ||
-				//	If there's no encryption provider
-				encryptor.IsNull()
-			) {
+			//	If no encryption, attempt to parse
+			//	and return at once
+			if (encryptor.IsNull()) return parser.FromBytes(buffer,state,ProtocolDirection::Serverbound);
 			
-				//	No encryption
-				packet_encrypted=false;
-				
-				//	Preserve count so we can
-				//	determine whether the packet
-				//	started constructing itself
-				Word before=buffer->Count();
-				
-				bool complete=in_progress.FromBytes(*buffer);
-				
-				//	Flag packet as in progress
-				//	if necessary
-				if (
-					complete ||
-					before!=buffer->Count()
-				) packet_in_progress=true;
-				
-				return complete;
+			//	Encryption enabled
 			
-			}
+			//	Decrypt directly into the decryption
+			//	buffer
+			encryptor->Decrypt(&buffer,&encryption_buffer);
 			
-			//	Encryption
+			//	Attempt to extract a packet from
+			//	the decryption buffer
+			return parser.FromBytes(encryption_buffer,state,ProtocolDirection::Serverbound);
 			
-			//	Decrypt directly into decryption buffer
-			encryptor->Decrypt(buffer,&encryption_buffer);
-			
-			//	Attempt to extract a packet
-			return in_progress.FromBytes(encryption_buffer);
-		
 		});
 	
 	}
 	
 	
-	Packet Client::CompleteReceive () noexcept {
+	Packet & Client::GetPacket () noexcept {
 	
 		//	Protocol Analysis
-		if (Server::Get().LogPacket(
+		/*if (Server::Get().LogPacket(
 			in_progress.Type(),
 			ProtocolDirection::ClientToServer
 		)) {
@@ -355,19 +253,21 @@ namespace MCPP {
 		//	Reset in progress flag
 		packet_in_progress=false;
 	
-		return std::move(in_progress);
+		return std::move(in_progress);*/
+		
+		return parser.Get();
 	
 	}
 	
 	
-	void Client::SetState (ClientState state) noexcept {
+	void Client::SetState (ProtocolState state) noexcept {
 	
 		write([&] () {	this->state=state;	});
 	
 	}
 	
 	
-	ClientState Client::GetState () const noexcept {
+	ProtocolState Client::GetState () const noexcept {
 	
 		return read([&] () {	return state;	});
 	

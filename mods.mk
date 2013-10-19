@@ -22,6 +22,7 @@ bin/mods/mcpp_ban.dll \
 bin/mods/mcpp_brand.dll \
 bin/mods/mcpp_disconnect.dll \
 bin/mods/mcpp_entity_id.dll \
+bin/mods/mcpp_handshake.dll \
 bin/mods/mcpp_keep_alive.dll \
 bin/mods/mcpp_op.dll \
 bin/mods/mcpp_ping.dll \
@@ -77,6 +78,16 @@ $(MOD_LIB)
 bin/mods/mcpp_entity_id.dll: \
 $(MOD_OBJ) \
 obj/entity_id/main.o | \
+$(MOD_LIB)
+	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+	
+	
+#	HANDSHAKE
+
+
+bin/mods/mcpp_handshake.dll: \
+$(MOD_OBJ) \
+obj/handshake/main.o | \
 $(MOD_LIB)
 	$(GPP) -shared -o $@ $^ $(MOD_LIB)
 	
