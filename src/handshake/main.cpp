@@ -38,11 +38,6 @@ class Handshake : public Module {
 				auto & packet=event.Data.Get<Packets::Handshaking::Serverbound::Handshake>();
 				
 				event.From->SetState(packet.CurrentState);
-				
-				Server::Get().WriteLog(
-					"Handshake",
-					Service::LogType::Information
-				);
 			
 			};
 		
