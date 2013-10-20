@@ -21,12 +21,19 @@ namespace Base64 {
 	
 	String Encode (const Vector<Byte> & buffer) {
 	
-		auto begin=buffer.begin();
-		auto end=buffer.end();
+		//	Determine the number of code
+		//	points it will take maximally
+		//	to describe this buffer
+		SafeWord len(buffer.Count()/3);
+		if ((buffer.Count()%3)!=0) ++len;
+		len*=4;
 		
 		//	This will be converted to
 		//	a string and then returned
-		Vector<CodePoint> cps;
+		Vector<CodePoint> cps(static_cast<Word>(len));
+	
+		auto begin=buffer.begin();
+		auto end=buffer.end();
 		
 		//	Iterate over entire input
 		//	buffer
