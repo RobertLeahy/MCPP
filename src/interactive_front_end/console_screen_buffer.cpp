@@ -471,29 +471,48 @@ inline void ConsoleScreenBuffer::add_output (String str) {
 	
 	}
 	
-	//	This mess basically takes the input
-	//	and:
-	//
-	//	1.	Splits it on line breaks.
-	//	2.	Replaces the tab character with
-	//		four spaces.
-	//	3.	Removes the vertical tab character.
-	//
-	//	I'd make the Regex objects static const
-	//	globals, but GCC didn't like that (got
-	//	SIGSEGVs)...
-	for (const auto & m : Regex(
-		"^(.*?)$",
-		RegexOptions().SetMultiline()
-	).Matches(str)) output.Add(
-		Regex("\t").Replace(
-			Regex("\v").Replace(
-				m.Value(),
-				""
-			),
-			"    "
-		)
-	);
+	//	Process the string so it's suitable for
+	//	display
+	Vector<CodePoint> substring;
+	bool added=false;
+	for (auto cp : str.CodePoints()) {
+	
+		switch (cp) {
+		
+			//	Skip vertical tabs and
+			//	carriage returns
+			case '\v':
+			case '\r':
+				break;
+			
+			//	End lines at newline
+			case '\n':
+				output.EmplaceBack(std::move(substring));
+				added=true;
+				continue;
+				
+			//	Replace tabs with four
+			//	spaces
+			case '\t':
+				for (Word i=0;i<4;++i) substring.Add(
+					static_cast<CodePoint>(' ')
+				);
+				break;
+				
+			//	Copy everything else verbatim
+			default:
+				substring.Add(cp);
+				break;
+		
+		}
+		
+		added=false;
+	
+	}
+	
+	//	If there's something left to be
+	//	added, add it
+	if (!added) output.EmplaceBack(std::move(substring));
 
 }
 
