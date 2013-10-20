@@ -114,7 +114,7 @@ class FaviconLoader : public Module {
 			//	contents of the file
 			//
 			//	We read -- or try to read -- at
-			//	least 20 bytes so we can verify:
+			//	least 24 bytes so we can verify:
 			//
 			//	1.	That it's a PNG file (from the
 			//		first 8 bytes).
@@ -133,7 +133,7 @@ class FaviconLoader : public Module {
 				24
 			);
 			
-			//	If we couldn't read 20 bytes, there's
+			//	If we couldn't read 24 bytes, there's
 			//	no way it's a valid PNG file, fail out
 			if (stream.gcount()!=24) {
 			
