@@ -1,4 +1,5 @@
 #include <rleahylib/rleahylib.hpp>
+#include <base_64.hpp>
 #include <json.hpp>
 #include <mod.hpp>
 #include <server.hpp>
@@ -12,6 +13,8 @@ static const String protocol_error("Protocol error");
 static const String name("Ping Support");
 static const Word priority=1;
 static const String ping_template("{0}:{1} pinged");
+static const String favicon_key("favicon");
+static const String favicon_prefix("data:image/png;base64,");
 
 
 class ServerListPing : public Module {
@@ -110,6 +113,19 @@ class ServerListPing : public Module {
 					String("description"),std::move(description)
 				);
 				
+				//	Add "favicon" if applicable
+				auto icon=server.Data().GetBinary(favicon_key);
+				if (!icon.IsNull()) {
+				
+					String favi(favicon_prefix);
+					favi << Base64::Encode(*icon);
+					
+					root.Add(
+						String("favicon"),std::move(favi)
+					);
+				
+				}
+				
 				//	Create and send reply
 				Packets::Status::Clientbound::Response packet;
 				packet.Value=std::move(root);
@@ -129,6 +145,15 @@ class ServerListPing : public Module {
 				reply.Time=packet.Time;
 				
 				event.From->Send(reply);
+				
+				Server::Get().WriteLog(
+					String::Format(
+						ping_template,
+						event.From->IP(),
+						event.From->Port()
+					),
+					Service::LogType::Information
+				);
 			
 			};
 		
