@@ -98,8 +98,6 @@ class FaviconLoader : public Module {
 				std::ios::in|std::ios::binary
 			);
 			
-			auto & data=Server::Get().Data();
-			
 			//	If the favicon file could not
 			//	be opened, fail out
 			if (!stream) {
@@ -188,7 +186,7 @@ class FaviconLoader : public Module {
 			
 			//	Store the image in the backing
 			//	store
-			data.SaveBinary(
+			Server::Get().SaveBinary(
 				favicon_key,
 				buffer.begin(),
 				buffer.Count()
