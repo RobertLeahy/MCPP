@@ -301,6 +301,7 @@ namespace MCPP {
 			void WriteChatLog (const String &, const Vector<String> &, const String &, const Nullable<String> &);
 			
 			
+			Nullable<Vector<Byte>> GetBinary (const String &);
 			bool GetBinary (const String &, void *, Word *);
 			void SaveBinary (const String &, const void *, Word);
 			void DeleteBinary (const String &);
@@ -545,6 +546,7 @@ namespace MCPP {
 			virtual void WriteChatLog (const String &, const Vector<String> &, const String &, const Nullable<String> &) override;
 			
 			
+			virtual Nullable<Vector<Byte>> GetBinary (const String &) override;
 			virtual bool GetBinary (const String &, void *, Word *) override;
 			virtual void SaveBinary (const String &, const void *, Word) override;
 			virtual void DeleteBinary (const String &) override;

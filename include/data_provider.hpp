@@ -133,6 +133,20 @@ namespace MCPP {
 			 *	\param [in] key
 			 *		The key whose associated binary data
 			 *		shall be retrieved.
+			 *
+			 *	\return
+			 *		A vector of bytes if there was binary
+			 *		data associated with \em key, \em null
+			 *		otherwise.
+			 */
+			virtual Nullable<Vector<Byte>> GetBinary (const String & key) = 0;
+			/**
+			 *	When overriden in a derived class, fetches
+			 *	binary data from the binary store.
+			 *
+			 *	\param [in] key
+			 *		The key whose associated binary data
+			 *		shall be retrieved.
 			 *	\param [out] ptr
 			 *		A pointer to the region of memory where
 			 *		the binary data shall be stored.
