@@ -261,7 +261,7 @@ namespace MCPP {
 				bool
 			);
 			void prepare_stmt (MYSQL_STMT * &, const char *);
-			__attribute__((noreturn))
+			[[noreturn]]
 			static void raise (MYSQL_STMT *);
 	
 	
