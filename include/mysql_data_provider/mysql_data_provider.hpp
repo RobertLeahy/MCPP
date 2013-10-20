@@ -348,6 +348,10 @@ namespace MCPP {
 			void done () noexcept;
 			//	Enqueues a logging task
 			void enqueue (std::function<void (std::unique_ptr<MySQLConnection> &)>);
+			//	Checks to see if the connection is
+			//	still open, and, if it's not,
+			//	attempts to reconnect
+			void keep_alive (std::unique_ptr<MySQLConnection> &);
 			template <typename T, typename... Args>
 			auto execute (T && callback, Args &&... args) -> typename std::enable_if<
 				std::is_same<
@@ -368,6 +372,8 @@ namespace MCPP {
 				Timer timer;
 				
 				try {
+				
+					keep_alive(conn);
 				
 					timer=Timer::CreateAndStart();
 					
@@ -439,6 +445,8 @@ namespace MCPP {
 				Timer timer;
 				
 				try {
+				
+					keep_alive(conn);
 				
 					timer=Timer::CreateAndStart();
 					
