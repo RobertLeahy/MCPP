@@ -6,25 +6,6 @@
 #pragma once
 
 
-namespace MCPP {
-
-
-	/**
-	 *	\cond
-	 */
-	 
-	 
-	class Server;
-	
-	
-	/**
-	 *	\endcond
-	 */
-
-
-}
-
-
 #include <rleahylib/rleahylib.hpp>
 #include <chat_provider.hpp>
 #include <command_interpreter.hpp>
