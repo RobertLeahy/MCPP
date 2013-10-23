@@ -587,7 +587,7 @@ namespace MCPP {
 		//	CLIENTBOUND
 		template <> class PacketMap<LI,CB,0x00> : public PacketType<JSON::Value> {	};
 		template <> class PacketMap<LI,CB,0x01> : public PacketType<String,Array<Int16,Byte>,Array<Int16,Byte>> {	};
-		template <> class PacketMap<LI,CB,0x02> : public PacketType<String> {	};
+		template <> class PacketMap<LI,CB,0x02> : public PacketType<String,String> {	};
 		
 		//	SERVERBOUND
 		template <> class PacketMap<LI,SB,0x00> : public PacketType<String> {	};
@@ -2480,6 +2480,7 @@ namespace MCPP {
 					
 					
 						String UUID;
+						String Username;
 				
 				
 				};
@@ -2522,7 +2523,7 @@ namespace MCPP {
 					public:
 					
 					
-						Vector<Byte> PublicKey;
+						Vector<Byte> Secret;
 						Vector<Byte> VerifyToken;
 				
 				
