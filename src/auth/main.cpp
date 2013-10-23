@@ -1,87 +1,73 @@
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
+#include <hash.hpp>
+#include <http_handler.hpp>
+#include <mod.hpp>
+#include <packet.hpp>
+#include <random.hpp>
+#include <rsa_key.hpp>
+#include <server.hpp>
+#include <sha1.hpp>
+#include <url.hpp>
+#include <memory>
 #include <unordered_map>
 #include <utility>
 
 
-static const String protocol_error("Protocol error");
-static const String out_of_date_error("Protocol version mismatch");
-static const String name("Authentication Support");
-static const String verify_token_mismatch("Verify token does not match");
-static const String login_template("http://session.minecraft.net/game/checkserver.jsp?user={0}&serverId={1}");
-static const String login_error("Error communicating with minecraft.net");
-static const String login_error_log("Error communicating with minecraft.net, HTTP status code {0}");
-static const String auth_fail("Failed to verify username");
-static const String auth_fail_log("Failed to verify username, minecraft.net says \"{0}\"");
+using namespace MCPP;
+
+
+static const String login_url("http://session.minecraft.net/game/checkserver.jsp?user={0}&serverId={1}");
+static const String verbose_key("auth");
+static const String http_request("HTTP request => {0}");
+static const String http_reply_success("HTTP response <= {0} - Status: 200 - Time elapsed {1}ns - \"{2}\"");
+static const String http_reply_error("HTTP response <= {0} - Status: {1} - Time elapsed {2}ns");
+static const String http_reply_internal_error("HTTP response <= {0} internal error after {1}ns");
 static const String auth_callback_error("Error during authentication");
+static const String protocol_error("Protocol error");
+static const String encryption_error("Encryption error");
 static const String logged_in("{0}:{1} logged in as {2}");
-static const String pa_banner("====PROTOCOL ANALYSIS====");
-static const String http_request_template("HTTP request ==> {0}");
-static const String http_success_template("HTTP response <== {0} - Status: 200 - Time elapsed: {1}ns - Response body ({2} grapheme{3}, {4} code point{5}):");
-static const String http_fail_template("HTTP response <== {0} - Status: {1} - Time elapsed: {2}ns");
-static const String http_error_template("HTTP response <== {0} - ERROR - Time elapsed: {1}ns");
-static const String http_error("Error communicating with session.minecraft.net after {0}ns");
-static const String http_error_w_status("Error communicating with session.minecraft.net ({0}) after {1}ns");
-static const Word priority=1;
-//	Minecraft.net sends "YES" (3 bytes) or "NO" (2 bytes)
+static const String yes("yes");
+static const String authentication_failed("Authentication failed");
+//	minecraft.net sends "YES" or "NO", so maximum
+//	bytes is 3
 static const Word max_http_bytes=3;
-static const Word num_random_bytes=4;
-static const String auth_pa_key("auth");
+static const Word verify_token_length=4;
+static const Word priority=1;
+static const String name("Minecraft.net Authentication Support");
 
 
 enum class AuthenticationState {
 
-	//	Initial state -- waiting on
-	//	0x02 with username and protocol
-	//	version
-	WaitingForHandshake,
-	//	0x02 received and checked out,
-	//	server has sent public key
-	//	and random bytes to the client
-	EncryptionRequestSent,
-	//	0xFC received and checked out,
-	//	server has shared secret, waiting
-	//	for minecrafte.net authentication
-	//	confirmation
-	WaitingForAuthentication,
-	//	Encryption has been enabled,
-	//	waiting on 0xCD
-	EncryptionEnabled
+	Waiting,
+	ResponseSent,
+	Authenticate
+
 };
 
 
-class AuthenticationClient {
+//	Data about each client
+class ClientData {
 
 
 	public:
 	
 	
-		AuthenticationClient () noexcept
-			:	Lock(SmartPointer<Mutex>::Make()),
-				State(AuthenticationState::WaitingForHandshake)
-		{	}
-	
-	
-		//	This lock is used to guard
-		//	against the client sending
-		//	the same packet multiple
-		//	times.
-		//
-		//	Has to be a pointer because
-		//	the implementation of std::unordered_map
-		//	is braindead and I don't feel
-		//	like rewriting it at the moment.
-		SmartPointer<Mutex> Lock;
-		//	Records the client's progress
-		//	through the authentication
-		//	process.
+		//	Guards this structure against
+		//	concurrent access
+		Mutex Lock;
+		//	The state the associated client
+		//	is in
 		AuthenticationState State;
-		//	Random bytes we generated
-		//	for the encryption handshake.
-		Vector<Byte> Bytes;
-		//	Shared secret client generated
+		//	"Verify token"
+		Vector<Byte> VerifyToken;
+		//	Shared secret
 		Vector<Byte> Secret;
-		//	Server ID this client was sent
+		//	Randomly-generated server ID
+		//	string sent to this client
 		String ServerID;
+		
+		
+		ClientData () noexcept : State(AuthenticationState::Waiting) {	}
 
 
 };
@@ -93,40 +79,331 @@ class Authentication : public Module {
 	private:
 	
 	
-		//	Master server encryption
-		//	key
+		enum class Status {
+		
+			Success,
+			Gone,
+			ProtocolError,
+			EncryptionError
+		
+		};
+	
+	
+		//	Client sends this to begin
+		//	the login process
+		typedef Packets::Login::Serverbound::LoginStart start;
+		//	Server responds with this
+		//	to request a shared secret
+		//	from the client
+		typedef Packets::Login::Clientbound::EncryptionResponse key_request;
+		//	Client sends shared secret
+		//	and encrypted verify token
+		//	in this packet
+		typedef Packets::Login::Serverbound::EncryptionRequest key_response;
+		//	After authenticating and enabling
+		//	encryption, server confirms login
+		//	successful by sending this
+		typedef Packets::Login::Clientbound::LoginSuccess success;
+	
+	
+		//	Master server encryption key
 		RSAKey key;
-		//	Makes authentication requests
-		//	to Minecraft.NET
+		//	Asynchronous HTTP handler which
+		//	makes requests to minecraft.net
 		HTTPHandler http;
-		//	Maps clients in the process
-		//	of authenticating to data
-		//	about their authentication
+		//	Associates clients with data
+		//	about them
 		std::unordered_map<
-			const Connection *,
-			AuthenticationClient
+			SmartPointer<Client>,
+			SmartPointer<ClientData>
 		> map;
 		RWLock map_lock;
-		//	Client is going to want
+		//	Client is going to need
 		//	random bytes
 		Random<Byte> token_generator;
 		Random<Word> id_len_generator;
 		Random<Byte> id_generator;
-	
-	
+		
+		
+		SmartPointer<ClientData> get (const SmartPointer<Client> client) {
+		
+			return map_lock.Read([&] () mutable {
+			
+				auto iter=map.find(client);
+				
+				return (iter==map.end()) ? SmartPointer<ClientData>() : iter->second;
+			
+			});
+		
+		}
+		
+		
+		void handle (Status status, SmartPointer<Client> & client) {
+		
+			switch (status) {
+			
+				case Status::Success:
+				case Status::Gone:
+				default:break;
+				
+				case Status::ProtocolError:
+					client->Disconnect(protocol_error);
+					break;
+					
+				case Status::EncryptionError:
+					client->Disconnect(encryption_error);
+					break;
+			
+			}
+		
+		}
+		
+		
+		Status login_start (ReceiveEvent & event) {
+		
+			auto data=get(event.From);
+			
+			//	Client has disconnected, do
+			//	not do any further processing
+			if (data.IsNull()) return Status::Gone;
+			
+			return data->Lock.Execute([&] () mutable {
+			
+				//	Verify client's authentication
+				//	state
+				if (data->State!=AuthenticationState::Waiting) return Status::ProtocolError;
+				
+				//	Set username
+				event.From->SetUsername(
+					std::move(
+						event.Data.Get<start>().Name
+					)
+				);
+				
+				//	We respond with EncryptionResponse
+				key_request reply;
+				
+				//	Generate a random server ID
+				Word id_len=id_len_generator();
+				Vector<Byte> id(id_len);
+				for (Word i=0;i<id_len;++i) id.Add(id_generator());
+				reply.ServerID=ASCII().Decode(id.begin(),id.end());
+				data->ServerID=reply.ServerID;
+				
+				//	Provide our public key
+				reply.PublicKey=key.PublicKey();
+				
+				//	Provide four random bytes -- a
+				//	"verify token"
+				reply.VerifyToken=Vector<Byte>(verify_token_length);
+				for (Word i=0;i<verify_token_length;++i) reply.VerifyToken.Add(token_generator());
+				data->VerifyToken=reply.VerifyToken;
+				
+				//	Send
+				event.From->Send(reply);
+				
+				//	Advance client's authentication
+				//	state
+				data->State=AuthenticationState::ResponseSent;
+				
+				return Status::Success;
+			
+			});
+		
+		}
+		
+		
+		void authenticate (SmartPointer<Client> & client, SmartPointer<ClientData> & data) {
+		
+			auto & server=Server::Get();
+		
+			//	Prepare a response
+			success packet;
+			packet.Username=client->GetUsername();
+			
+			data->Lock.Execute([&] () mutable {
+			
+				//	Atomically enable encryption,
+				//	send response, and fire on login
+				//	handler
+				client->Atomic(
+					Tuple<Vector<Byte>,Vector<Byte>>(
+						data->Secret,
+						data->Secret
+					),
+					packet,
+					ProtocolState::Play,
+					[&] () {	server.OnLogin(client);	}
+				);
+			
+			});
+			
+			//	Client is authenticated, log
+			server.WriteLog(
+				String::Format(
+					logged_in,
+					client->IP(),
+					client->Port(),
+					client->GetUsername()
+				),
+				Service::LogType::Information
+			);
+		
+		}
+		
+		
+		Status encryption_request (ReceiveEvent & event) {
+		
+			auto data=get(event.From);
+			
+			//	Make sure client hasn't gone
+			//	away
+			if (data.IsNull()) return Status::Gone;
+			
+			return data->Lock.Execute([&] () mutable {
+			
+				//	Verify client's authentication
+				//	state
+				if (data->State!=AuthenticationState::ResponseSent) return Status::ProtocolError;
+				
+				auto & packet=event.Data.Get<key_response>();
+				
+				//	Match up verify token
+				auto verify_token=key.PrivateDecrypt(packet.VerifyToken);
+				if (verify_token.Count()!=data->VerifyToken.Count()) return Status::ProtocolError;
+				for (Word i=0;i<verify_token.Count();++i) if (verify_token[i]!=data->VerifyToken[i]) return Status::EncryptionError;
+				
+				//	Decrypt the shared secret
+				data->Secret=key.PrivateDecrypt(packet.Secret);
+				
+				//	Verify secret length (128 bits)
+				if (data->Secret.Count()!=(128/BitsPerByte())) return Status::ProtocolError;
+				
+				//	Prepare a SHA-1 hash
+				SHA1 hash;
+				hash.Update(ASCII().Encode(data->ServerID));
+				hash.Update(data->Secret);
+				hash.Update(key.PublicKey());
+				
+				//	Get the URL to verify login
+				//	against minecraft.net
+				String url(
+					String::Format(
+						login_url,
+						URL::Encode(event.From->GetUsername()),
+						URL::Encode(hash.HexDigest())
+					)
+				);
+				
+				//	Debug log if requested
+				auto & server=Server::Get();
+				
+				if (server.IsVerbose(verbose_key)) server.WriteLog(
+					String::Format(
+						http_request,
+						url
+					),
+					Service::LogType::Debug
+				);
+				
+				//	Advance client's state
+				data->State=AuthenticationState::Authenticate;
+				
+				//	Start a timer to measure how
+				//	long the HTTP request takes
+				Timer timer(Timer::CreateAndStart());
+				
+				//	Dispatch HTTP request
+				#pragma GCC diagnostic push
+				#pragma GCC diagnostic ignored "-Wpedantic"
+				http.Get(
+					url,
+					[=,&server,client=event.From] (Word status, String response) mutable {
+					
+						try {
+						
+							auto elapsed=timer.ElapsedNanoseconds();
+							
+							auto data=get(client);
+							
+							if (data.IsNull()) return;
+							
+							if (status==200) {
+							
+								//	SUCCESS
+								
+								if (server.IsVerbose(verbose_key)) server.WriteLog(
+									String::Format(
+										http_reply_success,
+										url,
+										elapsed,
+										response
+									),
+									Service::LogType::Debug
+								);
+								
+								if (response.ToLower()==yes) authenticate(client,data);
+								else client->Disconnect(authentication_failed);
+							
+							} else if (status==0) {
+							
+								//	cURL failure
+							
+								server.WriteLog(
+									String::Format(
+										http_reply_internal_error,
+										url,
+										elapsed
+									),
+									Service::LogType::Error
+								);
+							
+							} else {
+							
+								//	HTTP failure
+								
+								server.WriteLog(
+									String::Format(
+										http_reply_error,
+										url,
+										status,
+										elapsed
+									),
+									Service::LogType::Error
+								);
+							
+							}
+						
+						} catch (...) {
+						
+							//	This shouldn't happen, but
+							//	if it does we don't have anything
+							//	higher up in the stack to
+							//	deal with this for us
+							
+							client->Disconnect(auth_callback_error);
+							
+							throw;
+						
+						}
+					
+					}
+				);
+				#pragma GCC diagnostic pop
+				
+				return Status::Success;
+			
+			});
+		
+		}
+		
+		
 	public:
 	
 	
-		Authentication ()
-			:	http(max_http_bytes),
-				id_len_generator(
-					15,	//	Shortest string observed from Notchian server
-					20	//	Longest string possible (confirmed by exception thrown in client on longer strings)
-				),
-				id_generator('!','~')	//	Non-printable characters seem to make authentication choke
-		{	}
-	
-	
+		Authentication () : http(max_http_bytes), id_len_generator(15,20), id_generator('!','~') {	}
+		
+		
 		virtual Word Priority () const noexcept override {
 		
 			return priority;
@@ -139,644 +416,37 @@ class Authentication : public Module {
 			return name;
 		
 		}
-	
-	
+		
+		
 		virtual void Install () override {
 		
-			//	We need to be notified of connect/
-			//	disconnect events so we can
-			//	manage our data structures
+			auto & server=Server::Get();
 			
-			Server::Get().OnConnect.Add([&] (SmartPointer<Client> client) {
+			//	Install connect/disconnect handlers
 			
-				//	Add this client to the map
-				map_lock.Write([&] () {	map.emplace(client->GetConn(),AuthenticationClient());	});
+			server.OnConnect.Add([this] (SmartPointer<Client> client) mutable {
+			
+				map_lock.Write([&] () {	map.emplace(std::move(client),SmartPointer<ClientData>::Make());	});
+			
+			});
+			
+			server.OnDisconnect.Add([this] (SmartPointer<Client> client, const String &) mutable {
+			
+				map_lock.Write([&] () {	map.erase(client);	});
 			
 			});
 			
-			Server::Get().OnDisconnect.Add([&] (SmartPointer<Client> client, const String &) {
+			//	Install packet handlers
 			
-				//	Remove this client from the map
-				//	if they're in the map
-				map_lock.Write([&] () {	map.erase(client->GetConn());	});
+			server.Router(
+				start::PacketID,
+				ProtocolState::Login
+			)=[this] (ReceiveEvent event) mutable {	handle(login_start(event),event.From);	};
 			
-			});
-		
-			//	We need to handle the following
-			//	packets:
-			//
-			//	-	0x02 Handshake
-			//	-	0xFC Encryption Response
-			//	-	0xCD Client Statuses
-			
-			//	Extract the previous 0x02
-			//	handler (if any)
-			PacketHandler prev(
-				std::move(
-					Server::Get().Router[0x02]
-				)
-			);
-			
-			//	Install our own handler
-			Server::Get().Router[0x02]=[=] (SmartPointer<Client> client, Packet packet) {
-			
-				//	We're only interested in newly-connected
-				//	clients
-				if (client->GetState()!=ClientState::Connected) {
-				
-					//	Maybe the handler we replaced is
-					//	interested in handling this
-					if (prev) prev(
-						std::move(client),
-						std::move(packet)
-					);
-					//	Else there's nothing to chain
-					//	through to, kill the client
-					else client->Disconnect(protocol_error);
-					
-					//	Short-circuit out
-					return;
-				
-				}
-				
-				//	If the client makes a protocol
-				//	error, this is set
-				bool kill=false;
-				//	If the client has been sent a reason,
-				//	this is unset
-				bool error=true;
-				
-				//	We need to read from the map
-				map_lock.Read([&] () {
-				
-					//	Retrieve information about
-					//	this client
-					
-					auto loc=map.find(client->GetConn());
-					if (loc==map.end()) {
-					
-						//	The client has been disconnected
-						kill=true;
-						error=false;
-						
-						return;
-					
-					}
-					
-					auto & data=loc->second;
-					
-					//	Acquire the lock on this
-					//	client
-					data.Lock->Execute([&] () {
-					
-						//	Check client's state
-						if (data.State!=AuthenticationState::WaitingForHandshake) {
-						
-							//	Wrong state, ERROR
-							kill=true;
-							
-							return;
-						
-						}
-						
-						//	Verify client's protocol version
-						if (packet.Retrieve<Byte>(0)!=ProtocolVersion) {
-						
-							//	Wrong version, KILL
-							client->Disconnect(out_of_date_error);
-							
-							kill=true;
-							error=false;	//	We've already set the reason
-							
-							return;
-						
-						}
-						
-						//	Retrieve client's username
-						//	from the packet
-						client->SetUsername(packet.Retrieve<String>(1));
-						
-						//	Prepare a response
-						Packet reply;
-						reply.SetType<PacketTypeMap<0xFD>>();
-						
-						//	Server ID
-						Word num_ascii=id_len_generator();
-						Vector<Byte> ascii(num_ascii);
-						for (Word i=0;i<num_ascii;++i) ascii.Add(id_generator());
-						
-						data.ServerID=ASCII().Decode(ascii.begin(),ascii.end());
-
-						reply.Retrieve<String>(0)=data.ServerID;
-						
-						//	Our public key
-						reply.Retrieve<Vector<Byte>>(1)=key.PublicKey();
-						
-						//	Client is going to need four
-						//	random bytes
-						for (Word i=0;i<num_random_bytes;++i) data.Bytes.Add(token_generator());
-						
-						reply.Retrieve<Vector<Byte>>(2)=data.Bytes;
-						
-						//	Send our response
-						client->Send(reply);
-						
-						//	Change client's state
-						data.State=AuthenticationState::EncryptionRequestSent;
-					
-					});
-				
-				});
-				
-				if (kill) {
-				
-					if (error) client->Disconnect(protocol_error);
-					
-					//	Don't chain
-					return;
-				
-				}
-				
-				//	Chain to previous callback
-				//	if it exists
-				if (prev) prev(
-					std::move(client),
-					std::move(packet)
-				);
-			
-			};
-			
-			//	Extract previous 0xFC handler
-			//	(if any)
-			prev=std::move(Server::Get().Router[0xFC]);
-			
-			//	Install our own handler
-			Server::Get().Router[0xFC]=[=] (SmartPointer<Client> client, Packet packet) {
-			
-				//	We're only interested in newly-connected
-				//	clients
-				if (client->GetState()!=ClientState::Connected) {
-				
-					//	Maybe the handler we replaced is
-					//	interested in handling this
-					if (prev) prev(
-						std::move(client),
-						std::move(packet)
-					);
-					//	Else there's nothing to chain
-					//	through to, kill the client
-					else client->Disconnect(protocol_error);
-					
-					//	Short-circuit out
-					return;
-				
-				}
-				
-				//	If the client makes a protocol error,
-				//	this is set
-				bool kill=false;
-				//	If the client has been sent a reason,
-				//	this is unset
-				bool error=true;
-				
-				//	We need to look the client up
-				map_lock.Read([&] () {
-				
-					//	Retrieve information about
-					//	this client
-					auto loc=map.find(client->GetConn());
-					if (loc==map.end()) {
-					
-						//	The client has been disconnected
-						kill=true;
-						error=false;
-						
-						return;
-					
-					}
-					
-					auto & data=loc->second;
-					
-					//	Acquire the lock on this
-					//	client
-					data.Lock->Execute([&] () {
-					
-						//	Verify client's state
-						if (data.State!=AuthenticationState::EncryptionRequestSent) {
-						
-							//	Wrong state, ERROR
-							kill=true;
-							
-							return;
-						
-						}
-						
-						//	Make sure client received our
-						//	encryption key and is using
-						//	it properly by retrieving the
-						//	random bytes we generated
-						//	(encrypted), decrypting them,
-						//	and verifying
-						Vector<Byte> plaintext_bytes(
-							key.PrivateDecrypt(
-								packet.Retrieve<Vector<Byte>>(1)
-							)
-						);
-						
-						bool bytes_match=true;
-						
-						if (data.Bytes.Count()==plaintext_bytes.Count()) {
-						
-							for (Word i=0;i<plaintext_bytes.Count();++i) {
-							
-								if (plaintext_bytes[i]!=data.Bytes[i]) {
-								
-									bytes_match=false;
-									
-									break;
-								
-								}
-							
-							}
-						
-						} else {
-						
-							bytes_match=false;
-						
-						}
-						
-						if (!bytes_match) {
-						
-							//	Client failed at encrypting
-							client->Disconnect(verify_token_mismatch);
-							
-							error=false;
-							kill=true;
-							
-							return;
-						
-						}
-						
-						//	Fetch shared secret
-						data.Secret=key.PrivateDecrypt(
-							packet.Retrieve<Vector<Byte>>(0)
-						);
-						
-						//	Verify private key is 128 bits
-						if (data.Secret.Count()!=(128/BitsPerByte())) {
-						
-							kill=true;
-							
-							return;
-						
-						}
-						
-						//	Prepare a hash
-						SHA1 hash;
-						//	Add ASCII encoding
-						//	of server ID string
-						//	to the hash
-						hash.Update(ASCII().Encode(data.ServerID));
-						//	Add shared secret
-						//	to the hash
-						hash.Update(data.Secret);
-						//	Add ASN.1 representation
-						//	of public key to the
-						//	hash
-						hash.Update(key.PublicKey());
-						
-						//	Prepare request to Minecraft.NET
-						String request_url(
-							String::Format(
-								login_template,
-								URL::Encode(client->GetUsername()),
-								URL::Encode(hash.HexDigest())
-							)
-						);
-						
-						//	Protocol analysis
-						if (Server::Get().IsVerbose(auth_pa_key)) {
-						
-							String log(pa_banner);
-							log << Newline << String::Format(
-								http_request_template,
-								request_url
-							);
-							
-							Server::Get().WriteLog(
-								log,
-								Service::LogType::Debug
-							);
-						
-						}
-						
-						//	Advance client's state
-						data.State=AuthenticationState::WaitingForAuthentication;
-						
-						//	Time for protocol analysis (if applicable)
-						Timer timer=Timer::CreateAndStart();
-						
-						//	Fire off verify request
-						//	to minecraft.net
-						http.Get(
-							request_url,
-							[=] (Word status_code, String response) mutable {
-							
-								try {
-								
-									timer.Stop();
-									
-									//	Handle various status codes
-									if (status_code==0) {
-									
-										//	cURL reports an error
-										
-										Server::Get().WriteLog(
-											String::Format(
-												http_error,
-												timer.ElapsedNanoseconds()
-											),
-											Service::LogType::Warning
-										);
-										
-									} else if (
-										(status_code>=500) &&
-										(status_code<600)
-									) {
-									
-										//	5xx server error
-									
-										Server::Get().WriteLog(
-											String::Format(
-												http_error_w_status,
-												status_code,
-												timer.ElapsedNanoseconds()
-											),
-											Service::LogType::Warning
-										);
-									
-									} else if (Server::Get().IsVerbose(auth_pa_key)) {
-									
-										//	Verbose logging
-									
-										String log(pa_banner);
-										log << Newline;
-										
-										//	HTTP request succeeded
-										if (status_code==200) log << String::Format(
-											http_success_template,
-											request_url,
-											timer.ElapsedNanoseconds(),
-											response.Count(),
-											(response.Count()==1) ? "" : "s",
-											response.Size(),
-											(response.Size()==1) ? "" : "s"
-										) << Newline << response;
-										//	HTTP request failed
-										else log << String::Format(
-											http_fail_template,
-											request_url,
-											status_code,
-											timer.ElapsedNanoseconds()
-										);
-										
-										Server::Get().WriteLog(
-											log,
-											Service::LogType::Debug
-										);
-									
-									}
-								
-									//	Client's getting a packet
-									//	one way or another
-									Packet reply;
-							
-									//	Handle instances wherein
-									//	client shall not be authenticated
-									if (!(
-										(status_code==200) &&
-										(response.Trim().ToLower()=="yes")
-									)) {
-									
-										//	Packet to client will
-										//	be a disconnect/kick
-										reply.SetType<PacketTypeMap<0xFF>>();
-									
-										//	Descriptive error string
-										//	to log
-										String log_error;
-										
-										if (status_code!=200) {
-										
-											reply.Retrieve<String>(0)=login_error;
-											log_error=String::Format(
-												(status_code==0) ? login_error : login_error_log,
-												status_code
-											);
-										
-										} else {
-										
-											reply.Retrieve<String>(0)=auth_fail;
-											log_error=String::Format(
-												auth_fail_log,
-												response
-											);
-										
-										}
-										
-										//	Send, wait, disconnect
-										client->Send(reply)->AddCallback([=] (SendState) mutable {
-										
-											client->Disconnect(log_error);
-											
-										});
-									
-										return;
-									
-									}
-									
-									//	Enable encryption
-									reply.SetType<PacketTypeMap<0xFC>>();
-									//	Retrieving default constructs
-									//	and we want zero-length arrays
-									reply.Retrieve<Vector<Byte>>(0);
-									reply.Retrieve<Vector<Byte>>(1);
-									
-									//	Go to map to get secret
-									if (!map_lock.Read([&] () {
-									
-										auto loc=map.find(client->GetConn());
-										if (loc==map.end()) {
-										
-											//	The client has been disconnected
-											client->Disconnect();	//	Just make sure, doesn't hurt
-											
-											return false;
-										
-										}
-										
-										auto & data=loc->second;
-										
-										//	Simultaneously send the
-										//	encryption response and
-										//	enable encryption on
-										//	the client's connection
-										client->Atomic(
-											reply,
-											Tuple<Vector<Byte>,Vector<Byte>>(
-												data.Secret,
-												data.Secret
-											)
-										);
-										
-										//	Advance state
-										data.State=AuthenticationState::EncryptionEnabled;
-										
-										return true;
-									
-									})) return;
-									
-									//	Client is authenticated, log
-									Server::Get().WriteLog(
-										String::Format(
-											logged_in,
-											client->IP(),
-											client->Port(),
-											client->GetUsername()
-										),
-										Service::LogType::Information
-									);
-									
-								} catch (...) {
-								
-									//	This shouldn't happen
-									//
-									//	Kill the client
-									client->Disconnect(auth_callback_error);
-								
-								}
-							
-							}
-						);
-					
-					});
-				
-				});
-			
-			};
-			
-			//	Extract the previous 0xCD
-			//	handler (if any)
-			//
-			//	Chaining is very important
-			//	as this packet can have
-			//	different payloads and be
-			//	interpreted in different ways
-			//
-			//	We're only interested in
-			//	handling it right after
-			//	authentication, but some
-			//	other module might want to
-			//	handle it when it's sent when
-			//	the player dies and is then
-			//	ready to respawn
-			prev=std::move(Server::Get().Router[0xCD]);
-			
-			//	Install our own handler
-			Server::Get().Router[0xCD]=[=] (SmartPointer<Client> client, Packet packet) {
-			
-				//	We're only interested in newly-connection
-				//	clients, and clients sending 0 as the
-				//	payload
-				if (!(
-					(packet.Retrieve<SByte>(0)==0) ||
-					(client->GetState()==ClientState::Connected)
-				)) {
-				
-					//	Chain
-					if (prev) prev(
-						std::move(client),
-						std::move(packet)
-					);
-					//	If there's nothing to chain to,
-					//	kill the client with a protocol
-					//	error
-					else client->Disconnect(protocol_error);
-					
-					//	Don't proceed
-					return;
-				
-				}
-				
-				//	Client made an error, and
-				//	is to be disconnected
-				bool kill=false;
-				//	We already handled the error,
-				//	don't set a new reason, just
-				//	disconnect
-				bool error=true;
-				
-				//	We need to fetch our information about
-				//	this client
-				map_lock.Read([&] () {
-				
-					//	Grab data from the map
-					
-					auto loc=map.find(client->GetConn());
-					if (loc==map.end()) {
-					
-						//	The client has been
-						//	disconnected
-						kill=true;
-						error=false;
-						
-						return;
-					
-					}
-					
-					auto & data=loc->second;
-					
-					//	Lock this client's data
-					data.Lock->Execute([&] () {
-					
-						//	Verify client's state
-						if (data.State!=AuthenticationState::EncryptionEnabled) {
-						
-							//	Wrong state, ERROR
-							kill=true;
-							
-							return;
-						
-						}
-						
-						//	Authenticate the player and fire
-						//	the login handler
-						client->Atomic(
-							ClientState::Authenticated,
-							[&] () {	Server::Get().OnLogin(client);	}
-						);
-					
-					});
-				
-				});
-				
-				//	Disconnect if necessary
-				if (kill) {
-				
-					if (error) client->Disconnect(protocol_error);
-					
-					//	Don't chain
-					return;
-				
-				}
-				
-				//	Chain (if applicable)
-				if (prev) prev(
-					std::move(client),
-					std::move(packet)
-				);
-			
-			};
+			server.Router(
+				key_response::PacketID,
+				ProtocolState::Login
+			)=[this] (ReceiveEvent event) mutable {	handle(encryption_request(event),event.From);	};
 		
 		}
 
@@ -784,36 +454,4 @@ class Authentication : public Module {
 };
 
 
-static Module * mod_ptr=nullptr;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		try {
-		
-			if (mod_ptr==nullptr) mod_ptr=new Authentication();
-		
-		} catch (...) {	}
-		
-		return mod_ptr;
-	
-	}
-	
-	
-	void Unload () {
-	
-		if (mod_ptr!=nullptr) {
-		
-			delete mod_ptr;
-			
-			mod_ptr=nullptr;
-		
-		}
-	
-	}
-
-
-}
+INSTALL_MODULE(Authentication)
