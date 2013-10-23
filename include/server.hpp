@@ -40,8 +40,75 @@ namespace MCPP {
 #include <functional>
 #include <type_traits>
 #include <unordered_set>
-#include <unordered_map>
 #include <utility>
+
+
+namespace RLeahyLib {
+
+
+	inline bool operator == (const Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection> & a, const Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection> & b) noexcept {
+	
+		return (
+			(a.Item<0>()==b.Item<0>()) &&
+			(a.Item<1>()==b.Item<1>()) &&
+			(a.Item<2>()==b.Item<2>())
+		);
+	
+	}
+
+
+}
+
+
+namespace std {
+
+
+	template <>
+	struct hash<Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection>> {
+	
+	
+		private:
+		
+		
+			template <typename T>
+			size_t get (T value) const noexcept {
+			
+				union {
+					size_t out;
+					typename std::decay<T>::type in;
+				};
+				
+				out=0;
+				in=value;
+				
+				return out;
+			
+			}
+	
+	
+		public:
+		
+		
+			size_t operator () (const Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection> & obj) const noexcept {
+			
+				size_t retr=23;
+				
+				retr*=31;
+				retr+=get(obj.Item<0>());
+				retr*=31;
+				retr+=get(obj.Item<1>());
+				retr*=31;
+				retr+=get(obj.Item<2>());
+				
+				return retr;
+			
+			}
+	
+	
+	};
+
+
+}
 
 
 namespace MCPP {
@@ -85,7 +152,13 @@ namespace MCPP {
 			std::atomic<bool> debug;
 			std::atomic<bool> log_all_packets;
 			mutable RWLock logged_packets_lock;
-			std::unordered_map<Byte,ProtocolDirection> logged_packets;
+			std::unordered_set<
+				Tuple<
+					UInt32,
+					ProtocolState,
+					ProtocolDirection
+				>
+			> logged_packets;
 			//	Module verbosity
 			std::atomic<bool> verbose_all;
 			mutable RWLock verbose_lock;
@@ -385,21 +458,28 @@ namespace MCPP {
 			 *
 			 *	\param [in] packet_id
 			 *		The ID of the packet to log.
+			 *	\param [in] state
+			 *		The protocol state associated
+			 *		with the packet.
 			 *	\param [in] direction
-			 *		The direction in which the
-			 *		packet shall be logged, defaults
-			 *		to ProtocolDirection::Both.
+			 *		The direction associated with
+			 *		the packet.
 			 */
-			void SetDebugPacket (Byte packet_id, ProtocolDirection direction=ProtocolDirection::Both);
+			void SetDebugPacket (UInt32 packet_id, ProtocolState state, ProtocolDirection direction);
 			/**
 			 *	Disables the logging of a certain
 			 *	packet.
 			 *
 			 *	\param [in] packet_id
-			 *		The ID of the packet to stop
-			 *		logging.
+			 *		The ID of the packet to log.
+			 *	\param [in] state
+			 *		The protocol state associated
+			 *		with the packet.
+			 *	\param [in] direction
+			 *		The direction associated with
+			 *		the packet.
 			 */
-			void UnsetDebugPacket (Byte packet_id) noexcept;
+			void UnsetDebugPacket (UInt32 packet_id, ProtocolState state, ProtocolDirection direction) noexcept;
 			/**
 			 *	Enables or disables debug logging
 			 *	of all keys.
@@ -432,6 +512,9 @@ namespace MCPP {
 			 *
 			 *	\param [in] type
 			 *		The type of the packet.
+			 *	\param [in] state
+			 *		The protocol state associated
+			 *		with the packet.
 			 *	\param [in] direction
 			 *		The direction the packet is moving.
 			 *
@@ -439,7 +522,7 @@ namespace MCPP {
 			 *		\em true if the packet should be
 			 *		logged, \em false otherwise.
 			 */
-			bool LogPacket (Byte type, ProtocolDirection direction) const noexcept;
+			bool LogPacket (UInt32 type, ProtocolState state, ProtocolDirection direction) const noexcept;
 			/**
 			 *	Whether the module or component given
 			 *	should be verbose.

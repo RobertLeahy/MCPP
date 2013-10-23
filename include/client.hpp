@@ -8,8 +8,8 @@
 
 #include <rleahylib/rleahylib.hpp>
 #include <aes_128_cfb_8.hpp>
-#include <packet.hpp>
 #include <network.hpp>
+#include <packet.hpp>
 #include <atomic>
 #include <functional>
 #include <type_traits>
@@ -208,10 +208,13 @@ namespace MCPP {
 			
 			
 			void enable_encryption (const Vector<Byte> &, const Vector<Byte> &);
+			void log (const Packet &, ProtocolState, ProtocolDirection) const;
 			
 			
 			template <typename T>
 			SmartPointer<SendHandle> send (const T & packet) {
+			
+				log(packet,T::State,T::Direction);
 			
 				auto buffer=Serialize(packet);
 				SmartPointer<SendHandle> retr;
@@ -241,7 +244,7 @@ namespace MCPP {
 				}
 				
 				return retr;
-			
+				
 			}
 			
 			

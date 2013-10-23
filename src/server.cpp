@@ -488,23 +488,22 @@ namespace MCPP {
 	}
 	
 	
-	void Server::SetDebugPacket (Byte packet_id, ProtocolDirection direction) {
+	void Server::SetDebugPacket (UInt32 packet_id, ProtocolState state, ProtocolDirection direction) {
 	
 		logged_packets_lock.Write([&] () {
 		
-			auto iter=logged_packets.find(packet_id);
-			
-			if (iter==logged_packets.end()) logged_packets.emplace(packet_id,direction);
-			else iter->second=direction;
+			logged_packets.emplace(packet_id,state,direction);
 		
 		});
 	
 	}
 	
 	
-	void Server::UnsetDebugPacket (Byte packet_id) noexcept {
+	void Server::UnsetDebugPacket (UInt32 packet_id, ProtocolState state, ProtocolDirection direction) noexcept {
 	
-		logged_packets_lock.Write([&] () {	logged_packets.erase(packet_id);	});
+		Tuple<UInt32,ProtocolState,ProtocolDirection> t(packet_id,state,direction);
+	
+		logged_packets_lock.Write([&] () {	logged_packets.erase(t);	});
 	
 	}
 	
@@ -530,7 +529,7 @@ namespace MCPP {
 	}
 	
 	
-	bool Server::LogPacket (Byte type, ProtocolDirection direction) const noexcept {
+	bool Server::LogPacket (UInt32 type, ProtocolState state, ProtocolDirection direction) const noexcept {
 	
 		//	If we're not debugging at all, short-circuit out
 		if (!debug) return false;
@@ -539,20 +538,14 @@ namespace MCPP {
 		//	true immediately
 		if (log_all_packets) return true;
 		
+		Tuple<UInt32,ProtocolState,ProtocolDirection> t(type,state,direction);
+		
 		//	Lock and determine if we're logging
 		//	this particular packet type in this
 		//	particular direction
 		return logged_packets_lock.Read([&] () {
 		
-			auto iter=logged_packets.find(type);
-			
-			return (
-				(iter!=logged_packets.end()) &&
-				(
-					(iter->second==ProtocolDirection::Both) ||
-					(direction==iter->second)
-				)
-			);
+			return logged_packets.find(t)!=logged_packets.end();
 		
 		});
 	
