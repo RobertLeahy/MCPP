@@ -367,7 +367,7 @@ namespace MCPP {
 		return String::Format(
 			(
 				(sizeof(T)==1)
-					?	"{{0}} byte"
+					?	"{0} bytes"
 					:	String::Format(
 							"{0}-bit {{0}} integer",
 							sizeof(T)*BitsPerByte()
@@ -467,7 +467,7 @@ namespace MCPP {
 	
 	static String print_type (const ProtocolState &) {
 	
-		return "Protocol Direction";
+		return "Protocol State";
 	
 	}
 	
