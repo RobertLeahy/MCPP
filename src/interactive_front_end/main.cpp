@@ -10,6 +10,9 @@
 #include "console.hpp"
 
 
+using namespace MCPP;
+
+
 enum class Action {
 
 	None,
