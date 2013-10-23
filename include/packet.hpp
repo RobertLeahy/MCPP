@@ -2767,6 +2767,34 @@ namespace MCPP {
 		return ToString(packet,T::State,T::Direction);
 	
 	}
+	
+	
+	/**
+	 *	The Minecraft protocol version this
+	 *	server is compatible with.
+	 */
+	extern const Word ProtocolVersion;
+	/**
+	 *	The major version number associated
+	 *	with the version of vanilla Minecraft
+	 *	this protocol implementation is
+	 *	compatible with.
+	 */
+	extern const Word MinecraftMajorVersion;
+	/**
+	 *	The minor version number associated
+	 *	with the version of vanilla Minecraft
+	 *	this protocol implementation is
+	 *	compatible with.
+	 */
+	extern const Word MinecraftMinorVersion;
+	/**
+	 *	The patch number associated with the
+	 *	version of vanilla Minecraft this
+	 *	protocol implementation is compatible
+	 *	with.
+	 */
+	extern const Word MinecraftPatch;
 
 
 }

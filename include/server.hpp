@@ -181,6 +181,35 @@ namespace MCPP {
 			 *	Not thread safe.
 			 */
 			static void Destroy () noexcept;
+			/**
+			 *	The date and time the server was built
+			 *	in this format: \"MMM DD YYYY HH:MM:SS\".
+			 */
+			static const String BuildDate;
+			/**
+			 *	The compiler the server was built with.
+			 */
+			static const String CompiledWith;
+			/**
+			 *	The major version number associated with
+			 *	this version of Minecraft++.
+			 */
+			static const Word MajorVersion;
+			/**
+			 *	The minor version number associated with
+			 *	this version of Minecraft++.
+			 */
+			static const Word MinorVersion;
+			/**
+			 *	The patch number associated with this
+			 *	version of Minecraft++.
+			 */
+			static const Word Patch;
+			/**
+			 *	The proper name which identifies
+			 *	Minecraft++.
+			 */
+			static const String Name;
 			
 			
 			/**
@@ -332,24 +361,6 @@ namespace MCPP {
 			 *	packets.
 			 */
 			PacketRouter Router;
-			/**
-			 *	Returns a string representing the date
-			 *	and time the server was built in this
-			 *	format: \"MMM DD YYYY HH:MM:SS\".
-			 *
-			 *	\return
-			 *		A string of the above format.
-			 */
-			const String & BuildDate () const noexcept;
-			/**
-			 *	Returns a string representing the compiler
-			 *	the server was built with.
-			 *
-			 *	\return
-			 *		A string representing the compiler used
-			 *		to build the server.
-			 */
-			const String & CompiledWith () const noexcept;
 			
 		
 			Server (const Server &) = delete;
@@ -586,6 +597,16 @@ namespace MCPP {
 			 *		A reference to a chat provider.
 			 */
 			ChatProvider & GetChatProvider () const;
+			/**
+			 *	Retrieves a string which identifies the
+			 *	server software.
+			 *
+			 *	\return
+			 *		A string identifying the server
+			 *		software.
+			 */
+			String GetName ();
+			
 			
 			
 			//			//

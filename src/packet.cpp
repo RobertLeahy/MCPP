@@ -7,6 +7,12 @@ using namespace MCPP::PacketImpl;
 namespace MCPP {
 
 
+	const Word ProtocolVersion=3;
+	const Word MinecraftMajorVersion=1;
+	const Word MinecraftMinorVersion=7;
+	const Word MinecraftPatch=0;
+
+
 	void BadFormat::Raise () {
 	
 		throw BadFormat();

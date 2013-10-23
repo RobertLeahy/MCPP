@@ -1,7 +1,12 @@
 #include <server.hpp>
+#include <format.hpp>
 #include <singleton.hpp>
 #include <cstdlib>
 #include <exception>
+
+
+#define stringify_impl(x) #x
+#define stringify(x) stringify_impl(x)
 
 
 namespace MCPP {
@@ -31,6 +36,30 @@ namespace MCPP {
 	static const String max_bytes_setting="max_bytes";
 	static const Word default_max_players=0;
 	static const String max_players_setting="max_players";
+	static const String name_template="{0} {1}";
+	
+	
+	const String Server::BuildDate(
+		__DATE__
+		" "
+		__TIME__
+	);
+	const String Server::CompiledWith(
+		#ifdef __GNUC__
+		"GNU C++ Compiler (g++) "
+		stringify(__GNUC__)
+		"."
+		stringify(__GNUC_MINOR__)
+		"."
+		stringify(__GNUC_PATCHLEVEL__)
+		#else
+		"UNKNOWN"
+		#endif
+	);
+	const Word Server::MajorVersion=0;
+	const Word Server::MinorVersion=0;
+	const Word Server::Patch=0;
+	const String Server::Name="Minecraft++";
 
 
 	Server::Server () :
@@ -612,45 +641,6 @@ namespace MCPP {
 	}
 	
 	
-	static const String build_date(
-		__DATE__
-		" "
-		__TIME__
-	);
-	
-	
-	const String & Server::BuildDate () const noexcept {
-	
-		return build_date;
-
-	}
-	
-	
-	#define stringify_impl(x) #x
-	#define stringify(x) stringify_impl(x)
-	
-	
-	static const String compiled_with(
-		#ifdef __GNUC__
-		"GNU C++ Compiler (g++) "
-		stringify(__GNUC__)
-		"."
-		stringify(__GNUC_MINOR__)
-		"."
-		stringify(__GNUC_PATCHLEVEL__)
-		#else
-		"UNKNOWN"
-		#endif
-	);
-
-
-	const String & Server::CompiledWith () const noexcept {
-	
-		return compiled_with;
-
-	}
-	
-	
 	static Singleton<Server> singleton;
 
 
@@ -1008,6 +998,21 @@ namespace MCPP {
 		if (provider==nullptr) throw std::out_of_range(NullPointerError);
 		
 		return *provider;
+	
+	}
+	
+	
+	String Server::GetName () {
+	
+		return String::Format(
+			name_template,
+			Name,
+			FormatVersion(
+				MajorVersion,
+				MinorVersion,
+				Patch
+			)
+		);
 	
 	}
 

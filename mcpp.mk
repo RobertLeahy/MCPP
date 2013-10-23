@@ -22,6 +22,7 @@ obj/client_list.o \
 obj/client_list_iterator.o \
 obj/compression.o \
 obj/concurrency_manager.o \
+obj/format.o \
 obj/hardware_concurrency.o \
 obj/http_handler.o \
 obj/http_request.o \
