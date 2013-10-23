@@ -20,6 +20,26 @@ static const String favicon_prefix("data:image/png;base64,");
 class ServerListPing : public Module {
 
 
+	private:
+	
+	
+		//	Client sends this packet to
+		//	request server status information
+		typedef Packets::Status::Serverbound::Request request;
+		//	Client sends this packet to
+		//	attempt to establish latency
+		//	to the server
+		typedef Packets::Status::Serverbound::Ping ping_cs;
+		
+		
+		//	Server sends this packet with
+		//	status information
+		typedef Packets::Status::Clientbound::Response response;
+		//	Server sends this packet so
+		//	client can establish latency
+		typedef Packets::Status::Clientbound::Ping ping_sc;
+
+
 	public:
 		
 		
@@ -44,7 +64,10 @@ class ServerListPing : public Module {
 			
 			//	Install handler for the status
 			//	request packet
-			router(0,ProtocolState::Status)=[] (ReceiveEvent event) {
+			router(
+				request::PacketID,
+				ProtocolState::Status
+			)=[] (ReceiveEvent event) {
 			
 				auto & server=Server::Get();
 			
@@ -95,8 +118,8 @@ class ServerListPing : public Module {
 				//	Add "version" object
 				JSON::Object version;
 				version.Add(
-					String("name"),String("MCPP"),
-					String("protocol"),Double(1)
+					String("name"),server.GetName(),
+					String("protocol"),Double(ProtocolVersion)
 				);
 				
 				root.Add(
@@ -127,7 +150,7 @@ class ServerListPing : public Module {
 				}
 				
 				//	Create and send reply
-				Packets::Status::Clientbound::Response packet;
+				response packet;
 				packet.Value=std::move(root);
 				
 				event.From->Send(packet);
@@ -135,13 +158,16 @@ class ServerListPing : public Module {
 			};
 			
 			//	Install handler for the ping request
-			router(1,ProtocolState::Status)=[] (ReceiveEvent event) {
+			router(
+				ping_cs::PacketID,
+				ProtocolState::Status
+			)=[] (ReceiveEvent event) {
 			
-				auto & packet=event.Data.Get<Packets::Status::Serverbound::Ping>();
+				auto & packet=event.Data.Get<ping_cs>();
 				
 				//	Just send the time right back
 				//	to the client
-				Packets::Status::Clientbound::Ping reply;
+				ping_sc reply;
 				reply.Time=packet.Time;
 				
 				event.From->Send(reply);
