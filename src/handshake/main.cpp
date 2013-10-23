@@ -14,6 +14,12 @@ static const Word priority=1;
 class Handshake : public Module {
 
 
+	private:
+	
+	
+		typedef Packets::Handshaking::Serverbound::Handshake handshake;
+
+
 	public:
 	
 	
@@ -33,9 +39,12 @@ class Handshake : public Module {
 		
 		virtual void Install () override {
 		
-			Server::Get().Router(0x00,ProtocolState::Handshaking)=[] (ReceiveEvent event) {
+			Server::Get().Router(
+				handshake::PacketID,
+				ProtocolState::Handshaking
+			)=[] (ReceiveEvent event) {
 			
-				auto & packet=event.Data.Get<Packets::Handshaking::Serverbound::Handshake>();
+				auto & packet=event.Data.Get<handshake>();
 				
 				event.From->SetState(packet.CurrentState);
 			
