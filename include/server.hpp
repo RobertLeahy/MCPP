@@ -183,6 +183,21 @@ namespace MCPP {
 			static void Destroy () noexcept;
 			
 			
+			/**
+			 *	Wraps a callback, panicking if it throws.
+			 *
+			 *	\tparam T
+			 *		The type of callback to invoke.
+			 *	\tparam Args
+			 *		The types of the arguments to pass
+			 *		through to the callback.
+			 *
+			 *	\param [in] callback
+			 *		The callback to invoke.
+			 *	\param [in] args
+			 *		The arguments to forward through to
+			 *		\em callback.
+			 */
 			template <typename T, typename... Args>
 			static auto PanicOnThrow (T && callback, Args &&... args) noexcept(
 				noexcept(callback(std::forward<Args>(args)...))
@@ -212,6 +227,24 @@ namespace MCPP {
 				}
 			
 			}
+			/**
+			 *	Wraps a callback, panicking if it throws.
+			 *
+			 *	\tparam T
+			 *		The type of callback to invoke.
+			 *	\tparam Args
+			 *		The types of the arguments to pass
+			 *		through to the callback.
+			 *
+			 *	\param [in] callback
+			 *		The callback to invoke.
+			 *	\param [in] args
+			 *		The arguments to forward through to
+			 *		\em callback.
+			 *
+			 *	\return
+			 *		Whatever \em callback returned.
+			 */
 			template <typename T, typename... Args>
 			static auto PanicOnThrow (T && callback, Args &&... args) noexcept(
 				noexcept(callback(std::forward<Args>(args)...))
