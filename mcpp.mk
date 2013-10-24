@@ -41,7 +41,8 @@ obj/sha1.o \
 obj/url.o \
 obj/random.o \
 obj/thread_pool.o \
-obj/thread_pool_handle.o | \
+obj/thread_pool_handle.o \
+obj/yggdrasil.o | \
 $(MCPP_LIB) \
 bin
 	$(GPP) -shared -o $@ $^ $(MCPP_LIB) -lws2_32
