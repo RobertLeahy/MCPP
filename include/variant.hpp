@@ -188,6 +188,71 @@ namespace MCPP {
 		
 		
 		};
+		
+		
+		template <Word i, typename, typename...>
+		class FindConvertibleImpl {	};
+		
+		
+		template <Word i, typename From, typename To, typename... Args>
+		class FindConvertibleImpl<i,From,To,Args...> {
+		
+		
+			public:
+			
+			
+				constexpr static Word Value=std::is_constructible<
+					To,
+					From
+				>::value ? i : FindConvertibleImpl<i+1,From,Args...>::Value;
+		
+		
+		};
+		
+		
+		template <Word i, typename T>
+		class FindConvertibleImpl<i,T> {
+		
+		
+			public:
+			
+			
+				constexpr static Word Value=i;
+		
+		
+		};
+		
+		
+		template <bool, typename T, typename...>
+		class NoThrowConstructibleImpl {
+		
+		
+			public:
+			
+			
+				constexpr static bool Value=std::is_nothrow_constructible<T,T>::value;
+		
+		
+		};
+		
+		
+		template <typename T, typename... Args>
+		class NoThrowConstructibleImpl<true,T,Args...> {
+		
+		
+			public:
+			
+			
+				constexpr static bool Value=std::is_nothrow_constructible<
+					typename GetType<
+						FindConvertibleImpl<0,T,Args...>::Value,
+						Args...
+					>::Type,
+					T
+				>::value;
+		
+		
+		};
 	
 	
 		template <typename... Args>
@@ -218,6 +283,36 @@ namespace MCPP {
 					
 					
 						constexpr static Word Value=FindTypeImpl<0,T,Args...>::Value;
+				
+				
+				};
+				
+				
+				template <typename T>
+				class FindConvertible {
+				
+				
+					public:
+					
+					
+						constexpr static Word Value=FindConvertibleImpl<0,T,Args...>::Value;
+				
+				
+				};
+				
+				
+				template <typename T>
+				class NoThrowConstructible {
+				
+				
+					public:
+					
+					
+						constexpr static bool Value=NoThrowConstructibleImpl<
+							FindType<T>::Value==sizeof...(Args),
+							T,
+							Args...
+						>::Value;
 				
 				
 				};
@@ -296,6 +391,14 @@ namespace MCPP {
 		
 		
 			typedef VariantImpl::VariantInfo<Args...> info;
+			
+			
+			template <typename, typename=void>
+			class NoThrowConstructibleHelper;
+			
+			
+			template <typename, typename=void>
+			class NoThrowAssignableHelper;
 		
 		
 			bool engaged;
@@ -367,7 +470,33 @@ namespace MCPP {
 				!std::is_same<
 					typename std::decay<T>::type,
 					Variant
+				>::value &&
+				(info::template FindType<T>::Value==sizeof...(Args)) &&
+				(info::template FindConvertible<T>::Value!=sizeof...(Args))
+			>::type construct (T && item) noexcept(
+				std::is_nothrow_constructible<
+					typename std::decay<T>::type,
+					T
 				>::value
+			) {
+			
+				constexpr Word index=info::template FindConvertible<T>::Value;
+				
+				new (buffer) typename info::template Types<index>::Type (std::forward<T>(item));
+				
+				engaged=true;
+				active=index;
+			
+			}
+			
+			
+			template <typename T>
+			typename std::enable_if<
+				!std::is_same<
+					typename std::decay<T>::type,
+					Variant
+				>::value &&
+				(info::template FindType<T>::Value!=sizeof...(Args))
 			>::type construct (T && item) noexcept(
 				std::is_nothrow_constructible<
 					typename std::decay<T>::type,
@@ -376,11 +505,6 @@ namespace MCPP {
 			) {
 			
 				constexpr Word index=info::template FindType<T>::Value;
-				
-				static_assert(
-					index!=sizeof...(Args),
-					"Variant does not contain that type"
-				);
 				
 				new (buffer) typename std::decay<T>::type (std::forward<T>(item));
 				
@@ -414,6 +538,7 @@ namespace MCPP {
 			
 			
 			template <Word i>
+			[[noreturn]]
 			typename std::enable_if<
 				!std::is_copy_constructible<typename info::template Types<i>::Type>::value
 			>::type copy_impl_impl (const Variant &) {
@@ -460,6 +585,7 @@ namespace MCPP {
 			
 			
 			template <Word i>
+			[[noreturn]]
 			typename std::enable_if<
 				!std::is_move_constructible<typename info::template Types<i>::Type>::value
 			>::type move_impl_impl (const Variant &) {
@@ -508,7 +634,7 @@ namespace MCPP {
 			
 			template <typename T>
 			void assign_impl (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				destroy();
@@ -525,7 +651,7 @@ namespace MCPP {
 					Variant
 				>::value
 			>::type assign (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				if (reinterpret_cast<const void *>(&item)!=this) assign_impl(std::forward<T>(item));
@@ -540,7 +666,7 @@ namespace MCPP {
 					Variant
 				>::value
 			>::type assign (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				assign_impl(std::forward<T>(item));
@@ -607,7 +733,7 @@ namespace MCPP {
 			 */
 			template <typename T>
 			Variant (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowConstructibleHelper<T>::Value
 			) : engaged(false) {
 			
 				construct(std::forward<T>(item));
@@ -632,7 +758,7 @@ namespace MCPP {
 			 */
 			template <typename T>
 			Variant & operator = (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				assign(std::forward<T>(item));
@@ -777,6 +903,66 @@ namespace MCPP {
 	
 	
 	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	
+	
+	template <typename... Args>
+	template <typename T, typename>
+	class Variant<Args...>::NoThrowConstructibleHelper {
+	
+	
+		public:
+		
+		
+			constexpr static bool Value=Variant<Args...>::info::template NoThrowConstructible<T>::Value;
+	
+	
+	};
+	
+	
+	template <typename... Args>
+	template <typename T>
+	class Variant<Args...>::NoThrowConstructibleHelper<T,typename std::enable_if<
+		std::is_same<
+			typename std::decay<T>::type,
+			Variant<Args...>
+		>::value
+	>::type> {
+	
+	
+		private:
+		
+		
+			typedef Variant<Args...>::info info;
+	
+	
+		public:
+		
+		
+			constexpr static bool Value=(
+				(
+					std::is_rvalue_reference<T>::value ||
+					!std::is_reference<T>::value
+				) &&
+				!std::is_const<T>::value
+			) ? info::NoThrowMovable : info::NoThrowCopyable;
+	
+	
+	};
+	
+	
+	template <typename... Args>
+	template <typename T, typename>
+	class Variant<Args...>::NoThrowAssignableHelper : public Variant<Args...>::template NoThrowConstructibleHelper<T> {	};
+	
+	
+	/**
+	 *	\endcond
+	 */
 
 
 }
