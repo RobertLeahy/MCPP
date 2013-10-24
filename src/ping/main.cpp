@@ -84,8 +84,8 @@ class ServerListPing : public Module {
 					
 						JSON::Object obj;		
 						obj.Add(
-							String("name"),client->GetUsername(),
-							String("id"),String()
+							"name",client->GetUsername(),
+							"id",String()
 						);
 						
 						arr.Values.Add(std::move(obj));
@@ -103,37 +103,37 @@ class ServerListPing : public Module {
 				//	Create "players" object
 				JSON::Object players;
 				players.Add(
-					String("max"),json_max_players,
-					String("online"),Double(player_count),
-					String("sample"),std::move(arr)
+					"max",json_max_players,
+					"online",player_count,
+					"sample",std::move(arr)
 				);
 				
 				//	Add "players" object to the
 				//	root object
 				JSON::Object root;
 				root.Add(
-					String("players"),std::move(players)
+					"players",std::move(players)
 				);
 				
 				//	Add "version" object
 				JSON::Object version;
 				version.Add(
-					String("name"),server.GetName(),
-					String("protocol"),Double(ProtocolVersion)
+					"name",server.GetName(),
+					"protocol",ProtocolVersion
 				);
 				
 				root.Add(
-					String("version"),std::move(version)
+					"version",std::move(version)
 				);
 				
 				//	Add "description" object
 				JSON::Object description;
 				description.Add(
-					String("text"),server.GetMessageOfTheDay()
+					"text",server.GetMessageOfTheDay()
 				);
 				
 				root.Add(
-					String("description"),std::move(description)
+					"description",std::move(description)
 				);
 				
 				//	Add "favicon" if applicable
@@ -144,7 +144,7 @@ class ServerListPing : public Module {
 					favi << Base64::Encode(*icon);
 					
 					root.Add(
-						String("favicon"),std::move(favi)
+						"favicon",std::move(favi)
 					);
 				
 				}
