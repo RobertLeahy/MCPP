@@ -152,11 +152,13 @@ namespace MCPP {
 	
 	void Time::Install () {
 	
+		auto & server=Server::Get();
+	
 		//	Retrieve settings from the backing
 		//	store
 		
 		//	Time between ticks
-		auto tick_length=Server::Get().Data().GetSetting(tick_length_key);
+		auto tick_length=server.Data().GetSetting(tick_length_key);
 		if (
 			tick_length.IsNull() ||
 			!tick_length->ToInteger(&(this->tick_length)) ||
@@ -164,7 +166,7 @@ namespace MCPP {
 		) this->tick_length=default_tick_length;
 		
 		//	Time between saves
-		auto between_saves=Server::Get().Data().GetSetting(between_saves_key);
+		auto between_saves=server.Data().GetSetting(between_saves_key);
 		if (
 			between_saves.IsNull() ||
 			!between_saves->ToInteger(&(this->between_saves)) ||
@@ -173,7 +175,7 @@ namespace MCPP {
 		else this->between_saves=this->between_saves/this->tick_length;
 		
 		//	Offline freeze
-		auto offline_freeze=Server::Get().Data().GetSetting(offline_freeze_key);
+		auto offline_freeze=server.Data().GetSetting(offline_freeze_key);
 		this->offline_freeze=(
 			offline_freeze.IsNull()
 				?	default_offline_freeze
@@ -189,7 +191,7 @@ namespace MCPP {
 		);
 		
 		//	Threshold
-		auto threshold_percentage=Server::Get().Data().GetSetting(threshold_percentage_key);
+		auto threshold_percentage=server.Data().GetSetting(threshold_percentage_key);
 		if (
 			threshold_percentage.IsNull() ||
 			!threshold_percentage->ToInteger(&(this->threshold_percentage))
@@ -207,7 +209,7 @@ namespace MCPP {
 		TimeSave save;
 		Word len=sizeof(save);
 		if (
-			Server::Get().Data().GetBinary(
+			server.Data().GetBinary(
 				time_key,
 				&save,
 				&len
@@ -226,7 +228,7 @@ namespace MCPP {
 		//	that all objects we could be holding
 		//	from other modules are cleaned up
 		//	before those modules are unloaded
-		Server::Get().OnShutdown.Add([this] () {
+		server.OnShutdown.Add([this] () {
 		
 			callbacks.Clear();
 			scheduled_callbacks.Clear();
@@ -237,7 +239,7 @@ namespace MCPP {
 		timer=Timer::CreateAndStart();
 	
 		//	Start the tick loop
-		Server::Get().OnInstall.Add(
+		server.OnInstall.Add(
 			[this] (bool before) {
 			
 				if (!before) {
@@ -439,6 +441,8 @@ namespace MCPP {
 	
 		try {
 		
+			auto & server=Server::Get();
+		
 			//	Triggers the next tick
 			MultiScopeGuard sg(
 				[this] () {
@@ -491,7 +495,7 @@ namespace MCPP {
 		
 			if (!(
 				offline_freeze &&
-				(Server::Get().Clients.AuthenticatedCount()==0)
+				(server.Clients.AuthenticatedCount()==0)
 			)) {
 			
 				//	Update stats
@@ -502,7 +506,7 @@ namespace MCPP {
 				
 					//	Tick was "too long"
 					
-					Server::Get().WriteLog(
+					server.WriteLog(
 						String::Format(
 							tick_too_long,
 							(static_cast<Double>(elapsed-tick_length)/tick_length)*100,
@@ -523,17 +527,12 @@ namespace MCPP {
 				lock.Release();
 				
 				//	Send tick packet
-				Packet packet;
-				packet.SetType<PacketTypeMap<0x04>>();
-				packet.Retrieve<UInt64>(0)=age;
-				packet.Retrieve<UInt64>(1)=time;
+				Packets::Play::Clientbound::TimeUpdate packet;
+				packet.Age=age;
+				packet.Time=time;
 				
 				//	Send to all clients
-				for (auto & client : Server::Get().Clients) {
-				
-					if (client->GetState()==ClientState::Authenticated) client->Send(packet);
-				
-				}
+				for (auto & client : server.Clients) if (client->GetState()==ProtocolState::Play) client->Send(packet);
 				
 				//	Execute tasks
 				
@@ -546,7 +545,7 @@ namespace MCPP {
 					MultiScopeGuard param;
 					if (t.Item<1>()) param=sg;
 					
-					Server::Get().Pool().Enqueue(
+					server.Pool().Enqueue(
 						t.Item<0>(),
 						std::move(param)
 					);
@@ -569,7 +568,7 @@ namespace MCPP {
 					
 					scheduled_callbacks.Delete(0);
 					
-					Server::Get().Pool().Enqueue(
+					server.Pool().Enqueue(
 						std::move(callback),
 						std::move(param)
 					);
