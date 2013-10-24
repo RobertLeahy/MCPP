@@ -25,6 +25,61 @@ namespace MCPP {
 	namespace VariantImpl {
 	
 	
+		template <typename T1, typename T2, typename=void>
+		class MaxAlignedImplHelper {
+		
+		
+			public:
+			
+			
+				typedef T1 Type;
+		
+		
+		};
+		
+		
+		template <typename T1, typename T2>
+		class MaxAlignedImplHelper<T1,T2,typename std::enable_if<alignof(T1)<alignof(T2)>::type> {
+		
+		
+			public:
+			
+			
+				typedef T2 Type;
+		
+		
+		};
+		
+		
+		template <typename T, typename... Args>
+		class MaxAlignedImpl {
+		
+		
+			public:
+			
+			
+				typedef typename MaxAlignedImplHelper<
+					T,
+					typename MaxAlignedImpl<Args...>::Type
+				>::Type Type;
+		
+		
+		};
+		
+		
+		template <typename T>
+		class MaxAlignedImpl<T> {
+		
+		
+			public:
+			
+			
+				typedef T Type;
+		
+		
+		};
+	
+	
 		template <typename...>
 		class MaxAlignOfImpl {	};
 		
@@ -318,6 +373,9 @@ namespace MCPP {
 				};
 				
 				
+				typedef typename MaxAlignedImpl<Args...>::Type MaxAligned;
+				
+				
 				constexpr static Word MaxAlignOf=MaxAlignOfImpl<Args...>::Value;
 				
 				
@@ -403,10 +461,7 @@ namespace MCPP {
 		
 			bool engaged;
 			Word active;
-			alignas(
-				max_align_t
-				//info::MaxAlignOf
-			) Byte buffer [info::MaxSizeOf];
+			alignas(typename info::MaxAligned) Byte buffer [info::MaxSizeOf];
 			
 			
 			template <typename T>
