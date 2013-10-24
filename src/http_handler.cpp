@@ -287,7 +287,7 @@ namespace MCPP {
 						if (msg->msg==CURLMSG_DONE) {
 						
 							//	Lookup this handle
-							SmartPointer<HTTPRequest> request(requests[msg->easy_handle]);
+							HTTPRequest * request=requests[msg->easy_handle].get();
 							
 							//	Dispatch callback as appropriate
 							if (msg->data.result!=CURLE_OK) {
@@ -447,7 +447,7 @@ namespace MCPP {
 	}
 	
 	
-	static inline void common_opts (CURL * curl, const String & url, SmartPointer<HTTPRequest> request) {
+	static inline void common_opts (CURL * curl, const std::unique_ptr<HTTPRequest> & request) {
 		
 		//	Apply settings
 		CURLcode result;
@@ -482,11 +482,7 @@ namespace MCPP {
 			((result=curl_easy_setopt(
 				curl,
 				CURLOPT_WRITEDATA,
-				reinterpret_cast<void *>(
-					static_cast<HTTPRequest *>(
-						request
-					)
-				)
+				request.get()
 			))!=CURLE_OK) ||
 			//	Call the header callback
 			//	to handle headers
@@ -500,11 +496,7 @@ namespace MCPP {
 			((result=curl_easy_setopt(
 				curl,
 				CURLOPT_WRITEHEADER,
-				reinterpret_cast<void *>(
-					static_cast<HTTPRequest *>(
-						request
-					)
-				)
+				request.get()
 			))!=CURLE_OK) ||
 			//	Call the read callback to
 			//	handle POSTs and such
@@ -518,20 +510,23 @@ namespace MCPP {
 			((result=curl_easy_setopt(
 				curl,
 				CURLOPT_READDATA,
-				reinterpret_cast<void *>(
-					static_cast<HTTPRequest *>(
-						request
-					)
-				)
+				request.get()
 			))!=CURLE_OK)
 			//	If DEBUG is defined, verbose
-			#ifdef DEBUG
+			//#ifdef DEBUG
 			/*|| ((result=curl_easy_setopt(
 				curl,
 				CURLOPT_VERBOSE,
 				static_cast<long>(1)
 			))!=CURLE_OK)*/
-			#endif
+			//#endif
+			//	Figure out a way to solve the
+			//	problem this "addresses"
+			|| ((result=curl_easy_setopt(
+				curl,
+				CURLOPT_SSL_VERIFYPEER,
+				static_cast<long>(0)
+			))!=CURLE_OK)
 		) throw std::runtime_error(curl_easy_strerror(result));
 	
 	}
@@ -545,15 +540,15 @@ namespace MCPP {
 		if (curl==nullptr) throw std::runtime_error(curl_error);
 		
 		//	Create HTTPRequest object
-		SmartPointer<HTTPRequest> request;
+		std::unique_ptr<HTTPRequest> request;
 		try {
 		
-			request=SmartPointer<HTTPRequest>::Make(
+			request=std::unique_ptr<HTTPRequest>(new HTTPRequest(
 				curl,
 				max_bytes,
 				url,
 				std::move(callback)
-			);
+			));
 			
 		} catch (...) {
 		
@@ -564,7 +559,7 @@ namespace MCPP {
 		}
 		
 		//	Set options
-		common_opts(curl,url,request);
+		common_opts(curl,request);
 		
 		//	Add to the list of pending/active
 		//	requests
@@ -580,11 +575,110 @@ namespace MCPP {
 			);
 			
 			//	Add to list
-			requests.insert(
-				decltype(requests)::value_type(
+			requests.emplace(
+				curl,
+				std::move(request)
+			);
+			
+			//	Wake up worker to handle
+			//	request
+			condvar.WakeAll();
+		
+		});
+	
+	}
+	
+	
+	static const String content_type_template("Content-Type: {0}");
+	static const char * content_type_error="Could not set Content-Type header";
+	
+	
+	void HTTPHandler::Post (const String & url, const String & content_type, const String & body, HTTPStatusStringDone callback) {
+	
+		//	Encode the content-type
+		auto ct=String::Format(
+			content_type_template,
+			content_type
+		).ToCString();
+		struct curl_slist * headers=curl_slist_append(
+			nullptr,
+			static_cast<char *>(ct)
+		);
+		if (headers==nullptr) throw std::runtime_error(content_type_error);
+		
+		CURL * curl;
+		std::unique_ptr<HTTPRequest> request;
+		try {
+		
+			curl=curl_easy_init();
+			
+			if (curl==nullptr) throw std::runtime_error(curl_error);
+			
+			//	Create HTTPRequest object
+			try {
+			
+				request=std::unique_ptr<HTTPRequest>(new HTTPRequest(
 					curl,
-					std::move(request)
-				)
+					max_bytes,
+					url,
+					body,
+					headers,
+					std::move(callback)
+				));
+			
+			} catch (...) {
+			
+				curl_easy_cleanup(curl);
+				
+				throw;
+			
+			}
+			
+		} catch (...) {
+		
+			curl_slist_free_all(headers);
+			
+			throw;
+		
+		}
+		
+		//	Set options
+		common_opts(curl,request);
+		CURLcode result;
+		if (!(
+			((result=curl_easy_setopt(
+				curl,
+				CURLOPT_HTTPHEADER,
+				headers
+			))==CURLE_OK) &&
+			((result=curl_easy_setopt(
+				curl,
+				CURLOPT_POST,
+				static_cast<long>(1)
+			))==CURLE_OK) &&
+			((result=curl_easy_setopt(
+				curl,
+				CURLOPT_POSTFIELDSIZE_LARGE,
+				static_cast<curl_off_t>(SafeWord(request->Body().Count()))
+			))==CURLE_OK)
+		)) throw std::runtime_error(
+			curl_easy_strerror(result)
+		);
+		
+		//	Add to list of pending/active
+		//	requests
+		mutex.Execute([&] () {
+		
+			//	Add to multi handle
+			CURLMcode result=curl_multi_add_handle(multi,curl);
+			if (result!=CURLM_OK) throw std::runtime_error(
+				curl_multi_strerror(result)
+			);
+			
+			//	Add to list
+			requests.emplace(
+				curl,
+				std::move(request)
 			);
 			
 			//	Wake up worker to handle

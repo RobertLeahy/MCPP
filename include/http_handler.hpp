@@ -9,6 +9,7 @@
 #include <rleahylib/rleahylib.hpp>
 #include <curl/curl.h>
 #include <functional>
+#include <memory>
 #include <unordered_map>
 
 
@@ -94,16 +95,19 @@ namespace MCPP {
 		private:
 		
 		
-			SmartPointer<Encoding> encoding;
+			std::unique_ptr<Encoding> encoding;
 			HTTPStatusDone status_done;
 			HTTPStatusStringDone status_string_done;
 			HTTPWrite write;
 			HTTPRead read;
 			HTTPHeader header;
+			Word outgoing_pos;
+			Vector<Byte> outgoing;
 			Vector<Byte> buffer;
 			Word max_bytes;
 			CURL * handle;
 			Vector<Byte> url;
+			struct curl_slist * headers;
 	
 	
 		public:
@@ -117,6 +121,7 @@ namespace MCPP {
 		
 		
 			HTTPRequest (CURL * handle, Word max_bytes, const String & url, HTTPStatusStringDone status_string_done);
+			HTTPRequest (CURL * handle, Word max_bytes, const String & url, const String & body, struct curl_slist * headers, HTTPStatusStringDone status_string_done);
 			~HTTPRequest () noexcept;
 		
 		
@@ -125,6 +130,7 @@ namespace MCPP {
 			void Done (Word status_code) noexcept;
 			bool Header (const String & key, const String & value) noexcept;
 			const Vector<Byte> & URL () const noexcept;
+			const Vector<Byte> & Body () const noexcept;
 	
 	
 	};
@@ -163,7 +169,7 @@ namespace MCPP {
 			
 			
 			//	Request list
-			std::unordered_map<CURL *, SmartPointer<HTTPRequest>> requests;
+			std::unordered_map<CURL *,std::unique_ptr<HTTPRequest>> requests;
 			
 			
 			//	cURL multi handle
@@ -232,6 +238,15 @@ namespace MCPP {
 			 */
 			void Get (
 				const String & url,
+				HTTPStatusStringDone callback
+			);
+			/**
+			 *
+			 */
+			void Post(
+				const String & url,
+				const String & content_type,
+				const String & body,
 				HTTPStatusStringDone callback
 			);
 	
