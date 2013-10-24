@@ -12,13 +12,12 @@ namespace MCPP {
 	static const String encrypt_key("encryption");
 	static const String raw_send_key("raw_send");
 	static const String parse_key("raw_recv");
-	
-	
 	static const String packet_sent("Server => {0}:{1} {2}");
 	static const String packet_recvd("{0}:{1} => Server {2}");
 	static const String buffer_recvd("{0}:{1} - Parsing buffer in state {2} - {3} bytes");
 	static const String buffer_decrypted("{0}:{1} - Decrypted {1} bytes");
 	static const String bytes_consumed("{0}:{1} - Parsing consumed {2} bytes");
+	static const String ciphertext_banner("Ciphertext:");
 	
 	
 	//	Formats a byte for display/logging
@@ -430,7 +429,7 @@ namespace MCPP {
 	}
 	
 	
-	void Client::log (const Packet & packet, ProtocolState state, ProtocolDirection direction) const {
+	void Client::log (const Packet & packet, ProtocolState state, ProtocolDirection direction, const Vector<Byte> & buffer, const Vector<Byte> & ciphertext) const {
 	
 		auto & server=Server::Get();
 	
@@ -443,6 +442,26 @@ namespace MCPP {
 			),
 			Service::LogType::Debug
 		);
+		
+		if (server.IsVerbose(raw_send_key)) {
+		
+			String log(
+				String::Format(
+					raw_send_template,
+					IP(),
+					Port(),
+					buffer.Count()
+				)
+			);
+			log << Newline << buffer_format(buffer);
+			if (ciphertext.Count()!=0) log << Newline << ciphertext_banner << Newline << buffer_format(ciphertext);
+			
+			server.WriteLog(
+				log,
+				Service::LogType::Debug
+			);
+		
+		}
 	
 	}
 

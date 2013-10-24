@@ -208,19 +208,27 @@ namespace MCPP {
 			
 			
 			void enable_encryption (const Vector<Byte> &, const Vector<Byte> &);
-			void log (const Packet &, ProtocolState, ProtocolDirection) const;
+			void log (const Packet &, ProtocolState, ProtocolDirection, const Vector<Byte> &, const Vector<Byte> &) const;
 			
 			
 			template <typename T>
 			SmartPointer<SendHandle> send (const T & packet) {
 			
-				log(packet,T::State,T::Direction);
-			
 				auto buffer=Serialize(packet);
+				Vector<Byte> ciphertext;
+				
 				SmartPointer<SendHandle> retr;
 				
 				if (encryptor.IsNull()) {
 				
+					log(
+						packet,
+						T::State,
+						T::Direction,
+						buffer,
+						ciphertext
+					);
+					
 					retr=conn->Send(std::move(buffer));
 				
 				} else {
@@ -229,7 +237,17 @@ namespace MCPP {
 					
 					try {
 					
-						retr=conn->Send(encryptor->Encrypt(std::move(buffer)));
+						ciphertext=encryptor->Encrypt(buffer);
+						
+						log(
+							packet,
+							T::State,
+							T::Direction,
+							buffer,
+							ciphertext
+						);
+						
+						retr=conn->Send(std::move(ciphertext));
 					
 					} catch (...) {
 					
