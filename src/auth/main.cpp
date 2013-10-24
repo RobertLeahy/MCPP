@@ -1,13 +1,11 @@
 #include <rleahylib/rleahylib.hpp>
 #include <hash.hpp>
-#include <http_handler.hpp>
 #include <mod.hpp>
 #include <packet.hpp>
 #include <random.hpp>
 #include <rsa_key.hpp>
 #include <server.hpp>
-#include <sha1.hpp>
-#include <url.hpp>
+#include <yggdrasil.hpp>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -18,10 +16,9 @@ using namespace MCPP;
 
 static const String login_url("http://session.minecraft.net/game/checkserver.jsp?user={0}&serverId={1}");
 static const String verbose_key("auth");
-static const String http_request("HTTP request => {0}");
-static const String http_reply_success("HTTP response <= {0} - Status: 200 - Time elapsed {1}ns - \"{2}\"");
-static const String http_reply_error("HTTP response <= {0} - Status: {1} - Time elapsed {2}ns");
-static const String http_reply_internal_error("HTTP response <= {0} internal error after {1}ns");
+static const String http_request("HTTP GET request => {0}");
+static const String http_response("HTTP response <= {0} - Status {1} - Time elapsed {2}ns - Body: {3}");
+static const String http_response_failed("HTTP response <= {0} internal error after {1}ns");
 static const String auth_callback_error("Error during authentication");
 static const String protocol_error("Protocol error");
 static const String encryption_error("Encryption error");
@@ -108,9 +105,7 @@ class Authentication : public Module {
 	
 		//	Master server encryption key
 		RSAKey key;
-		//	Asynchronous HTTP handler which
-		//	makes requests to minecraft.net
-		HTTPHandler http;
+		Yggdrasil::Client ygg;
 		//	Associates clients with data
 		//	about them
 		std::unordered_map<
@@ -123,6 +118,13 @@ class Authentication : public Module {
 		Random<Byte> token_generator;
 		Random<Word> id_len_generator;
 		Random<Byte> id_generator;
+		
+		
+		static bool debug () {
+		
+			return Server::Get().IsVerbose(verbose_key);
+		
+		}
 		
 		
 		SmartPointer<ClientData> get (const SmartPointer<Client> client) {
@@ -279,100 +281,28 @@ class Authentication : public Module {
 				//	Verify secret length (128 bits)
 				if (data->Secret.Count()!=(128/BitsPerByte())) return Status::ProtocolError;
 				
-				//	Prepare a SHA-1 hash
-				SHA1 hash;
-				hash.Update(ASCII().Encode(data->ServerID));
-				hash.Update(data->Secret);
-				hash.Update(key.PublicKey());
-				
-				//	Get the URL to verify login
-				//	against minecraft.net
-				String url(
-					String::Format(
-						login_url,
-						URL::Encode(event.From->GetUsername()),
-						URL::Encode(hash.HexDigest())
-					)
-				);
-				
-				//	Debug log if requested
-				auto & server=Server::Get();
-				
-				if (server.IsVerbose(verbose_key)) server.WriteLog(
-					String::Format(
-						http_request,
-						url
-					),
-					Service::LogType::Debug
-				);
-				
 				//	Advance client's state
 				data->State=AuthenticationState::Authenticate;
 				
-				//	Start a timer to measure how
-				//	long the HTTP request takes
-				Timer timer(Timer::CreateAndStart());
-				
-				//	Dispatch HTTP request
 				#pragma GCC diagnostic push
 				#pragma GCC diagnostic ignored "-Wpedantic"
-				http.Get(
-					url,
-					[=,&server,client=event.From] (Word status, String response) mutable {
+				ygg.ServerSession(
+					event.From->GetUsername(),
+					data->ServerID,
+					data->Secret,
+					key.PublicKey(),
+					[=,client=event.From] (bool result) mutable {
 					
 						try {
-						
-							auto elapsed=timer.ElapsedNanoseconds();
 							
 							auto data=get(client);
 							
+							//	If client no longer exists, bail
+							//	out
 							if (data.IsNull()) return;
 							
-							if (status==200) {
-							
-								//	SUCCESS
-								
-								if (server.IsVerbose(verbose_key)) server.WriteLog(
-									String::Format(
-										http_reply_success,
-										url,
-										elapsed,
-										response
-									),
-									Service::LogType::Debug
-								);
-								
-								if (response.ToLower()==yes) authenticate(client,data);
-								else client->Disconnect(authentication_failed);
-							
-							} else if (status==0) {
-							
-								//	cURL failure
-							
-								server.WriteLog(
-									String::Format(
-										http_reply_internal_error,
-										url,
-										elapsed
-									),
-									Service::LogType::Error
-								);
-							
-							} else {
-							
-								//	HTTP failure
-								
-								server.WriteLog(
-									String::Format(
-										http_reply_error,
-										url,
-										status,
-										elapsed
-									),
-									Service::LogType::Error
-								);
-							
-							}
+							if (result) authenticate(client,data);
+							else client->Disconnect(authentication_failed);
 						
 						} catch (...) {
 						
@@ -401,7 +331,51 @@ class Authentication : public Module {
 	public:
 	
 	
-		Authentication () : http(max_http_bytes), id_len_generator(15,20), id_generator('!','~') {	}
+		Authentication () : id_len_generator(15,20), id_generator('!','~') {
+		
+			ygg.SetDebug(
+				[this] (Yggdrasil::Request request) mutable {
+				
+					if (debug()) Server::Get().WriteLog(
+						String::Format(
+							http_request,
+							request.URL
+						),
+						Service::LogType::Debug
+					);
+				
+				},
+				[this] (Yggdrasil::Response response) mutable {
+				
+					if (debug()) {
+					
+						auto & server=Server::Get();
+					
+						if (response.Status==0) server.WriteLog(
+							String::Format(
+								http_response_failed,
+								response.URL,
+								response.Elapsed
+							),
+							Service::LogType::Debug
+						);
+						else server.WriteLog(
+							String::Format(
+								http_response,
+								response.URL,
+								response.Status,
+								response.Elapsed,
+								response.Body
+							),
+							Service::LogType::Debug
+						);
+					
+					}
+				
+				}
+			);
+		
+		}
 		
 		
 		virtual Word Priority () const noexcept override {
