@@ -165,20 +165,6 @@ namespace Yggdrasil {
 	
 	
 	};
-	
-	
-	/**
-	 *	\cond
-	 */
-	 
-	 
-	template <typename T>
-	using Type=Variant<T,Error>;
-	
-	
-	/**
-	 *	\endcond
-	 */
 	 
 	 
 	class Request {
@@ -208,6 +194,20 @@ namespace Yggdrasil {
 	
 	
 	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	 
+	 
+	template <typename T>
+	using Type=Variant<T,Error>;
+	
+	
+	/**
+	 *	\endcond
+	 */
 	
 	
 	typedef Type<AuthenticateResult> AuthenticateType;

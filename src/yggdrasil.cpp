@@ -37,7 +37,7 @@ namespace Yggdrasil {
 			std::move(url),
 			std::move(body)
 		};
-			
+		
 		if (request) try {
 		
 			request(event);
