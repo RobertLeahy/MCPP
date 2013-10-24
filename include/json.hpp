@@ -78,8 +78,8 @@ namespace JSON {
 			 */
 			Vector<
 				Variant<
-					String,
 					Double,
+					String,
 					Object,
 					Array,
 					bool
@@ -123,8 +123,8 @@ namespace JSON {
 				std::unordered_map<
 					String,
 					Variant<
-						String,
 						Double,
+						String,
 						Object,
 						Array,
 						bool
@@ -173,7 +173,7 @@ namespace JSON {
 	/**
 	 *	The type of a single JSON value.
 	 */
-	typedef Variant<String,Double,Object,Array,bool> Value;
+	typedef Variant<Double,String,Object,Array,bool> Value;
 	
 	
 	/**
