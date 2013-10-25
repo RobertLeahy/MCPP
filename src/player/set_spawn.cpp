@@ -1,4 +1,5 @@
 #include <player/player.hpp>
+#include <server.hpp>
 
 
 namespace MCPP {

@@ -69,68 +69,17 @@ namespace MCPP {
 	}
 
 
-	Packet PlayerPosition::ToPacket (Byte type) const {
+	Packets::Play::Clientbound::PlayerPositionAndLook PlayerPosition::ToPacket () const noexcept {
 	
-		Packet packet;
-	
-		switch (type) {
+		Packets::Play::Clientbound::PlayerPositionAndLook retr;
+		retr.X=X;
+		retr.Y=Y;
+		retr.Z=Z;
+		retr.Yaw=Yaw;
+		retr.Pitch=Pitch;
+		retr.OnGround=on_ground;
 		
-			case 0x0A:{
-			
-				typedef PacketTypeMap<0x0A> pt;
-				
-				packet.SetType<pt>();
-				
-				packet.Retrieve<pt,0>()=on_ground;
-			
-			}break;
-			
-			case 0x0B:{
-			
-				typedef PacketTypeMap<0x0B> pt;
-				
-				packet.SetType<pt>();
-				
-				packet.Retrieve<pt,0>()=X;
-				packet.Retrieve<pt,1>()=Y;
-				packet.Retrieve<pt,2>()=Stance;
-				packet.Retrieve<pt,3>()=Z;
-				packet.Retrieve<pt,4>()=on_ground;
-			
-			}break;
-			
-			case 0x0C:{
-			
-				typedef PacketTypeMap<0x0C> pt;
-				
-				packet.SetType<pt>();
-				
-				packet.Retrieve<pt,0>()=Yaw;
-				packet.Retrieve<pt,1>()=Pitch;
-				packet.Retrieve<pt,2>()=on_ground;
-			
-			}break;
-			
-			case 0x0D:
-			default:{
-			
-				typedef PacketTypeMap<0x0D> pt;
-				
-				packet.SetType<pt>();
-				
-				packet.Retrieve<pt,0>()=X;
-				packet.Retrieve<pt,1>()=Y;
-				packet.Retrieve<pt,2>()=Stance;
-				packet.Retrieve<pt,3>()=Z;
-				packet.Retrieve<pt,4>()=Yaw;
-				packet.Retrieve<pt,5>()=Pitch;
-				packet.Retrieve<pt,6>()=on_ground;
-			
-			}break;
-		
-		}
-		
-		return packet;
+		return retr;
 	
 	}
 	
@@ -149,52 +98,57 @@ namespace MCPP {
 		Double x=X;
 		Double y=Y;
 		Double z=Z;
-	
-		switch (packet.Type()) {
+		
+		typedef Packets::Play::Serverbound::Player p;
+		typedef Packets::Play::Serverbound::PlayerPosition pp;
+		typedef Packets::Play::Serverbound::PlayerLook pl;
+		typedef Packets::Play::Serverbound::PlayerPositionAndLook ppl;
+		
+		switch (packet.ID) {
 		
 			default:break;
 			
-			case 0x0A:{
+			case p::PacketID:{
 			
-				typedef PacketTypeMap<0x0A> pt;
-			
-				time=SetOnGround(packet.Retrieve<pt,0>());
+				auto & pa=packet.Get<p>();
+				
+				time=SetOnGround(pa.OnGround);
 			
 			}break;
 			
-			case 0x0B:{
+			case pp::PacketID:{
 			
-				typedef PacketTypeMap<0x0B> pt;
+				auto & pa=packet.Get<pp>();
 				
-				X=packet.Retrieve<pt,0>();
-				Y=packet.Retrieve<pt,1>();
-				Stance=packet.Retrieve<pt,2>();
-				Z=packet.Retrieve<pt,3>();
-				time=SetOnGround(packet.Retrieve<pt,4>());
+				X=pa.X;
+				Y=pa.X;
+				Stance=pa.Stance;
+				Z=pa.Z;
+				time=SetOnGround(pa.OnGround);
 			
 			}break;
 			
-			case 0x0C:{
+			case pl::PacketID:{
 			
-				typedef PacketTypeMap<0x0C> pt;
+				auto & pa=packet.Get<pl>();
 				
-				Yaw=packet.Retrieve<pt,0>();
-				Pitch=packet.Retrieve<pt,1>();
-				time=SetOnGround(packet.Retrieve<pt,2>());
+				Yaw=pa.Yaw;
+				Pitch=pa.Pitch;
+				time=SetOnGround(pa.OnGround);
 			
 			}break;
 			
-			case 0x0D:{
+			case ppl::PacketID:{
 			
-				typedef PacketTypeMap<0x0D> pt;
+				auto & pa=packet.Get<ppl>();
 				
-				X=packet.Retrieve<pt,0>();
-				Y=packet.Retrieve<pt,1>();
-				Stance=packet.Retrieve<pt,2>();
-				Z=packet.Retrieve<pt,3>();
-				Yaw=packet.Retrieve<pt,4>();
-				Pitch=packet.Retrieve<pt,5>();
-				time=SetOnGround(packet.Retrieve<pt,6>());
+				X=pa.X;
+				Y=pa.Y;
+				Stance=pa.Stance;
+				Z=pa.Z;
+				Yaw=pa.Yaw;
+				Pitch=pa.Pitch;
+				time=SetOnGround(pa.OnGround);
 			
 			}break;
 		
