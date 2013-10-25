@@ -82,7 +82,7 @@ class ServerListPing : public Module {
 				
 					if (client->GetState()==ProtocolState::Play) {
 					
-						JSON::Object obj;		
+						JSON::Object obj;
 						obj.Add(
 							"name",client->GetUsername(),
 							"id",String()
