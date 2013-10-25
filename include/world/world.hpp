@@ -6,7 +6,13 @@
 #pragma once
 
 
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
+#include <client.hpp>
+#include <event.hpp>
+#include <hash.hpp>
+#include <mod.hpp>
+#include <packet.hpp>
+#include <thread_pool.hpp>
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
@@ -14,6 +20,7 @@
 #include <new>
 #include <random>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <type_traits>
 
@@ -392,13 +399,13 @@ namespace std {
 
 
 	template <>
-	struct hash<ColumnID> {
+	struct hash<MCPP::ColumnID> {
 	
 	
 		public:
 		
 		
-			size_t operator () (const ColumnID & subject) const noexcept {
+			size_t operator () (const MCPP::ColumnID & subject) const noexcept {
 			
 				union {
 					UInt32 u_x;
@@ -537,13 +544,13 @@ namespace std {
 
 
 	template <>
-	struct hash<BlockID> {
+	struct hash<MCPP::BlockID> {
 	
 	
 		public:
 		
 		
-			size_t operator () (const BlockID & subject) const noexcept {
+			size_t operator () (const MCPP::BlockID & subject) const noexcept {
 			
 				union {
 					UInt32 u_x;
@@ -699,6 +706,9 @@ namespace MCPP {
 		public:
 		
 		
+			typedef Packets::Play::Clientbound::ChunkData PacketType;
+		
+		
 			ColumnContainer () = delete;
 			//	Creates a ColumnContainer with a given id
 			//	and in the loading state
@@ -727,10 +737,10 @@ namespace MCPP {
 			ColumnID ID () const noexcept;
 			//	Retrieves a 0x33 packet which represents
 			//	the contained column
-			Vector<Byte> ToChunkData () const;
+			PacketType ToChunkData () const;
 			//	Retrieves a 0x33 packet which unloads
 			//	the contained column from a client
-			Vector<Byte> GetUnload () const;
+			PacketType GetUnload () const;
 			//	Checks the column's state.
 			//
 			//	If the column is in the required state, or

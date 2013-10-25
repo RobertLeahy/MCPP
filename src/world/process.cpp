@@ -1,4 +1,5 @@
 #include <world/world.hpp>
+#include <server.hpp>
 #include <exception>
 
 
@@ -17,12 +18,14 @@ namespace MCPP {
 	void World::process (ColumnContainer & column, const WorldHandle * handle) {
 	
 		try {
+		
+			auto & server=Server::Get();
 	
 			//	The state the column is currently in
 			ColumnState curr=column.GetState();
 			
 			//	Are we logging debug information?
-			bool is_verbose=Server::Get().IsVerbose(verbose);
+			bool is_verbose=server.IsVerbose(verbose);
 			
 			bool dirty;
 			//	Process at least once -- this function
@@ -55,7 +58,7 @@ namespace MCPP {
 						++loaded;
 						
 						//	Log if necessary
-						if (is_verbose) Server::Get().WriteLog(
+						if (is_verbose) server.WriteLog(
 							(
 								(curr==ColumnState::Generating)
 									//	We missed on the load --
@@ -102,7 +105,7 @@ namespace MCPP {
 						++generated;
 						
 						//	Log if necessary
-						if (is_verbose) Server::Get().WriteLog(
+						if (is_verbose) server.WriteLog(
 							String::Format(
 								end_generate,
 								column.ToString(),
@@ -141,7 +144,7 @@ namespace MCPP {
 						++populated;
 						
 						//	Log if necessary
-						if (is_verbose) Server::Get().WriteLog(
+						if (is_verbose) server.WriteLog(
 							String::Format(
 								end_populate,
 								column.ToString(),
@@ -181,7 +184,7 @@ namespace MCPP {
 			} while (!column.SetState(
 				curr,
 				dirty,
-				Server::Get().Pool()
+				server.Pool()
 			));
 		
 		//	Any error leaves the world

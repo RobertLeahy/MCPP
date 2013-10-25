@@ -1,4 +1,5 @@
 #include <world/world.hpp>
+#include <server.hpp>
 
 
 namespace MCPP {
