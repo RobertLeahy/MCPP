@@ -186,7 +186,7 @@ class FaviconLoader : public Module {
 			
 			//	Store the image in the backing
 			//	store
-			Server::Get().SaveBinary(
+			Server::Get().Data().SaveBinary(
 				favicon_key,
 				buffer.begin(),
 				buffer.Count()
