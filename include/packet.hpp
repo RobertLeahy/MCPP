@@ -479,7 +479,7 @@ namespace MCPP {
 		
 		//	CLIENTBOUND
 		template <> class PacketMap<PL,CB,0x00> : public PacketType<Int32> {	};
-		template <> class PacketMap<PL,CB,0x01> : public PacketType<Int32,Byte,SByte,Byte,Byte> {	};
+		template <> class PacketMap<PL,CB,0x01> : public PacketType<Int32,Byte,SByte,Byte,Byte,String> {	};
 		template <> class PacketMap<PL,CB,0x02> : public PacketType<JSON::Value> {	};
 		template <> class PacketMap<PL,CB,0x03> : public PacketType<Int64,Int64> {	};
 		template <> class PacketMap<PL,CB,0x04> : public PacketType<Int32,Int16,Nullable<Slot>> {	};
@@ -548,7 +548,7 @@ namespace MCPP {
 		//	SERVERBOUND
 		
 		template <> class PacketMap<PL,SB,0x00> : public PacketType<Int32> {	};
-		template <> class PacketMap<PL,SB,0x01> : public PacketType<JSON::Value> {	};
+		template <> class PacketMap<PL,SB,0x01> : public PacketType<String> {	};
 		template <> class PacketMap<PL,SB,0x02> : public PacketType<Int32,Byte> {	};
 		template <> class PacketMap<PL,SB,0x03> : public PacketType<bool> {	};
 		template <> class PacketMap<PL,SB,0x04> : public PacketType<Double,Double,Double,Double,bool> {	};
@@ -2141,6 +2141,7 @@ namespace MCPP {
 						SByte Dimension;
 						Byte Difficulty;
 						Byte MaxPlayers;
+						String LevelType;
 				
 				
 				};
@@ -2334,6 +2335,155 @@ namespace MCPP {
 							Int32,
 							Tuple<Int32,Int16,Int16,Int16>
 						> Data;
+				
+				
+				};
+				
+				
+				class ChunkData : public Base, public IDPacket<0x21> {
+				
+				
+					public:
+					
+					
+						Int32 X;
+						Int32 Z;
+						bool Continuous;
+						UInt16 Primary;
+						UInt16 Add;
+						Vector<Byte> Data;
+				
+				
+				};
+				
+				
+				class BlockChange : public Base, public IDPacket<0x23> {
+				
+				
+					public:
+					
+					
+						Int32 X;
+						Byte Y;
+						Int32 Z;
+						UInt32 Type;
+						Byte Metadata;
+				
+				
+				};
+			
+			
+			}
+			
+			
+			namespace Serverbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public PLPacket, public SBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class KeepAlive : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						Int32 KeepAliveID;
+				
+				
+				};
+			
+			
+				class ChatMessage : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						String Value;
+				
+				
+				};
+				
+				
+				class UseEntity : public Base, public IDPacket<0x02> {
+				
+				
+					public:
+					
+					
+						Int32 Target;
+						Byte Mouse;
+				
+				
+				};
+				
+				
+				class Player : public Base, public IDPacket<0x03> {
+				
+				
+					public:
+					
+					
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class PlayerPosition : public Base, public IDPacket<0x04> {
+				
+				
+					public:
+					
+					
+						Double X;
+						Double Y;
+						Double Stance;
+						Double Z;
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class PlayerLook : public Base, public IDPacket<0x05> {
+				
+				
+					public:
+					
+					
+						Single Yaw;
+						Single Pitch;
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class PlayerPositionAndLook : public Base, public IDPacket<0x06> {
+				
+				
+					public:
+					
+					
+						Double X;
+						Double Y;
+						Double Stance;
+						Double Z;
+						Single Yaw;
+						Single Pitch;
+						bool OnGround;
 				
 				
 				};
