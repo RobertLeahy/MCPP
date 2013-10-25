@@ -1,9 +1,13 @@
-#include <common.hpp>
 #include <chat/chat.hpp>
+#include <hash.hpp>
+#include <packet.hpp>
+#include <server.hpp>
 #include <singleton.hpp>
-#include <utility>
-#include <limits>
 #include <algorithm>
+#include <limits>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 
 using namespace MCPP;
@@ -33,246 +37,192 @@ namespace MCPP {
 	}
 	
 	
+	//	Maximum depth to which incoming JSON
+	//	messages will be parsed
+	static const Word max_depth=5;
+	
+	
 	void Chat::Install () {
+	
+		auto & server=Server::Get();
+	
+		//	Incoming packet type
+		typedef Packets::Play::Serverbound::ChatMessage type;
 		
-		//	We need to handle 0x03
+		//	Handle incoming chat messages
+		server.Router(
+			type::PacketID,
+			ProtocolState::Play
+		)=[this] (ReceiveEvent event) mutable {
+
+			//	If there's no installed handler,
+			//	abort at once
+			if (!Chat) return;
 		
-		//	Grab the old handler
-		PacketHandler prev(
-			std::move(
-				Server::Get().Router[0x03]
-			)
-		);
-		
-		//	Install our handler
-		Server::Get().Router[0x03]=[=] (SmartPointer<Client> client, Packet packet) {
-		
-			//	Unauthenticated users cannot chat
-			if (client->GetState()!=ClientState::Authenticated) {
+			auto & packet=event.Data.Get<type>();
 			
-				//	Chain to the old handler
-				if (prev) prev(
-					std::move(client),
-					std::move(packet)
-				);
-				//	...or kill the client
-				else client->Disconnect(protocol_error);
-				
-				//	Don't execute any of
-				//	the following code
-				return;
+			ChatEvent dispatch;
+			dispatch.From=event.From;
+			dispatch.Body=std::move(packet.Value);
 			
-			}
-			
-			//	If mods installed a handler,
-			//	call it.
-			if (Chat) Chat(
-				client,
-				packet.Retrieve<String>(0)
-			);
-			
-			//	Chain to the old handle if
-			//	applicable
-			if (prev) prev(
-				std::move(client),
-				std::move(packet)
-			);
+			Chat(std::move(dispatch));
 		
 		};
 		
 		//	Make sure that we don't keep
 		//	module assets after the server
 		//	is shutdown
-		Server::Get().OnShutdown.Add([this] () mutable {	Chat=ChatHandler();	});
+		server.OnShutdown.Add([this] () mutable {	Chat=ChatHandler();	});
 	
 	}
 	
 	
-	static const String server("SERVER");
-	
-	
-	static inline void insert_sorted (Vector<Tuple<String,bool>> & list, String username) {
-	
-		for (Word i=0;i<list.Count();++i) {
-		
-			if (list[i].Item<0>()==username) return;
-			
-			if (list[i].Item<0>()>username) {
-			
-				list.Emplace(
-					i,
-					std::move(username),
-					username==server
-				);
-				
-				return;
-			
-			}
-		
-		}
-		
-		list.EmplaceBack(
-			std::move(username),
-			username==server
-		);
-	
-	}
-	
-	
-	static inline void flag_found (Vector<Tuple<String,bool>> & list, const String & username) {
-	
-		for (auto & t : list) {
-		
-			if (t.Item<0>()==username) {
-			
-				t.Item<1>()=true;
-				
-				return;
-			
-			}
-		
-		}
-	
-	}
-	
-	
-	static inline bool is_recipient (const Vector<Tuple<String,bool>> & list, const String & username) {
-	
-		for (const auto & t : list) {
-		
-			if (t.Item<0>()==username) return true;
-		
-		}
-		
-		return false;
-	
-	}
+	static const String server_username("SERVER");
 	
 	
 	Vector<String> Chat::Send (const ChatMessage & message) {
 	
-		//	Get the formatted string
-		String formatted(Format(message));
+		//	Create the packet
+		Packets::Play::Clientbound::ChatMessage packet;
+		packet.Value=Format(message);
 		
-		//	If there's nothing there, silently
-		//	fail
-		if (formatted.Size()==0) return Vector<String>();
-	
-		//	Build the packet
-		Packet packet;
-		packet.SetType<pt>();
-		packet.Retrieve<pt,0>()=std::move(formatted);
+		//	List of clients to whom the message
+		//	could not be delivered
+		Vector<String> retr;
 		
-		//	Return to sender if applicable
+		//	Return to sender if this is
+		//	an echo message
 		if (message.Echo && !message.From.IsNull()) {
 		
 			const_cast<ChatMessage &>(message).From->Send(packet);
-			
-			return Vector<String>();
+		
+			return retr;
 		
 		}
 		
-		//	Normalize the list of
-		//	recipients and create
-		//	a boolean flag for each
-		//	one so that we can track
-		//	whether or not we've delivered
-		//	to them
-		Vector<
-			Tuple<
-				String,
-				bool
-			>
-		> recipients;
-		//	Insert recipients sorted to decrease
-		//	lookup time
-		for (const auto & s : message.To) insert_sorted(
-			recipients,
-			(s==server) ? s : s.ToLower()
-		);
-		for (const auto & c : message.Recipients) insert_sorted(
-			recipients,
-			c.IsNull() ? server : c->GetUsername().ToLower()
-		);
+		auto & server=Server::Get();
 		
-		//	Scan the list of connected
-		//	users and send the message
-		//	as appropriate
+		//	If this is a broadcast, simply send to everyone
 		if (
-			(message.To.Count()!=0) ||
+			(message.To.Count()==0) &&
 			(message.Recipients.Count()==0)
-		) for (auto & client : Server::Get().Clients) {
+		) {
 		
-			//	Skip all clients we have the handle
-			//	for
-			for (const auto & handle : message.Recipients) {
+			for (auto & client : server.Clients) client->Send(packet);
 			
-				if (static_cast<const Client *>(handle)==static_cast<Client *>(client)) continue;
-			
-			}
-			
-			//	We're only interested in authenticated
-			//	clients
-			if (client->GetState()==ClientState::Authenticated) {
-			
-				//	If this is a broadcast, send unconditionally
-				if (recipients.Count()==0) {
-				
-					client->Send(packet);
-				
-				//	See if this recipient is among
-				//	the intended recipients
-				} else {
-				
-					String username(client->GetUsername().ToLower());
-					
-					if (is_recipient(
-						recipients,
-						username
-					)) {
-					
-						client->Send(packet);
-						
-						flag_found(
-							recipients,
-							username
-						);
-					
-					}
-				
-				}
-			
-			}
+			return retr;
 		
 		}
 		
-		//	Send to all the people we have the handle
-		//	for
-		for (auto & handle : message.Recipients) {
+		//	Create two lookup tables for recipients
+		//	whose handles we have -- one which relates
+		//	the handle to the normalized username of
+		//	that user, another which can simply be used
+		//	to lookup the handle.
+		std::unordered_map<String,SmartPointer<Client>> names;
+		std::unordered_set<SmartPointer<Client>> handles;
+		for (const auto & c : message.Recipients) {
 		
-			const_cast<SmartPointer<Client> &>(handle)->Send(packet);
+			String lowercase;
 			
-			flag_found(
-				recipients,
-				handle->GetUsername().ToLower()
+			//	Special case for the server
+			if (c.IsNull()) {
+			
+				handles.emplace(c);
+				
+				lowercase=server_username;
+			
+			//	Skip clients who are not in the
+			//	appropriate state
+			} else if (c->GetState()==ProtocolState::Play) {
+			
+				handles.emplace(c);
+				
+				lowercase=c->GetUsername().ToLower();
+			
+			} else {
+			
+				continue;
+			
+			}
+			
+			names.emplace(
+				std::move(lowercase),
+				c
 			);
 		
 		}
 		
-		//	Build a list of clients to whom
-		//	delivery failed
-		Vector<String> dne;
-		for (auto & t : recipients) {
+		//	Rearrange the clients we're delivering
+		//	to by name into a hash table, which maps
+		//	their normalized (i.e. lowercased) username
+		//	to the actual username that was used for
+		//	them.
+		//
+		//	This will greatly reduce the overhead of
+		//	tracking the recipients to whom we could
+		//	or could not deliver
+		std::unordered_map<String,const String *> to;
+		for (const auto & s : message.To) {
 		
-			if (!t.Item<1>()) dne.Add(std::move(t.Item<0>()));
+			String lowercase(s);
+			//	There's a special case for
+			//	the server -- that username
+			//	is always uppercase
+			if (s!=server_username) lowercase.ToLower();
+			
+			//	If this user is also being delivered
+			//	to by handle, ignore
+			if (names.count(s)!=0) continue;
+			
+			to.emplace(
+				std::move(lowercase),
+				&s
+			);
 		
 		}
 		
-		//	Log
-		Log(message,dne);
+		//	Scan connected users to find users
+		//	with the usernames of our recipients
+		if (to.size()!=0) for (auto & client : server.Clients) {
 		
-		//	Return
-		return dne;
+			//	We're only interested in clients
+			//	in game
+			if (client->GetState()!=ProtocolState::Play) continue;
+			
+			//	Check to see if we're sending to
+			//	this user by name
+			auto iter=to.find(client->GetUsername().ToLower());
+			if (iter!=to.end()) {
+			
+				//	YES
+			
+				//	Send
+				client->Send(packet);
+				
+				//	Remove from collection
+				//
+				//	The users left in the collection
+				//	will be those users to whom
+				//	we could not deliver
+				to.erase(iter);
+			
+			}
+		
+		}
+		
+		//	Deliver to users we're delivering to
+		//	by handle
+		for (auto & client : message.Recipients) const_cast<SmartPointer<Client> &>(client)->Send(packet);
+		
+		//	Build the list of recipients who could
+		//	not be found/delivered to
+		for (const auto & pair : to) retr.Add(*pair.second);
+		
+		//	Log
+		Log(message,retr);
+		
+		return retr;
 	
 	}
 

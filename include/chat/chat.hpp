@@ -6,7 +6,10 @@
 #pragma once
 
 
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
+#include <client.hpp>
+#include <json.hpp>
+#include <mod.hpp>
 #include <functional>
 #include <utility>
 
@@ -309,6 +312,22 @@ namespace MCPP {
 	
 	
 	};
+	
+	
+	/**
+	 *	Represents an incoming chat message.
+	 */
+	class ChatEvent {
+	
+	
+		public:
+		
+		
+			SmartPointer<Client> From;
+			String Body;
+	
+	
+	};
 
 
 	/**
@@ -316,7 +335,7 @@ namespace MCPP {
 	 *	invoked whenever a new chat message
 	 *	arrives.
 	 */
-	typedef std::function<void (SmartPointer<Client>, const String &)> ChatHandler;
+	typedef std::function<void (ChatEvent)> ChatHandler;
 
 
 	/**
@@ -324,12 +343,6 @@ namespace MCPP {
 	 *	implementing chat-related functionalities.
 	 */
 	class Chat : public Module {
-	
-	
-		private:
-		
-		
-			typedef PacketTypeMap<0x03> pt;
 	
 	
 		public:
@@ -375,23 +388,48 @@ namespace MCPP {
 			 */
 			static void Log (const ChatMessage & message, const Vector<String> & dne);
 			/**
-			 *	Creates a string representation of
-			 *	\em message which may be sent to a
-			 *	vanilla Minecraft client via a
-			 *	0x03 packet.
+			 *	Creates a JSON representation of
+			 *	\em message which may be understood
+			 *	by the Minecraft client.
 			 *
 			 *	\param [in] message
 			 *		A chat message to format.
-			 *	\param [in] json
-			 *		If \em true JSON output shall
-			 *		be generated, otherwise plain
-			 *		text output shall be generated.
 			 *
 			 *	\return
-			 *		\em message formatted as a
-			 *		string.
+			 *		\em message represented as a
+			 *		JSON value.
 			 */
-			static String Format (const ChatMessage & message, bool json=true);
+			static JSON::Value Format (const ChatMessage & message);
+			/**
+			 *	Extracts a text representation of a JSON
+			 *	chat message.
+			 *
+			 *	\param [in] value
+			 *		The JSON representation of a chat
+			 *		message.
+			 *	\param [in] max_depth
+			 *		The depth to which this function should
+			 *		recurse while converting the message to
+			 *		a string.  Defaults to zero.  If zero will
+			 *		recurse to unlimited depth.
+			 *
+			 *	\return
+			 *		A string which contains the text of
+			 *		the message given by \em value, without
+			 *		any formatting.
+			 */
+			static String ToString (const JSON::Value & value, Word max_depth=0);
+			/**
+			 *	Extracts a text representation of a chat
+			 *	message.
+			 *
+			 *	\param [in] message
+			 *		A chat message to format.
+			 *
+			 *	\return
+			 *		\em message represented as plain text.
+			 */
+			static String ToString (const ChatMessage & message);
 		
 		
 			/**
