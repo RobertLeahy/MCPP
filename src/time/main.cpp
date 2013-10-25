@@ -240,16 +240,12 @@ namespace MCPP {
 	
 		//	Start the tick loop
 		server.OnInstall.Add(
-			[this] (bool before) {
-			
-				if (!before) {
+			[this] (bool) {
 				
-					Server::Get().Pool().Enqueue(
-						this->tick_length,
-						[this] () {	tick();	}
-					);
-					
-				}
+				Server::Get().Pool().Enqueue(
+					this->tick_length,
+					[this] () {	tick();	}
+				);
 			
 			}
 		);
