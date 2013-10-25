@@ -5,139 +5,69 @@
 namespace MCPP {
 
 
-	ClientList::ClientList () noexcept : iters(0) {	}
-
-
 	SmartPointer<Client> ClientList::operator [] (const Connection & conn) {
 	
-		Nullable<SmartPointer<Client>> client;
-	
-		map_lock.Read();
-		
-		try {
-		
-			client.Construct(map.at(&conn));
-		
-		} catch (...) {
-		
-			map_lock.CompleteRead();
-			
-			throw;
-		
-		}
-		
-		map_lock.CompleteRead();
-		
-		return *client;
+		return map_lock.Read([&] () mutable {	return map.at(&conn);	});
 	
 	}
 	
 	
 	void ClientList::Add (SmartPointer<Client> client) {
 	
-		map_lock.Write();
+		map_lock.Write([&] () mutable {
 		
-		try {
-	
-			map.insert(
-				decltype(map)::value_type(
-					static_cast<const Connection *>(client->conn),
-					std::move(client)
-				)
+			auto conn=client->conn;
+			
+			map.emplace(
+				conn,
+				std::move(client)
 			);
 			
-		} catch (...) {
-		
-			map_lock.CompleteWrite();
-			
-			throw;
-		
-		}
-		
-		map_lock.CompleteWrite();
+		});
 	
 	}
 	
 	
 	void ClientList::Remove (const Connection & conn) {
 	
-		map_lock.Write();
-		
-		try {
-		
-			map.erase(&conn);
-		
-		} catch (...) {
-		
-			map_lock.CompleteWrite();
-			
-			throw;
-		
-		}
-		
-		map_lock.CompleteWrite();
+		map_lock.Write([&] () mutable {	map.erase(&conn);	});
 	
 	}
 	
 	
 	Word ClientList::Count () const noexcept {
 	
-		map_lock.Read();
-		
-		Word count=map.size();
-		
-		map_lock.CompleteRead();
-		
-		return count;
+		return map_lock.Read([&] () {	return map.size();	});
 	
 	}
 	
 	
 	Word ClientList::AuthenticatedCount () const noexcept {
 	
-		Word count=0;
+		return map_lock.Read([&] () {
 		
-		map_lock.Read();
+			Word retr=0;
 		
-		for (const auto & pair : map) {
+			for (const auto & pair : map) if (pair.second->GetState()==ProtocolState::Play) ++retr;
+			
+			return retr;
 		
-			if (pair.second->GetState()==ProtocolState::Play) ++count;
-		
-		}
-		
-		map_lock.CompleteRead();
-		
-		return count;
+		});
 	
 	}
 	
 	
 	void ClientList::Clear () noexcept {
 	
-		map_lock.Write();
-		
-		map.clear();
-		
-		map_lock.CompleteWrite();
-	
-	}
-	
-	
-	inline void ClientList::acquire () noexcept {
-	
-		iters_lock.Acquire();
-		if ((iters++)==0) map_lock.Read();
-		iters_lock.Release();
+		map_lock.Write([&] () mutable {	map.clear();	});
 	
 	}
 	
 	
 	ClientListIterator ClientList::begin () noexcept {
 	
-		acquire();
-	
 		return ClientListIterator(
-			*this,
+			this,
 			map.begin()
 		);
 	
@@ -145,11 +75,9 @@ namespace MCPP {
 	
 	
 	ClientListIterator ClientList::end () noexcept {
-	
-		acquire();
 		
 		return ClientListIterator(
-			*this,
+			this,
 			map.end()
 		);
 	

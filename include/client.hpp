@@ -979,10 +979,10 @@ namespace MCPP {
 			
 			
 			iter_type iter;
-			ClientList & list;
+			ClientList * list;
 			
 			
-			ClientListIterator (ClientList &, iter_type) noexcept;
+			ClientListIterator (ClientList *, iter_type) noexcept;
 			
 			
 		public:
@@ -990,6 +990,8 @@ namespace MCPP {
 		
 			ClientListIterator () = delete;
 			~ClientListIterator () noexcept;
+			ClientListIterator (const ClientListIterator &) noexcept;
+			ClientListIterator & operator = (const ClientListIterator &) noexcept;
 			
 			
 			SmartPointer<Client> & operator * () noexcept;
@@ -1044,19 +1046,7 @@ namespace MCPP {
 			mutable RWLock map_lock;
 			
 			
-			//	The number of active iterators
-			//	holding a lock on this object
-			Word iters;
-			Mutex iters_lock;
-			
-			
-			inline void acquire () noexcept;
-			
-			
 		public:
-		
-		
-			ClientList () noexcept;
 		
 		
 			/**
