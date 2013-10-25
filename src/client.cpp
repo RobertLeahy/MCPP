@@ -15,7 +15,7 @@ namespace MCPP {
 	static const String packet_sent("Server => {0}:{1} {2}");
 	static const String packet_recvd("{0}:{1} => Server {2}");
 	static const String buffer_recvd("{0}:{1} - Parsing buffer in state {2} - {3} bytes");
-	static const String buffer_decrypted("{0}:{1} - Decrypted {1} bytes");
+	static const String buffer_decrypted("{0}:{1} - Decrypted {2} bytes");
 	static const String bytes_consumed("{0}:{1} - Parsing consumed {2} bytes");
 	static const String ciphertext_banner("Ciphertext:");
 	
@@ -210,11 +210,6 @@ namespace MCPP {
 	
 	bool Client::Receive (Vector<Byte> & buffer) {
 		
-		//	If there are no bytes in the buffer,
-		//	nothing is going to happen, and it's
-		//	not client activity
-		if (buffer.Count()==0) return false;
-		
 		//	This is activity
 		Active();
 		
@@ -222,7 +217,7 @@ namespace MCPP {
 		
 		auto & server=Server::Get();
 		
-		bool debug=server.IsVerbose(parse_key);
+		bool debug=server.IsVerbose(parse_key) && (buffer.Count()!=0);
 		
 		if (debug) {
 		
@@ -244,66 +239,83 @@ namespace MCPP {
 			
 		}
 		
-		Word before=buffer.Count();
+		//Word before=buffer.Count();
 		
 		//	Acquire lock so encryption
 		//	state doesn't change
-		auto retr=read([&] () {
+		return read([&] () {
 		
 			//	If no encryption, attempt to parse
 			//	and return at once
-			if (encryptor.IsNull()) return parser.FromBytes(buffer,state,ProtocolDirection::Serverbound);
+			if (encryptor.IsNull()) {
+
+				Word before=buffer.Count();
+				
+				auto retr=parser.FromBytes(buffer,state,ProtocolDirection::Serverbound);
+				
+				if (debug) server.WriteLog(
+					String::Format(
+						bytes_consumed,
+						IP(),
+						Port(),
+						before-buffer.Count()
+					),
+					Service::LogType::Debug
+				);
+				
+				return retr;
+				
+			}
 			
 			//	Encryption enabled
 			
-			auto begin=encryption_buffer.end();
+			Word before=encryption_buffer.Count();
 			
 			//	Decrypt directly into the decryption
 			//	buffer
 			encryptor->Decrypt(&buffer,&encryption_buffer);
 			
 			if (debug) {
-			
-				auto end=encryption_buffer.end();
 				
-				if (begin!=end) {
+				String log(
+					String::Format(
+						buffer_decrypted,
+						IP(),
+						Port(),
+						encryption_buffer.Count()-before
+					)
+				);
+				log << Newline << buffer_format(
+					encryption_buffer.begin()+before,
+					encryption_buffer.end()
+				);
 				
-					String log(
-						String::Format(
-							buffer_decrypted,
-							IP(),
-							Port(),
-							end-begin
-						)
-					);
-					log << Newline << buffer_format(begin,end);
-					
-					server.WriteLog(
-						log,
-						Service::LogType::Debug
-					);
-				
-				}
+				server.WriteLog(
+					log,
+					Service::LogType::Debug
+				);
 				
 			}
 			
+			before=encryption_buffer.Count();
+			
 			//	Attempt to extract a packet from
 			//	the decryption buffer
-			return parser.FromBytes(encryption_buffer,state,ProtocolDirection::Serverbound);
+			auto retr=parser.FromBytes(encryption_buffer,state,ProtocolDirection::Serverbound);
+			
+			if (debug) server.WriteLog(
+				String::Format(
+					bytes_consumed,
+					IP(),
+					Port(),
+					before-encryption_buffer.Count()
+				),
+				Service::LogType::Debug
+			);
+			
+			return retr;
 			
 		});
-		
-		if (debug) server.WriteLog(
-			String::Format(
-				bytes_consumed,
-				IP(),
-				Port(),
-				before-buffer.Count()
-			),
-			Service::LogType::Debug
-		);
-		
-		return retr;
 	
 	}
 	
