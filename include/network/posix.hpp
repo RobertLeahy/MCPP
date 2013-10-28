@@ -333,6 +333,13 @@ namespace MCPP {
 			//	Causes the send handle to succeed
 			//	asynchronously
 			void Complete (ThreadPool &);
+			//	Causes the send handle to flag itself
+			//	as completed immediately.
+			//
+			//	Does not fire callbacks.  Is meant
+			//	to be called before callbacks may
+			//	be attached
+			void Complete () noexcept;
 			
 			
 		public:

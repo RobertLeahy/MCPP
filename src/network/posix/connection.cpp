@@ -299,8 +299,21 @@ namespace MCPP {
 	
 	SmartPointer<SendHandle> Connection::Send (Vector<Byte> buffer) {
 	
+		//	Store the buffer's count
+		auto count=buffer.Count();
+	
 		//	Create a send handle
 		auto handle=SmartPointer<SendHandle>::Make(std::move(buffer));
+		
+		//	If there are no bytes in the buffer,
+		//	succeed at once
+		if (count==0) {
+		
+			handle->Complete();
+			
+			return handle;
+		
+		}
 		
 		//	Lock to queue send
 		lock.Execute([&] () mutable {

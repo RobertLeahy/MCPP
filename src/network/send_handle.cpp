@@ -15,6 +15,13 @@ namespace MCPP {
 	}
 	
 	
+	void SendHandle::Complete () noexcept {
+	
+		state=SendState::Succeeded;
+	
+	}
+	
+	
 	SendState SendHandle::State () const noexcept {
 	
 		return lock.Execute([&] () {	return state;	});

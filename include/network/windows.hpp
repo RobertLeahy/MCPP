@@ -231,6 +231,7 @@ namespace MCPP {
 			void Fail () noexcept;
 			bool Complete (NetworkImpl::IOCPPacket, ThreadPool &);
 			void Dispatch (SOCKET);
+			void Complete () noexcept;
 			
 			
 		public:
