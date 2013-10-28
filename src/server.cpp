@@ -740,7 +740,7 @@ namespace MCPP {
 		//	Get binds
 		Nullable<String> binds_str(data->GetSetting(binds_setting));
 		
-		Vector<Endpoint> binds;
+		Vector<Tuple<IPAddress,UInt16>> binds;
 		
 		//	Parse binds
 		if (!binds_str.IsNull()) {
@@ -833,8 +833,8 @@ namespace MCPP {
 			
 			binds_desc << String::Format(
 				endpoint_template,
-				binds[i].IP(),
-				binds[i].Port()
+				binds[i].Item<0>(),
+				binds[i].Item<1>()
 			);
 		
 		}
@@ -901,7 +901,7 @@ namespace MCPP {
 				} catch (...) {	}
 			
 			},
-			[=] (SmartPointer<Connection> conn, const String & reason) {
+			[=] (SmartPointer<Connection> conn, String reason) {
 			
 				try {
 				
@@ -962,8 +962,7 @@ namespace MCPP {
 			
 			},
 			OnReceive,
-			log,
-			panic,
+			[this] (std::exception_ptr ex) mutable {	Panic(ex);	},
 			*pool
 		);
 	

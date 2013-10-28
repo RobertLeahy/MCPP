@@ -624,7 +624,7 @@ namespace MCPP {
 			 *	cause the server to immediately close
 			 *	the connection.
 			 */
-			Event<bool (IPAddress, UInt16)> OnAccept;
+			Event<bool (IPAddress, UInt16, IPAddress, UInt16)> OnAccept;
 			/**
 			 *	Invoked whenever a connection is accepted
 			 *	into the server, passed the Connection
