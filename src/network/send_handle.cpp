@@ -10,7 +10,27 @@ namespace MCPP {
 
 	void SendHandle::Then (std::function<void (SendState)> callback) {
 	
-		lock.Execute([&] () mutable {	callbacks.Add(std::move(callback));	});
+		auto s=lock.Execute([&] () mutable {
+		
+			//	Add callback to pending unless
+			//	the send has already completed
+			if (state==SendState::InProgress) callbacks.Add(std::move(callback));
+			
+			return state;
+		
+		});
+		
+		//	If send has already completed,
+		//	fire callback at once
+		if (s!=SendState::InProgress) if (callback) try {
+		
+			callback(s);
+		
+		//	If callback was actually invoked asynchronously,
+		//	use would not get exceptions, therefore
+		//	simulate that behaviour by not propagating them
+		//	here
+		} catch (...) {	}
 	
 	}
 	
