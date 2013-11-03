@@ -79,12 +79,9 @@ LIB:=bin/rleahy_lib.dll
 OBJ:=obj/new_delete.o
 	
 	
-makefiles/%.mk:
-	$(call MKDIR,$@)
-	$(GPP) -MM -MT "$(patsubst makefiles/%.mk,obj/%.o,$@) $@" $(patsubst makefiles/%.mk,src/%.cpp,$@) -MF $@
-	
-	
 obj/%.o:
+	$(call MKDIR,$(patsubst obj/%.o,makefiles/%.mk,$@))
+	$(GPP) -MM -MT "$@" $(patsubst obj/%.o,src/%.cpp,$@) -MF $(patsubst obj/%.o,makefiles/%.mk,$@)
 	$(call MKDIR,$@)
 	$(GPP) -c -o $@ $(patsubst obj/%.o,src/%.cpp,$@)
 	
