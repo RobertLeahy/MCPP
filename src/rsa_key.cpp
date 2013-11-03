@@ -15,125 +15,6 @@ namespace MCPP {
 	//	Constants
 	static const int num=1024;	//	Number of bits in the key
 	static const unsigned long e=65537;	//	Public exponent of key
-	
-	
-	static inline Vector<Byte> der_count (Word count) {
-	
-		//	Can this count be represented
-		//	by one byte?
-		if (count<128) {
-		
-			Vector<Byte> buffer(1);
-			buffer.Add(static_cast<Byte>(count));
-			
-			return buffer;
-		
-		}
-		
-		//	Otherwise, how many bytes will
-		//	it take?
-		Word num_bytes=0;
-		//	Scan each byte in the count
-		//	and record the most significant
-		//	one which is not 0.
-		for (Word i=0;i<sizeof(Word);++i) {
-		
-			if ((count&(static_cast<Word>(255)<<(i*BitsPerByte())))!=0) num_bytes=i+1;
-		
-		}
-		
-		//	Buffer for encoding
-		//
-		//	We add one because there's a leading
-		//	byte that gives information about
-		//	the length of the count
-		Vector<Byte> buffer(num_bytes+1);
-		
-		//	In a DER encoded multi-byte count
-		//	the first byte encodes the number
-		//	of bytes that follow.
-		//
-		//	It does this by setting its high
-		//	bit to 1, and then encoding the
-		//	count in the 7 low-order bits
-		buffer.Add(static_cast<Byte>(num_bytes)|128);
-		
-		//	Bytes in DER encoding are big-endian,
-		//	which means we can just carve
-		//	the bytes out of the count in reverse
-		//	order
-		for (Word i=num_bytes-1;(num_bytes--)>0;) {
-		
-			buffer.Add(
-				static_cast<Byte>(
-					(count&(static_cast<Word>(255)<<(i*BitsPerByte())))>>(i*BitsPerByte())
-				)
-			);
-		
-		}
-		
-		//	Return encoding
-		return buffer;
-	
-	}
-	
-	
-	static inline Vector<Byte> bn_to_der (const BIGNUM * bn) {
-	
-		//	In the case where the most
-		//	significant bit of the leading
-		//	byte of the big-endian representation
-		//	of the BIGNUM is set, we'll have
-		//	to add a leading zero byte to
-		//	disambiguate -- negative vs.
-		//	positive.
-		//
-		//	Preallocate this extra byte to
-		//	reduce the number of calls that
-		//	have to be made to the heap
-		//	manager
-		Word bignum_size=Word(
-			SafeWord(
-				Word(
-					SafeInt<int>(
-						BN_num_bytes(bn)
-					)
-				)
-			)+
-			SafeWord(1)
-		);
-		Vector<Byte> bignum(bignum_size);
-		
-		//	Insert the big-endian representation
-		//	of the big num into the buffer we
-		//	just allocated
-		//
-		//	We know this integer conversion
-		//	is safe since we checked above
-		bignum.SetCount(
-			static_cast<Word>(
-				BN_bn2bin(
-					bn,
-					reinterpret_cast<unsigned char *>(
-						static_cast<Byte *>(
-							bignum
-						)
-					)
-				)
-			)
-		);
-		
-		//	Check leading byte's most
-		//	significant bit
-		if (!(
-			(bignum.Count()==0) ||
-			((bignum[0]&128)==0)
-		)) bignum.Insert(0,0);
-		
-		//	Return DER INTEGER representation
-		return bignum;
-	
-	}
 
 
 	RSAKey::RSAKey (const String & seed) {
@@ -159,110 +40,45 @@ namespace MCPP {
 				nullptr
 			)
 		);
-		
-		//	Create ASN.1/DER representation
-		//	of public key
-		
-		//	DER encoded modulus
-		Vector<Byte> modulus(bn_to_der(reinterpret_cast<RSA *>(key)->n));
-		//	Modulus count
-		Vector<Byte> modulus_count(der_count(modulus.Count()));
-		//	DER encoded exponent
-		Vector<Byte> exponent(bn_to_der(reinterpret_cast<RSA *>(key)->e));
-		//	Exponent count
-		Vector<Byte> exponent_count(der_count(exponent.Count()));
-		
-		//	Object identifier and algorithm (constant)
-		Vector<Byte> id_and_algo={
-			0x30, 13,	//	Begin sequence
-			0x06, 9, 42, 134, 72, 134, 247, 13, 1, 1, 1,	//	Object identifier
-			0x05, 0	//	Algorthim (NULL)
-		};
-		
-		//	A sequence wraps the modulus
-		//	and exponent, prepare for that
-		
-		//	Get count
-		Word mod_exp_seq_count=Word(
-			SafeWord(modulus.Count())+	//	Count of the modulus' representation
-			SafeWord(modulus_count.Count())+	//	Count of the modulus' count's representation
-			SafeWord(1)+	//	One byte for the modulus' tag
-			SafeWord(exponent.Count())+	//	Count of the exponent's representation
-			SafeWord(exponent_count.Count())+	//	Count of the exponent's count's representation
-			SafeWord(1)	//	One byte for the exponent's tag
+	
+	}
+	
+	
+	RSAKey::RSAKey (const Vector<Byte> & pub_key) {
+	
+		//	Allocate an RSA structure
+		if ((key=RSA_new())==nullptr) throw std::runtime_error(
+			ERR_error_string(
+				ERR_get_error(),
+				nullptr
+			)
 		);
 		
-		//	Get DER count
-		Vector<Byte> mod_exp_seq_der_count(der_count(mod_exp_seq_count));
+		//	We're manually managing the lifetime
+		//	of the RSA structure
+		try {
 		
-		//	A bit string wraps the sequence
-		//	which wraps the modulus and exponent,
-		//	prepare for that
+			auto * ptr=reinterpret_cast<const unsigned char *>(pub_key.begin());
 		
-		//	Get Count
-		Word bit_string_count=Word(
-			SafeWord(mod_exp_seq_count)+	//	The sequence being wrapped
-			SafeWord(mod_exp_seq_der_count.Count())+	//	The count of that sequence
-			SafeWord(1)+	//	That sequence's tag
-			SafeWord(1)	//	One byte for unused bits
-		);
+			//	Attempt to decode
+			if (d2i_RSAPublicKey(
+				reinterpret_cast<RSA **>(&key),
+				&ptr,
+				static_cast<int>(SafeWord(pub_key.Count()))
+			)==nullptr) throw std::runtime_error(
+				ERR_error_string(
+					ERR_get_error(),
+					nullptr
+				)
+			);
+			
+		} catch (...) {
 		
-		//	Get DER count
-		Vector<Byte> bit_string_der_count(der_count(bit_string_count));
+			RSA_free(reinterpret_cast<RSA *>(key));
+			
+			throw;
 		
-		//	Everything is wrapped in a sequence
-		//	prepare for that
-		
-		Word seq_count=Word(
-			SafeWord(bit_string_count)+	//	Bit string
-			SafeWord(bit_string_der_count.Count())+	//	Bit string's count
-			SafeWord(1)+	//	Bit string's tag
-			SafeWord(id_and_algo.Count())	//	Object ID and algorithm count
-		);
-		
-		Vector<Byte> seq_der_count(der_count(seq_count));
-		
-		//	Outermost sequence's length
-		//	determines final buffer count
-		
-		Word public_key_count=Word(
-			SafeWord(seq_der_count.Count())+
-			SafeWord(seq_count)+
-			SafeWord(1)
-		);
-		
-		//	Allocate space
-		public_key=Vector<Byte>(public_key_count);
-		
-		//	Populate
-		
-		//	Outermost sequence metadata
-		public_key.Add(0x30);
-		public_key.Add(seq_der_count.begin(),seq_der_count.end());
-		
-		//	Object ID and Algorithm sequence
-		public_key.Add(id_and_algo.begin(),id_and_algo.end());
-		
-		//	Bit string metedata
-		public_key.Add(0x03);
-		public_key.Add(bit_string_der_count.begin(),bit_string_der_count.end());
-		public_key.Add(0);	//	Zero unused bits
-		
-		//	Modulus/exponent sequence metadata
-		public_key.Add(0x30);
-		public_key.Add(mod_exp_seq_der_count.begin(),mod_exp_seq_der_count.end());
-		
-		//	Modulus
-		public_key.Add(0x02);
-		public_key.Add(modulus_count.begin(),modulus_count.end());
-		public_key.Add(modulus.begin(),modulus.end());
-		
-		//	Exponent
-		public_key.Add(0x02);
-		public_key.Add(exponent_count.begin(),exponent_count.end());
-		public_key.Add(exponent.begin(),exponent.end());
-		
-		//	DONE
+		}
 	
 	}
 	
@@ -389,9 +205,49 @@ namespace MCPP {
 	}
 	
 	
-	const Vector<Byte> & RSAKey::PublicKey () const noexcept {
+	Vector<Byte> RSAKey::PublicKey () const {
 	
-		return public_key;
+		//	Get the length of buffer that we
+		//	need
+		int len=i2d_RSAPublicKey(
+			reinterpret_cast<RSA *>(
+				const_cast<void *>(
+					key
+				)
+			),
+			nullptr
+		);
+		
+		if (len<0) throw std::runtime_error(
+			ERR_error_string(
+				ERR_get_error(),
+				nullptr
+			)
+		);
+		
+		//	Allocate
+		Vector<Byte> retr(static_cast<Word>(SafeInt<int>(len)));
+		
+		//	Encode
+		auto * ptr=reinterpret_cast<unsigned char *>(retr.begin());
+		if (i2d_RSAPublicKey(
+			reinterpret_cast<RSA *>(
+				const_cast<void *>(
+					key
+				)
+			),
+			&ptr
+		)<0) throw std::runtime_error(
+			ERR_error_string(
+				ERR_get_error(),
+				nullptr
+			)
+		);
+		
+		//	Update count
+		retr.SetCount(reinterpret_cast<const Byte *>(ptr)-retr.begin());
+		
+		return retr;
 	
 	}
 

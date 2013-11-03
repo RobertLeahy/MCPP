@@ -24,8 +24,6 @@ namespace MCPP {
 		
 			//	RSA key pair from OpenSSL
 			void * key;
-			//	ASN.1/DER representation
-			Vector<Byte> public_key;
 			
 			
 		public:
@@ -43,9 +41,31 @@ namespace MCPP {
 			 */
 			RSAKey (const String & seed=String());
 			/**
+			 *	Creates a new public key from a
+			 *	SubjectPublicKeyInfo, i.e. an
+			 *	ASN.1 DER-encoded public key.
+			 *
+			 *	Note that functions that depend
+			 *	on the private key will fail after
+			 *	the object has been constructed
+			 *	in this way.
+			 *
+			 *	\param [in] pub_key
+			 *		The ASN.1 DER-encoded public
+			 *		key from which to construct
+			 *		this object.
+			 */
+			RSAKey (const Vector<Byte> & pub_key);
+			/**
 			 *	Cleans up this public/private key pair.
 			 */
 			~RSAKey () noexcept;
+			
+			
+			RSAKey (const RSAKey &) = delete;
+			RSAKey (RSAKey &&) = delete;
+			RSAKey & operator = (const RSAKey &) = delete;
+			RSAKey & operator = (RSAKey &&) = delete;
 			
 			
 			/**
@@ -97,14 +117,14 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Retrieves the ASN.1, DER-encoded representation
+			 *	Retrieves the ASN.1 DER-encoded representation
 			 *	of the public key.
 			 *
 			 *	\return
 			 *		The ASN.1, DER-encoded representation of
 			 *		the public key.
 			 */
-			const Vector<Byte> & PublicKey () const noexcept;
+			Vector<Byte> PublicKey () const;
 	
 	
 	};
