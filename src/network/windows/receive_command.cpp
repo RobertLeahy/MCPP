@@ -7,54 +7,43 @@ namespace MCPP {
 	namespace NetworkImpl {
 	
 	
-		//	Default size for a receive buffer
-		static const Word default_size=256;
+		//	Minimum size of a receive buffer
+		static const Word buffer_size=1024;
 	
 	
-		ReceiveCommand::ReceiveCommand () noexcept : IOCPCommand(NetworkCommand::Receive), recv_flags(0) {	}
+		ReceiveCommand::ReceiveCommand () noexcept : CompletionCommand(CommandType::Receive), flags(0) {	}
 		
 		
-		bool ReceiveCommand::Dispatch (SOCKET socket) {
+		DWORD ReceiveCommand::Dispatch (SOCKET socket) {
 		
-			//	Make space in the buffer if necessary
-			if (Buffer.Capacity()==0) Buffer.SetCapacity(default_size);
-			else if (Buffer.Capacity()==Buffer.Count()) Buffer.SetCapacity();
+			//	Does the buffer need to be resized?
+			//	If so, resize it
+			if (Buffer.Count()==0) Buffer.SetCapacity(buffer_size);
+			else if (Buffer.Count()==Buffer.Capacity()) Buffer.SetCapacity();
 			
-			//	Setup buffer
-			b.len=static_cast<u_long>(SafeWord(Buffer.Capacity()-Buffer.Count()));
-			b.buf=reinterpret_cast<char *>(Buffer.end());
+			//	Keep the WSABUF up to date
+			buf.len=static_cast<u_long>(SafeWord(Buffer.Capacity()-Buffer.Count()));
+			buf.buf=reinterpret_cast<char *>(Buffer.end());
 		
-			//	Dispatch asynchronous receive
-			auto result=WSARecv(
+			//	Dispatch receive
+			if (WSARecv(
 				socket,
-				&b,
+				&buf,
 				1,
 				nullptr,
-				&recv_flags,
-				reinterpret_cast<LPWSAOVERLAPPED>(this),
+				&flags,
+				reinterpret_cast<LPOVERLAPPED>(this),
 				nullptr
-			);
+			)==SOCKET_ERROR) {
 			
-			//	Weird error checking for overlapped I/O
-			return (!(
-				(result==SOCKET_ERROR) &&
-				(WSAGetLastError()!=WSA_IO_PENDING)
-			));
-		
-		}
-		
-		
-		bool ReceiveCommand::Complete (IOCPPacket packet) {
-		
-			if (!(
-				packet.Result &&
-				(packet.Num!=0)
-			)) return false;
+				//	It's only an error if we
+				//	actually failed
+				auto result=WSAGetLastError();
+				if (result!=WSA_IO_PENDING) return result;
 			
-			//	Update buffer count
-			Buffer.SetCount(Buffer.Count()+packet.Num);
+			}
 			
-			return true;
+			return 0;
 		
 		}
 	

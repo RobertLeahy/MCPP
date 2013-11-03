@@ -1,7 +1,4 @@
 #include <network.hpp>
-#include <mswsock.h>
-#include <Ws2tcpip.h>
-#include <system_error>
 
 
 namespace MCPP {
@@ -10,47 +7,77 @@ namespace MCPP {
 	namespace NetworkImpl {
 	
 	
-		AcceptCommand::AcceptCommand (SOCKET socket, SOCKET listening) noexcept
-			:	IOCPCommand(NetworkCommand::Accept),
-				socket(socket),
-				listening(listening)
-		{	}
+		AcceptCommand::AcceptCommand (IPAddress ip) noexcept : CompletionCommand(CommandType::Accept), socket(INVALID_SOCKET) {
 		
-		
-		AcceptCommand::~AcceptCommand () noexcept {
-		
-			if (socket!=INVALID_SOCKET) closesocket(socket);
+			is_v6=ip.IsV6();
 		
 		}
 		
 		
-		SOCKET AcceptCommand::Get () noexcept {
+		void AcceptCommand::cleanup () noexcept {
 		
-			//	Inherit
-			if (setsockopt(
-				socket,
-				SOL_SOCKET,
-				SO_UPDATE_ACCEPT_CONTEXT,
-				reinterpret_cast<char *>(&listening),
-				sizeof(listening)
-			)==SOCKET_ERROR) {
-			
-				//	If inheriting failed, close
-				//	the socket and return an invalid
-				//	value to indicate failure
+			//	Clean up socket this object
+			//	contains unless it's already
+			//	been cleaned up
+			if (socket!=INVALID_SOCKET) {
 			
 				closesocket(socket);
-				
 				socket=INVALID_SOCKET;
-				
-				return INVALID_SOCKET;
 			
 			}
 		
-			SOCKET retr=socket;
-			socket=INVALID_SOCKET;
+		}
+		
+		
+		AcceptCommand::~AcceptCommand () noexcept {
+		
+			cleanup();
+		
+		}
+		
+		
+		void AcceptCommand::Dispatch (SOCKET listening) {
+		
+			//	If there's already a socket in
+			//	this object, clean it up
+			cleanup();
 			
-			return retr;
+			//	Create a new socket
+			socket=MakeSocket(is_v6);
+		
+			//	Get the address of the AcceptEx function
+			GUID guid=WSAID_ACCEPTEX;
+			LPFN_ACCEPTEX accept_ex;
+			DWORD bytes;	//	This is ignored
+			if (WSAIoctl(
+				socket,
+				SIO_GET_EXTENSION_FUNCTION_POINTER,
+				&guid,
+				sizeof(guid),
+				&accept_ex,
+				sizeof(accept_ex),
+				&bytes,
+				nullptr,
+				nullptr
+			)==SOCKET_ERROR) RaiseWSA();
+			
+			//	Dispatch asynchronous accept
+			if (!accept_ex(
+				listening,
+				socket,
+				buffer,
+				0,
+				sizeof(buffer)/2,
+				sizeof(buffer)/2,
+				&num,
+				reinterpret_cast<LPOVERLAPPED>(this)
+			)) {
+			
+				//	Pending I/O is not an error
+				auto result=WSAGetLastError();
+				if (result!=ERROR_IO_PENDING) Raise(result);
+			
+			}
 		
 		}
 		
@@ -66,9 +93,9 @@ namespace MCPP {
 		}
 		
 		
-		Tuple<IPAddress,UInt16,IPAddress,UInt16> AcceptCommand::GetEndpoints () {
+		AcceptData AcceptCommand::Get () {
 		
-			//	Attempt to get the address of the
+			//	Get the address of the
 			//	GetAcceptExSockaddrs function
 			GUID guid=WSAID_GETACCEPTEXSOCKADDRS;
 			LPFN_GETACCEPTEXSOCKADDRS get_accept_ex_sockaddrs;
@@ -83,13 +110,9 @@ namespace MCPP {
 				&bytes,
 				nullptr,
 				nullptr
-			)==SOCKET_ERROR) throw std::system_error(
-				std::error_code(
-					WSAGetLastError(),
-					std::system_category()
-				)
-			);
+			)==SOCKET_ERROR) RaiseWSA();
 			
+			//	Get local and remote addresses
 			struct sockaddr_storage * remote;
 			INT remote_size=sizeof(struct sockaddr_storage);
 			struct sockaddr_storage * local;
@@ -105,74 +128,22 @@ namespace MCPP {
 				&remote_size
 			);
 			
-			return Tuple<IPAddress,UInt16,IPAddress,UInt16>(
-				remote,
-				get_port(remote),
-				local,
-				get_port(local)
-			);
-		
-		}
-		
-		
-		void AcceptCommand::Dispatch (SOCKET listening) {
-		
-			//	Attempt to get the address of the
-			//	WSAAcceptEx function
-			GUID guid=WSAID_ACCEPTEX;
-			LPFN_ACCEPTEX accept_ex;
-			DWORD bytes;	//	This is ignored
-			if (WSAIoctl(
-				socket,
-				SIO_GET_EXTENSION_FUNCTION_POINTER,
-				&guid,
-				sizeof(guid),
-				&accept_ex,
-				sizeof(accept_ex),
-				&bytes,
-				nullptr,
-				nullptr
-			)==SOCKET_ERROR) throw std::system_error(
-				std::error_code(
-					WSAGetLastError(),
-					std::system_category()
-				)
-			);
+			//	Prepare structure to be returned
 			
-			//	Dispatch asynchronous accept
-			if (accept_ex(
-				listening,
-				socket,
-				buffer,
-				0,
-				sizeof(buffer)/2,
-				sizeof(buffer)/2,
-				&num,
-				reinterpret_cast<LPOVERLAPPED>(this)
-			)==SOCKET_ERROR) {
+			//	Move socket from this structure to
+			//	return structure
+			AcceptData retr(socket);
+			//	We're no longer responsible for this
+			//	socket's lifetime
+			socket=INVALID_SOCKET;
 			
-				//	Error handling is a bit weird, since
-				//	pending is a normal condition, but is
-				//	reported as an error, so filter that
-				//	out
+			//	IPs/ports
+			retr.RemoteIP=IPAddress(remote);
+			retr.RemotePort=get_port(remote);
+			retr.LocalIP=IPAddress(local);
+			retr.LocalPort=get_port(local);
 			
-				auto result=WSAGetLastError();
-				
-				if (result!=WSA_IO_PENDING) throw std::system_error(
-					std::error_code(
-						result,
-						std::system_category()
-					)
-				);
-			
-			}
-			
-		}
-		
-		
-		void AcceptCommand::Imbue (SOCKET socket) noexcept {
-		
-			this->socket=socket;
+			return retr;
 		
 		}
 	

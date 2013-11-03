@@ -1,5 +1,4 @@
 #include <network.hpp>
-#include <utility>
 
 
 using namespace MCPP::NetworkImpl;
@@ -8,73 +7,19 @@ using namespace MCPP::NetworkImpl;
 namespace MCPP {
 
 
-	void SendHandle::Then (std::function<void (SendState)> callback) {
-	
-		auto s=lock.Execute([&] () mutable {
-		
-			//	Add callback to pending unless
-			//	the send has already completed
-			if (state==SendState::InProgress) callbacks.Add(std::move(callback));
-			
-			return state;
-		
-		});
-		
-		//	If send has already completed,
-		//	fire callback at once
-		if (s!=SendState::InProgress) if (callback) try {
-		
-			callback(s);
-		
-		//	If callback was actually invoked asynchronously,
-		//	use would not get exceptions, therefore
-		//	simulate that behaviour by not propagating them
-		//	here
-		} catch (...) {	}
-	
-	}
-	
-	
-	void SendHandle::Complete () noexcept {
-	
-		state=SendState::Succeeded;
-	
-	}
-	
-	
-	SendState SendHandle::State () const noexcept {
-	
-		return lock.Execute([&] () {	return state;	});
-	
-	}
-	
-	
-	SendState SendHandle::Wait () const noexcept {
-	
-		return lock.Execute([&] () {
-		
-			while (state==SendState::InProgress) wait.Sleep(lock);
-			
-			return state;
-		
-		});
-	
-	}
-	
-	
 	void SendHandle::Fail () noexcept {
 	
 		lock.Execute([&] () mutable {
+		
+			state=SendState::Failed;
 			
 			for (auto & callback : callbacks) try {
 			
-				if (callback) callback(SendState::Failed);
+				callback(state);
 			
-			//	We don't care abouc exceptions
+			//	Eat exceptions, we don't care about
+			//	them, it's not our code executing
 			} catch (...) {	}
-			
-			//	Set state
-			state=SendState::Failed;
 			
 			//	Wake up waiting threads
 			wait.WakeAll();
@@ -84,4 +29,74 @@ namespace MCPP {
 	}
 	
 	
+	void SendHandle::Complete (ThreadPool & pool) {
+	
+		lock.Execute([&] () mutable {
+		
+			state=SendState::Sent;
+			
+			//	We MUST make an effort to fire all
+			//	callbacks otherwise critical code
+			//	may not execute, therefore we store
+			//	exceptions to be rethrown later
+			std::exception_ptr ex;
+			for (auto & callback : callbacks) try {
+			
+				pool.Enqueue(
+					std::move(callback),
+					state
+				);
+			
+			} catch (...) {
+			
+				ex=std::current_exception();
+			
+			}
+			
+			//	Wake up waiting threads
+			wait.WakeAll();
+			
+			//	If there was an error, now is the
+			//	time to rethrow it
+			if (ex) std::rethrow_exception(ex);
+		
+		});
+	
+	}
+	
+	
+	void SendHandle::SetState (SendState state) noexcept {
+	
+		this->state=state;
+	
+	}
+
+
+	SendState SendHandle::Wait () const noexcept {
+	
+		return lock.Execute([&] () {
+		
+			while (state==SendState::Sending) wait.Sleep(lock);
+			
+			return state;
+			
+		});
+	
+	}
+	
+	
+	void SendHandle::Then (std::function<void (SendState)> callback) {
+	
+		lock.Execute([&] () mutable {	callbacks.Add(std::move(callback));	});
+	
+	}
+	
+	
+	SendState SendHandle::State () const noexcept {
+	
+		return lock.Execute([&] () {	return state;	});
+	
+	}
+
+
 }

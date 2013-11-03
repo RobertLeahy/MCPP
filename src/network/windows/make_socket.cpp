@@ -1,5 +1,4 @@
 #include <network.hpp>
-#include <system_error>
 
 
 namespace MCPP {
@@ -8,20 +7,15 @@ namespace MCPP {
 	namespace NetworkImpl {
 	
 	
-		SOCKET MakeSocket (bool v6) {
-
-			SOCKET retr=::socket(
-				v6 ? AF_INET6 : AF_INET,
+		SOCKET MakeSocket (bool is_v6) {
+		
+			SOCKET retr=socket(
+				is_v6 ? AF_INET6 : AF_INET,
 				SOCK_STREAM,
 				IPPROTO_TCP
 			);
 			
-			if (retr==INVALID_SOCKET) throw std::system_error(
-				std::error_code(
-					WSAGetLastError(),
-					std::system_category()
-				)
-			);
+			if (retr==INVALID_SOCKET) RaiseWSA();
 			
 			return retr;
 		

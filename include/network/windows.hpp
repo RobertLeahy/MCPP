@@ -9,17 +9,18 @@
 #include <rleahylib/rleahylib.hpp>
 #include <network.hpp>
 #include <thread_pool.hpp>
+#include <mswsock.h>
 #include <windows.h>
+#include <Ws2tcpip.h>
 #include <atomic>
-#include <exception>
-#include <functional>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 
 
 namespace MCPP {
-	
-	
+
+
 	/**
 	 *	\cond
 	 */
@@ -28,112 +29,128 @@ namespace MCPP {
 	namespace NetworkImpl {
 	
 	
+		//	Helper function -- raises the last system
+		//	error
+		[[noreturn]]
+		void Raise ();
+		//	Helper function -- raises the last WinSock
+		//	error
+		[[noreturn]]
+		void RaiseWSA ();
+		//	Helper function -- raises a system error
+		//	given an error code
+		[[noreturn]]
+		void Raise (DWORD);
+		//	Helper function -- captures the system error
+		//	given as an exception pointer
+		std::exception_ptr GetError (DWORD) noexcept;
+		//	Helper function -- gets the string associated
+		//	with a system error code
+		String GetErrorMessage (DWORD);
+		//	Helper function -- makes a socket given an
+		//	address family (either IPv6 or IPv4)
 		SOCKET MakeSocket (bool);
 	
 	
-		enum class NetworkCommand {
-		
-			Receive,
-			Send,
-			Accept
-		
-		};
+		class CompletionCommand;
 		
 		
-		class IOCPCommand {
+		//	A packet which may be dequeued from
+		//	a completion port and represents a
+		//	completed I/O operation.
+		class Packet {
 		
 		
 			public:
-			
-			
-				OVERLAPPED Overlapped;
-				NetworkCommand Command;
+		
 				
-				
-				IOCPCommand (NetworkCommand) noexcept;
-		
-		
-		};
-		
-		
-		class IOCPPacket {
-		
-		
-			public:
-			
-			
+				//	True if this packet represents a
+				//	successful I/O operation, false
+				//	otherwise.
 				bool Result;
-				void * Conn;
-				IOCPCommand * Command;
-				Word Num;
+				//	The operating system error code if
+				//	this packet represents failure,
+				//	0 otherwise.
+				DWORD Error;
+				//	The number of bytes associated with
+				//	this I/O operation, 0 otherwise.
+				DWORD Count;
+				//	The command that was issued to start
+				//	the I/O operation whose completion
+				//	this packet represents.
+				CompletionCommand * Command;
+				//	The data associated with the handle
+				//	I/O was performed on.
+				void * Data;
 		
 		
 		};
 		
 		
-		class AcceptCommand : public IOCPCommand {
-		
-		
-			private:
-			
-			
-				SOCKET socket;
-				SOCKET listening;
-				Byte buffer [(sizeof(struct sockaddr_storage)+16)*2];
-				DWORD num;
-		
-		
-			public:
-				
-				
-				AcceptCommand (SOCKET, SOCKET) noexcept;
-				~AcceptCommand () noexcept;
-				
-				
-				void Imbue (SOCKET) noexcept;
-				SOCKET Get () noexcept;
-				Tuple<IPAddress,UInt16,IPAddress,UInt16> GetEndpoints ();
-				
-				
-				void Dispatch (SOCKET);
-		
-		
-		};
-		
-		
-		class ReceiveCommand : public IOCPCommand {
-		
-		
-			private:
-			
-			
-				WSABUF b;
-				DWORD recv_flags;
+		//	Initializes and cleans up WinSock using
+		//	RAII techniques
+		class Initializer {
 		
 		
 			public:
 			
 			
-				Vector<Byte> Buffer;
-				
-				
-				ReceiveCommand () noexcept;
-				
-				
-				bool Dispatch (SOCKET);
-				bool Complete (IOCPPacket);
+				Initializer ();
+				~Initializer () noexcept;
 		
 		
 		};
 		
 		
-		class IOCP {
+		//	A completion port from which completed
+		//	I/O packets may be extracted
+		class CompletionPort {
 		
 		
 			private:
 			
 			
 				HANDLE iocp;
+		
+		
+			public:
+			
+			
+				CompletionPort ();
+				~CompletionPort () noexcept;
+				
+				
+				//	Attaches a socket and associated data to
+				//	the completion port
+				void Attach (SOCKET, void *);
+				//	Dequeues an I/O completion packet
+				Packet Get ();
+				//	Manually posts a message to the completion
+				//	port
+				void Post ();
+		
+		
+		};
+		
+		
+		class ReferenceManager;
+		
+		
+		//	Provides an RAII guard on reference manager
+		//	reference acquisitions
+		class ReferenceManagerHandle {
+		
+		
+			friend class ReferenceManager;
+		
+		
+			private:
+		
+		
+				ReferenceManager * manager;
+				
+				
+				ReferenceManagerHandle (ReferenceManager &) noexcept;
 				
 				
 				void destroy () noexcept;
@@ -142,43 +159,271 @@ namespace MCPP {
 			public:
 			
 			
-				IOCP ();
-				~IOCP ();
-				
-				
-				void Attach (SOCKET, void *);
-				void Dispatch (IOCPCommand *, void *);
-				IOCPPacket Get ();
-				void Destroy () noexcept;
+				ReferenceManagerHandle (const ReferenceManagerHandle &) noexcept;
+				ReferenceManagerHandle (ReferenceManagerHandle &&) noexcept;
+				ReferenceManagerHandle & operator = (const ReferenceManagerHandle &) noexcept;
+				ReferenceManagerHandle & operator = (ReferenceManagerHandle &&) noexcept;
+				~ReferenceManagerHandle () noexcept;
 		
 		
 		};
 		
 		
-		class ListeningSocket {
+		//	Manages references by providing a handle on
+		//	which objects may wait for completion
+		class ReferenceManager {
+		
+		
+			private:
+			
+			
+				mutable Mutex lock;
+				mutable CondVar wait;
+				Word count;
+		
+		
+			public:
+			
+			
+				ReferenceManager () noexcept;
+			
+			
+				~ReferenceManager () noexcept;
+			
+			
+				//	Manually acquires a reference
+				void Begin () noexcept;
+				//	Manually release a reference
+				//	Returns true if the last reference
+				//	was manually released
+				void End () noexcept;
+				//	Acquires a handle which guards an acquired
+				//	reference, release it as soon as it goes
+				//	out of scope
+				ReferenceManagerHandle Get () noexcept;
+				//	Waits for the reference count to reach
+				//	zero
+				void Wait () const noexcept;
+				//	Resets the count to zero
+				void Reset () noexcept;
+				//	Retrieves the current count
+				Word Count () const noexcept;
+		
+		
+		};
+		
+		
+		//	The types of commands that may be
+		//	issued on a completion port
+		enum class CommandType {
+		
+			Send,
+			Receive,
+			Accept,
+			Connect
+		
+		};
+		
+		
+		//	All commands inherit this class to
+		//	store command-specific data
+		//
+		//	A pointer to a Command object is
+		//	guaranteed to be a pointer to an
+		//	OVERLAPPED object as well
+		class CompletionCommand {
+		
+		
+			private:
+			
+			
+				//	This structure must start with an
+				//	OVERLAPPED structure
+				OVERLAPPED overlapped;
+		
+		
+			public:
+			
+			
+				CompletionCommand (CommandType) noexcept;
+			
+			
+				//	The type of command this represents
+				CommandType Type;
+		
+		
+		};
+		
+		
+		//	A command to receive data on a given
+		//	connection
+		class ReceiveCommand : public CompletionCommand {
+		
+		
+			private:
+			
+			
+				WSABUF buf;
+				DWORD flags;
+		
+		
+			public:
+			
+			
+				ReceiveCommand () noexcept;
+			
+			
+				//	Received bytes
+				Vector<Byte> Buffer;
+				
+				
+				//	Makes a WSARecv request, queuing
+				//	up an asynchronous receive using
+				//	this object and the buffer within
+				//
+				//	Returns zero on success, an OS
+				//	error code otherwise.
+				DWORD Dispatch (SOCKET);
+		
+		
+		};
+		
+		
+		//	A command to send data on a given connection
+		class SendCommand : public CompletionCommand {
+		
+		
+			private:
+			
+			
+				WSABUF buf;
+				
+				
+			public:
+			
+			
+				SendCommand (Vector<Byte>) noexcept;
+			
+			
+				Vector<Byte> Buffer;
+				
+				
+				//	Makes a WSASend request, queuing
+				//	up an asynchronous send using
+				//	this object and the buffer within
+				//
+				//	Returns zero on success, an OS error
+				//	code otherwise
+				DWORD Dispatch (SOCKET) noexcept;
+		
+		
+		};
+		
+		
+		//	Contains information about an accepted
+		//	connection
+		class AcceptData {
 		
 		
 			private:
 			
 			
 				SOCKET socket;
-				IPAddress ip;
-				UInt16 port;
 				
 				
-				Vector<std::unique_ptr<AcceptCommand>> available;
-				std::unordered_map<AcceptCommand *,std::unique_ptr<AcceptCommand>> pending;
-				Mutex lock;
+				void cleanup () noexcept;
+
+		
+			public:
+			
+			
+				AcceptData (SOCKET) noexcept;
+				~AcceptData () noexcept;
+				
+				
+				AcceptData (AcceptData &&) noexcept;
+				AcceptData & operator = (AcceptData &&) noexcept;
+				AcceptData (const AcceptData &) noexcept;
+				AcceptData & operator = (const AcceptData &) noexcept;
+			
+			
+				//	Gets the socket this AcceptData
+				//	structure is carrying.  Ends the
+				//	AcceptData structure's responsibility
+				//	for managing that socket's lifetime
+				SOCKET Get () noexcept;
+			
+			
+				IPAddress RemoteIP;
+				UInt16 RemotePort;
+				IPAddress LocalIP;
+				UInt16 LocalPort;
+		
+		
+		};
+		
+		
+		//	A command to accept an incoming connection on
+		//	a given socket
+		class AcceptCommand : public CompletionCommand {
+		
+		
+			private:
+			
+			
+				//	Actual socket to be accepted on
+				SOCKET socket;
+				//	Whether the underlying listening socket
+				//	is IPv6 or IPv4
+				bool is_v6;
+				//	Buffer of bytes for AcceptEx to store
+				//	addresses in
+				Byte buffer [(sizeof(struct sockaddr_storage)+16)*2];
+				//	Implementation artifact -- this is
+				//	ignored
+				DWORD num;
+				
+				
+				void cleanup () noexcept;
 				
 				
 			public:
 			
 			
-				ListeningSocket (IPAddress, UInt16, IOCP &);
+				AcceptCommand (IPAddress) noexcept;
 				
 				
-				void Dispatch ();
-				void Complete (AcceptCommand *);
+				~AcceptCommand () noexcept;
+				
+				
+				//	Dispatches an asynchronous accept
+				void Dispatch (SOCKET);
+				//	Retrieves data about a completed receive
+				AcceptData Get ();
+		
+		
+		};
+		
+		
+		//	A command to connect to a remote endpoint
+		class ConnectCommand : public CompletionCommand {
+		
+		
+			private:
+			
+			
+				//	Remote endpoint
+				struct sockaddr_storage addr;
+				
+				
+			public:
+			
+			
+				ConnectCommand () noexcept;
+				
+				
+				//	Dispatches an asynchronous connect
+				void Dispatch (SOCKET, IPAddress, UInt16);
 		
 		
 		};
@@ -193,45 +438,146 @@ namespace MCPP {
 	
 	
 	/**
-	 *	A handle to an asynchronous
-	 *	send operation.
-	 *
-	 *	The handle may be used to monitor
-	 *	the progress of the send, attach
-	 *	a callback to be executed after
-	 *	the send completes, or to wait until
-	 *	the send completes.
+	 *	Represents an endpoint on which a connection
+	 *	handler is listening for incoming connections.
 	 */
-	class SendHandle : private NetworkImpl::IOCPCommand {
+	class ListeningSocket {
 	
 	
 		friend class ConnectionHandler;
+	
+	
+		private:
+		
+		
+			//	The listening socket
+			SOCKET socket;
+			
+			
+			//	The connection handler this is associated
+			//	with
+			ConnectionHandler & handler;
+			
+			
+			//	The endpoint to which this socket
+			//	is bound
+			LocalEndpoint ep;
+		
+		
+			//	Synchronizes shutting down
+			Mutex lock;
+			CondVar wait;
+			
+			
+			//	Pending accept operations
+			std::unordered_map<NetworkImpl::CompletionCommand *,std::unique_ptr<NetworkImpl::AcceptCommand>> pending;
+			
+			
+			//	Completes an asynchronous operation
+			void Complete (NetworkImpl::Packet);
+			//	Attaches this listening socket to
+			//	the completion port
+			void Attach ();
+			//	Dispatches an asynchronous accept
+			//	operation, should be called once
+			//	per worker thread
+			void Dispatch ();
+		
+		
+		public:
+		
+		
+			/**
+			 *	\cond
+			 */
+		
+		
+			ListeningSocket (LocalEndpoint, ConnectionHandler &);
+			
+			
+			/**
+			 *	\endcond
+			 */
+			
+			
+			/**
+			 *	Destroys the listening socket and all
+			 *	associated resources.
+			 */
+			~ListeningSocket () noexcept;
+			
+			
+			/**
+			 *	Shuts the listening socket down.
+			 *
+			 *	Once this function returns all pending
+			 *	incoming connections are guaranteed to have
+			 *	been processed.
+			 */
+			void Shutdown () noexcept;
+	
+	
+	};
+	
+	
+	/**
+	 *	The different states through which
+	 *	a send transitions.
+	 */
+	enum class SendState {
+	
+		Sending,	/**<	The send is either waiting or currently being sent.	*/
+		Sent,		/**<	The send completed successfully.	*/
+		Failed		/**<	The send failed.	*/
+	
+	};
+	
+	
+	/**
+	 *	Represents a single send across a single
+	 *	connection, and allows for that send to be
+	 *	monitored.
+	 */
+	class SendHandle {
+	
+	
 		friend class Connection;
 	
 	
 		private:
 		
 		
-			//	Buffer that's being sent
-			Vector<Byte> buffer;
-			WSABUF b;
+			//	A pointer to a send handle is
+			//	guaranteed to be a pointer to
+			//	a SendCommand, which is in turn
+			//	guaranteed to be a pointer to
+			//	an OVERLAPPED structure
+			NetworkImpl::SendCommand Command;
 			
 			
-			//	Bytes successfully sent
-			std::atomic<Word> sent;
-			
-			
-			//	State of the send
+			//	Current state of the send
 			SendState state;
 			mutable Mutex lock;
 			mutable CondVar wait;
 			Vector<std::function<void (SendState)>> callbacks;
 			
 			
+			//	Marks the current send as having failed,
+			//	and dispatches all waiting callbacks
+			//	synchronously
 			void Fail () noexcept;
-			bool Complete (NetworkImpl::IOCPPacket, ThreadPool &);
-			void Dispatch (SOCKET);
-			void Complete () noexcept;
+			//	Marks the current send as having succeeded,
+			//	and dispatches all waiting callbacks
+			//	asynchronously using the provided thread
+			//	pool
+			void Complete (ThreadPool &);
+			//	Simply sets the state
+			//	As this does not invoke callbacks, it
+			//	is assumed that this object is not
+			//	yet referenced by more than one thread,
+			//	and therefore this operation is not
+			//	thread safe
+			void SetState (SendState) noexcept;
 			
 			
 		public:
@@ -240,79 +586,92 @@ namespace MCPP {
 			/**
 			 *	\cond
 			 */
-		
-		
-			SendHandle (Vector<Byte> buffer) noexcept;
-			
-			
+			 
+			 
+			//	Creates a send handle, passing the provided argument
+			//	through to the constructor of the underlying
+			//	send command
+			SendHandle (Vector<Byte>) noexcept;
+			 
+			 
 			/**
 			 *	\endcond
 			 */
-			
+			 
 			
 			/**
-			 *	Determines the state the send
-			 *	operation is currently in.
+			 *	Waits for the send to complete.
 			 *
 			 *	\return
-			 *		The operation that the send
-			 *		operation is currently in.
-			 */
-			SendState State () const noexcept;
-			/**
-			 *	Waits until the send operation
-			 *	completes.
-			 *
-			 *	\return
-			 *		The state the send operation
-			 *		terminated in.
+			 *		The state in which the send completed.
 			 */
 			SendState Wait () const noexcept;
 			/**
-			 *	Attaches a callback to be executed
-			 *	after the send operation completes.
+			 *	Adds a callback to be invoked once the
+			 *	send completes.
 			 *
-			 *	The callback will be passed the
-			 *	state in which the send operation
-			 *	terminated.
+			 *	The callback will be invoked immediately if
+			 *	the send has already completed.
 			 *
 			 *	\param [in] callback
-			 *		A callback to be invoked once
-			 *		the send operation completes.
+			 *		A callback which shall be invoked when the
+			 *		send has completed.
 			 */
 			void Then (std::function<void (SendState)> callback);
+			/**
+			 *	Determines the send's current state.
+			 *
+			 *	\return
+			 *		The send's current state.
+			 */
+			SendState State () const noexcept;
 	
 	
 	};
-
+	
 	
 	/**
-	 *	Encapsulates a connection to a remote
+	 *	Represents a connection to a single remote
 	 *	host.
 	 */
 	class Connection {
 	
 	
 		friend class ConnectionHandler;
+		friend class ListeningSocket;
 	
 	
 		private:
 		
 		
-			//	Associated socket and
-			//	I/O completion port
+			//	This connection's socket
 			SOCKET socket;
 			
 			
-			//	Whether the socket has been
-			//	shutdown or not
+			//	The handler this connection
+			//	is associated with
+			ConnectionHandler & handler;
+			
+			
+			//	Whether this connection's socket
+			//	is shutdown or not
+			//
+			//	For certain reasons, this is protected
+			//	by the send lock
 			bool is_shutdown;
 			
 			
-			//	How many pending asynchronous
-			//	operations are running against
-			//	this connection
-			Word pending;
+			//	The remote IP and port to
+			//	which this socket is connected
+			IPAddress remote_ip;
+			UInt16 remote_port;
+			//	The local IP and port from
+			//	which this socket is connected
+			//	(only relevant for sockets
+			//	created by accepting on a
+			//	listening socket)
+			IPAddress local_ip;
+			UInt16 local_port;
 			
 			
 			//	Statistics
@@ -320,39 +679,70 @@ namespace MCPP {
 			std::atomic<Word> received;
 			
 			
-			//	Endpoints -- local and
-			//	remote
-			IPAddress remote_ip;
-			UInt16 remote_port;
-			IPAddress local_ip;
-			UInt16 local_port;
+			//	Callbacks
+			DisconnectType disconnect;
+			ReceiveType receive_callback;
+			ConnectType connect_callback;
+			
+			
+			//	Pending sends
+			std::unordered_map<NetworkImpl::CompletionCommand *,SmartPointer<SendHandle>> sends;
+			Mutex sends_lock;
+			
+			
+			//	Pending operations
+			std::atomic<Word> pending;
 			
 			
 			//	Receive command
 			NetworkImpl::ReceiveCommand recv;
 			
 			
-			//	Reason for disconnect (if
-			//	provided)
-			String reason;
+			//	Connect command
+			NetworkImpl::ConnectCommand conn;
+			
+			
+			//	Reason (if any) this connection
+			//	was closed
+			bool set_reason;
+			Nullable<String> reason;
+			std::exception_ptr ex;
 			Mutex reason_lock;
 			
 			
-			//	Collection of pending sends
-			std::unordered_map<SendHandle *,SmartPointer<SendHandle>> sends;
-			mutable Mutex sends_lock;
+			//	Shuts the socket down
+			void shutdown () noexcept;
 			
 			
-			bool Dispatch ();
-			bool Complete (SendHandle *);
-			bool Complete () noexcept;
-			bool Kill () noexcept;
-			String Reason () noexcept;
-			void Send (Word) noexcept;
-			void Receive (Word) noexcept;
+			//	Completes an event by cleaning
+			//	up
+			void complete (DWORD code=0);
 			
 			
-			void disconnect () noexcept;
+			//	Completion routines
+			void receive (NetworkImpl::Packet);
+			void send (NetworkImpl::Packet);
+			void connect (NetworkImpl::Packet);
+			
+			
+			//	Completes some pending asynchronous
+			//	I/O operation against this connection
+			void Complete (NetworkImpl::Packet);
+			
+			
+			//	Dispatches an asynchronous connection
+			//	attempt
+			void Connect ();
+			
+			
+			//	Attaches this connection to the completion
+			//	port
+			void Attach ();
+			
+			
+			//	Begins the receive loop by queuing up a
+			//	receive
+			void Begin ();
 			
 			
 		public:
@@ -363,7 +753,7 @@ namespace MCPP {
 			 */
 		
 		
-			Connection (SOCKET, IPAddress, UInt16, NetworkImpl::IOCP &, IPAddress, UInt16);
+			Connection (SOCKET, IPAddress, UInt16, IPAddress, UInt16, ConnectionHandler &, ReceiveType, DisconnectType, ConnectType connect_callback=ConnectType());
 			
 			
 			/**
@@ -372,251 +762,259 @@ namespace MCPP {
 		
 		
 			/**
-			 *	Disconnects this connection.
+			 *	Destroys this connection, closing its
+			 *	socket and cleaning up all associated
+			 *	resources.
 			 */
 			~Connection () noexcept;
 			
 			
 			/**
-			 *	Asynchronously sends data across this
-			 *	connection.
+			 *	Sends data across a connected connection.
 			 *
 			 *	\param [in] buffer
-			 *		A buffer of bytes to send.
+			 *		The data to sent.
 			 *
 			 *	\return
-			 *		A handle which may be used to track,
-			 *		monitor, and respond to changes in the
-			 *		status of this asynchronous send operation.
+			 *		A handle through which the send may be
+			 *		monitored.
 			 */
 			SmartPointer<SendHandle> Send (Vector<Byte> buffer);
-			
-			
-			/**
-			 *	Disconnects this connection.
-			 */
-			void Disconnect ();
-			/**
-			 *	Disconnects this connection for a certain
-			 *	reason.
-			 *
-			 *	\param [in] reason
-			 *		A string representing the reason that
-			 *		this connection is being disconnected.
-			 */
-			void Disconnect (String reason);
-			
-			
-			/**
-			 *	Retrieves the remote IP.
-			 *
-			 *	\return
-			 *		An IP address which represents the
-			 *		IP address to which this connection is
-			 *		connected.
-			 */
-			IPAddress IP () const noexcept;
-			/**
-			 *	Retrieves the remote port.
-			 *
-			 *	\return
-			 *		An integer which represents the port
-			 *		to which this connection is connected.
-			 */
-			UInt16 Port () const noexcept;
-			
-			
-			/**
-			 *	Retrieves the local IP.
-			 *
-			 *	\return
-			 *		An IP address which represents the
-			 *		IP address on this machine to which
-			 *		this connection is connected.
-			 */
-			IPAddress LocalIP () const noexcept;
-			/**
-			 *	Retrieves the local port.
-			 *
-			 *	\return
-			 *		An integer which represents the port
-			 *		on this machine to which this connection
-			 *		is connected.
-			 */
-			UInt16 LocalPort () const noexcept;
-			
-			
-			/**
-			 *	Retrieves the number of bytes which have
-			 *	been send across this connection.
-			 *
-			 *	\return
-			 *		The number of bytes sent.
-			 */
-			Word Sent () const noexcept;
-			/**
-			 *	Retrieves the number of bytes which have
-			 *	been received on this connection.
-			 *
-			 *	\return
-			 *		The number of bytes received.
-			 */
-			Word Received () const noexcept;
-			
-			
-			/**
-			 *	Determines the number of asynchronous
-			 *	send operations currently pending on this
-			 *	connection.
-			 *
-			 *	\return
-			 *		The number of send operations pending
-			 *		on this connection.
-			 */
-			Word Pending () const noexcept;
 	
 	
 	};
 	
 	
 	/**
-	 *	Handles connections, creating listening sockets,
-	 *	accepting connections, and performing
-	 *	high-performance, non-blocking, asynchronous
-	 *	sends and receives.
+	 *	A component which provides high-performance,
+	 *	asynchronous networking capabilities.
 	 */
 	class ConnectionHandler {
+	
+	
+		friend class Connection;
+		friend class ListeningSocket;
 	
 	
 		private:
 		
 		
-			//	Completion port
-			NetworkImpl::IOCP iocp;
+			//	CONSTRUCTION ORDER IS VERY
+			//	IMPORTANT
 			
 			
-			//	Thread pool
-			ThreadPool & pool;
+			//	FIRST WE INITIALIZE WINSOCK
+			NetworkImpl::Initializer init;
 			
 			
-			//	Callbacks
-			ReceiveCallback recv;
-			DisconnectCallback disconnect;
-			AcceptCallback accept;
-			ConnectCallback connect;
-			PanicCallback panic;
+			//	SECOND WE CREATE AN I/O COMPLETION PORT
+			NetworkImpl::CompletionPort Port;
 			
 			
-			//	Asynchronous callback tracking
-			Word pending;
-			Mutex lock;
-			CondVar wait;
-	
-	
-			//	Connections this handler is
-			//	responsible for
+			//	THEN WE CREATE COLLECTIONS
+		
+		
+			//	Connections
 			std::unordered_map<Connection *,SmartPointer<Connection>> connections;
-			RWLock connections_lock;
+			Mutex connections_lock;
 			
-			
-			//	Listening sockets this handler
-			//	is responsible for
-			Vector<NetworkImpl::ListeningSocket> listening;
+			//	Listening sockets
+			std::unordered_map<ListeningSocket *,SmartPointer<ListeningSocket>> listening;
+			Mutex listening_lock;
 			
 			
 			//	Worker threads
 			Vector<Thread> workers;
 			
 			
-			//	Startup
-			Mutex startup;
-			CondVar startup_wait;
-			bool proceed;
-			bool success;
+			//	This construction order insures that
+			//	everything is cleaned up in the required
+			//	order (since destructors fire from
+			//	bottom to top).
+			//
+			//	This ensures that the I/O Completion Port
+			//	is cleaned up after all the connections,
+			//	and that WinSock is cleaned up after all
+			//	connections are shut down.
+			
+			
+			//	Reference manager prevents destruction
+			//	until it's safe to do so
+			NetworkImpl::ReferenceManager Manager;
+			
+			
+			//	Thread Pool
+			ThreadPool & Pool;
 			
 			
 			//	Statistics
-			std::atomic<Word> sent;
-			std::atomic<Word> received;
-			std::atomic<Word> connected;
-			std::atomic<Word> accepted;
+			
+			//	Number of bytes sent
+			std::atomic<Word> Sent;
+			//	Number of bytes received
+			std::atomic<Word> Received;
+			//	Number of incoming connections
+			std::atomic<Word> Incoming;
+			//	Number of outgoing connections
+			std::atomic<Word> Outgoing;
+			//	Number of accepted connections
+			std::atomic<Word> Accepted;
+			//	Number of disconnected connections
+			std::atomic<Word> Disconnected;
 			
 			
-			void do_panic (std::exception_ptr) noexcept;
-			void worker_init () noexcept;
-			void worker_func ();
-			void kill (SmartPointer<Connection> &);
+			//	Startup co-ordination
+			
+			enum class StartupResult {
+			
+				//	Still waiting for constructor to finish
+				None,
+				//	Startup failed, workers should exit at once
+				Failed,
+				//	Startup succeeded, workers should start
+				Succeeded
+			
+			};
+			
+			Mutex lock;
+			CondVar wait;
+			StartupResult startup;
+			
+			
+			//	Panic callback
+			PanicType panic;
+			
+			
+			//	Worker thread function
+			void worker ();
+			
+			
+			//	Removes connections and listening sockets
+			void Remove (const Connection *) noexcept;
+			void Remove (const ListeningSocket *) noexcept;
+			//	Retieves connections and listening sockets
+			SmartPointer<Connection> Get (const Connection *) noexcept;
+			SmartPointer<ListeningSocket> Get (const ListeningSocket *) noexcept;
+			//	Adds connections and listening sockets
+			Connection * Add (SmartPointer<Connection>);
+			ListeningSocket * Add (SmartPointer<ListeningSocket>);
+			
+			
+			//	Enqueues a task to run in the thread pool
+			//	associated with the connection handler
+			//
+			//	The connection handler is guaranteed to
+			//	exist at the same address until this
+			//	asynchronous task ends
 			template <typename T, typename... Args>
-			void enqueue (const T &, Args &&...);
-			SmartPointer<Connection> get (Connection *) noexcept;
-			void make (SOCKET, Tuple<IPAddress,UInt16,IPAddress,UInt16>);
+			void Enqueue (T && callback, Args &&... args);
+			
+			
+			//	Panics
+			void Panic (std::exception_ptr) noexcept;
 			
 			
 		public:
 		
 		
 			/**
-			 *	Creates a new connection handler and immediately
-			 *	begins listening.
+			 *	Creates a new connection handler.
 			 *
-			 *	\param [in] binds
-			 *		A vector of tuples which contain as their
-			 *		first item an IP address, and as their
-			 *		second item a port number.  These are the
-			 *		local IP addresses on which the handler
-			 *		will listen for incoming connections.
-			 *	\param [in] accept
-			 *		A callback which will be invoked to filter
-			 *		incoming connections.  If it returns
-			 *		\em false the connection will be ended
-			 *		at once, otherwise the connection will be
-			 *		allowed.
-			 *	\param [in] connect
-			 *		A callback which will be invoked whenever
-			 *		a connection to the handler is allowed.
-			 *	\param [in] disconnect
-			 *		A callback which will be invoked whenever
-			 *		a connection to the handler ends.
-			 *	\param [in] recv
-			 *		A callback which will be invoked whenever
-			 *		the handler receives data on any connection.
-			 *		The handler will not process subsequent
-			 *		receives on that connection until this callback
-			 *		has returned.
-			 *	\param [in] panic
-			 *		A callback which will be invoked when and
-			 *		if any internal, irrecoverable errors occur
-			 *		within the handler.
 			 *	\param [in] pool
-			 *		A reference to a thread pool that the handler
-			 *		will use to dispatch asynchronous callbacks.
+			 *		The thread pool that the connection
+			 *		handler will use to dispatch asynchronous
+			 *		callbacks.
 			 *	\param [in] num_workers
-			 *		A nullable integer representing the number of
-			 *		worker threads to spawn.  If null as many
-			 *		threads as the current CPU has cores will be
-			 *		spawned.  If zero one thread will be spawned.
-			 *		Defaults to null.
+			 *		The number of worker threads that the
+			 *		connection handler should create and
+			 *		maintain internally to service connections.
+			 *		Optional.  If not provided or set to
+			 *		null defaults to the number of threads of
+			 *		execution supported by this computer's
+			 *		CPU.
+			 *	\param [in] panic
+			 *		A callback to be invoked when and if a
+			 *		critical error occurs within the connection
+			 *		handler.  Defaults to calling std::abort.
 			 */
 			ConnectionHandler (
-				const Vector<Tuple<IPAddress,UInt16>> & binds,
-				AcceptCallback accept,
-				ConnectCallback connect,
-				DisconnectCallback disconnect,
-				ReceiveCallback recv,
-				PanicCallback panic,
 				ThreadPool & pool,
-				Nullable<Word> num_workers=Nullable<Word>()
+				Nullable<Word> num_workers=Nullable<Word>(),
+				PanicType panic=PanicType()
 			);
+		
+		
 			/**
-			 *	Cleans up a connection handler, closing all
-			 *	connections and listening sockets, and
-			 *	ending all worker threads.
+			 *	Shuts down the connection handler, closing all
+			 *	connections and stopping all worker threads.
 			 */
 			~ConnectionHandler () noexcept;
+			
+			
+			/**
+			 *	Forms an outgoing connection.
+			 *
+			 *	\param [in] ep
+			 *		The remote endpoint to which the handler
+			 *		shall attempt to connect.
+			 */
+			void Connect (RemoteEndpoint ep);
+			
+			
+			/**
+			 *	Begins listening on a certain local endpoint.
+			 *
+			 *	\param [in] ep
+			 *		The local endpoint on which to listen.
+			 *
+			 *	\return
+			 *		A handle through which the listening socket
+			 *		may be manipulated.
+			 */
+			SmartPointer<ListeningSocket> Listen (LocalEndpoint ep);
+			
+			
+			/**
+			 *	Gets a structure which contains information
+			 *	about this connection handler.
+			 */
+			ConnectionHandlerInfo GetInfo () const noexcept;
 	
 	
 	};
 	
+	
+	/**
+	 *	\cond
+	 */
+	
+	
+	template <typename T, typename... Args>
+	void ConnectionHandler::Enqueue (T && callback, Args &&... args) {
+	
+		//	Get a handle that will insure the
+		//	connection handler stays alive
+		auto handle=Manager.Get();
+		
+		//	Run callback in pool
+		#pragma GCC diagnostic push
+		#pragma GCC diagnostic ignored "-Wpedantic"
+		Pool.Enqueue([
+			handle=std::move(handle),
+			callback=std::bind(
+				std::forward<T>(callback),
+				std::forward<Args>(args)...
+			)
+		] () mutable {	callback();	});
+		#pragma GCC diagnostic pop
+	
+	}
+	
+	
+	/**
+	 *	\endcond
+	 */
+
 
 }
  

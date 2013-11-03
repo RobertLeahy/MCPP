@@ -1,5 +1,4 @@
 #include <network.hpp>
-#include <system_error>
 
 
 namespace MCPP {
@@ -8,103 +7,86 @@ namespace MCPP {
 	namespace NetworkImpl {
 	
 	
-		IOCP::IOCP () {
+		CompletionPort::CompletionPort () {
 		
+			//	Create the completion port
 			if ((iocp=CreateIoCompletionPort(
 				INVALID_HANDLE_VALUE,
 				nullptr,
 				0,
 				0
-			))==nullptr) throw std::system_error(
-				std::error_code(
-					GetLastError(),
-					std::system_category()
-				)
-			);
+			))==nullptr) Raise();
 		
 		}
 		
 		
-		void IOCP::destroy () noexcept {
+		CompletionPort::~CompletionPort () noexcept {
 		
-			if (iocp!=nullptr) CloseHandle(iocp);
-		
-		}
-		
-		
-		IOCP::~IOCP () noexcept {
-		
-			destroy();
+			CloseHandle(iocp);
 		
 		}
 		
 		
-		void IOCP::Destroy () noexcept {
+		void CompletionPort::Attach (SOCKET socket, void * ptr) {
 		
-			destroy();
-		
-		}
-		
-		
-		void IOCP::Attach (SOCKET socket, void * ptr) {
-		
+			//	Attempt to attach to the completion port
 			if (CreateIoCompletionPort(
 				reinterpret_cast<HANDLE>(socket),
 				iocp,
 				reinterpret_cast<ULONG_PTR>(ptr),
 				0
-			)!=iocp) throw std::system_error(
-				std::error_code(
-					GetLastError(),
-					std::system_category()
-				)
-			);
+			)==nullptr) Raise();
 		
 		}
 		
 		
-		void IOCP::Dispatch (IOCPCommand * command, void * ptr) {
+		Packet CompletionPort::Get () {
 		
-			if (!PostQueuedCompletionStatus(
-				iocp,
-				0,
-				reinterpret_cast<ULONG_PTR>(ptr),
-				reinterpret_cast<LPOVERLAPPED>(command)
-			)) throw std::system_error(
-				std::error_code(
-					GetLastError(),
-					std::system_category()
-				)
-			);
-		
-		}
-		
-		
-		IOCPPacket IOCP::Get () {
-		
-			IOCPPacket retr;
-			
-			DWORD num;
+			//	Attempt to dequeue
+			Packet retr;
 			retr.Result=GetQueuedCompletionStatus(
 				iocp,
-				&num,
-				reinterpret_cast<PULONG_PTR>(&retr.Conn),
+				&retr.Count,
+				reinterpret_cast<PULONG_PTR>(&retr.Data),
 				reinterpret_cast<LPOVERLAPPED *>(&retr.Command),
 				INFINITE
 			);
 			
-			//	Error checking
-			if (!retr.Result && (retr.Command==nullptr)) throw std::system_error(
-				std::error_code(
-					GetLastError(),
-					std::system_category()
-				)
-			);
+			if (retr.Result) {
 			
-			//	Convert DWORD => Word
-			retr.Num=static_cast<Word>(SafeInt<DWORD>(num));
+				//	Both the dequeue and the I/O operation
+				//	associated with the dequeued packet
+				//	succeeded
+				retr.Error=0;
+			
+			} else if (retr.Command==nullptr) {
+			
+				//	The dequeue itself failed
+				Raise();
+			
+			} else {
+			
+				//	The dequeue succeeded, but the I/O
+				//	operation associated with this packet
+				//	failed
+				retr.Error=GetLastError();
+				retr.Count=0;
+			
+			}
 			
 			return retr;
+		
+		}
+		
+		
+		void CompletionPort::Post () {
+		
+			if (!PostQueuedCompletionStatus(
+				iocp,
+				0,
+				0,
+				nullptr
+			)) Raise();
 		
 		}
 	

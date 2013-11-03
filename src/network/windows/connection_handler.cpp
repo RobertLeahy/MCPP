@@ -1,7 +1,6 @@
 #include <hardware_concurrency.hpp>
 #include <network.hpp>
-#include <system_error>
-#include <utility>
+#include <cstdlib>
 
 
 using namespace MCPP::NetworkImpl;
@@ -10,334 +9,148 @@ using namespace MCPP::NetworkImpl;
 namespace MCPP {
 
 
-	template <typename T, typename... Args>
-	void ConnectionHandler::enqueue (const T & callback, Args &&... args) {
+	void ConnectionHandler::Remove (const Connection * ptr) noexcept {
 	
-		lock.Acquire();
-		++pending;
-		lock.Release();
-		
-		//	Make sure the count gets decremented
-		//	if we throw
-		try {
-		
-			//	Dispatch asynchronous callback
-			#pragma GCC diagnostic push
-			#pragma GCC diagnostic ignored "-Wpedantic"
-			pool.Enqueue([this,callback=std::bind(callback,std::forward<Args>(args)...)] () mutable {
-			
-				try {
-				
-					callback();
-				
-				} catch (...) {
-				
-					lock.Acquire();
-					--pending;
-					wait.WakeAll();
-					lock.Release();
-				
-					throw;
-				
-				}
-			
-			});
-			#pragma GCC diagnostic pop
-		
-		} catch (...) {
-		
-			lock.Acquire();
-			--pending;
-			wait.WakeAll();
-			lock.Release();
-			
-			throw;
-		
-		}
+		connections_lock.Execute([&] () mutable {	connections.erase(const_cast<Connection *>(ptr));	});
 	
 	}
 	
 	
-	SmartPointer<Connection> ConnectionHandler::get (Connection * conn) noexcept {
+	void ConnectionHandler::Remove (const ListeningSocket * ptr) noexcept {
 	
-		return connections_lock.Read([&] () mutable {	return connections[conn];	});
+		listening_lock.Execute([&] () mutable {	listening.erase(const_cast<ListeningSocket *>(ptr));	});
 	
 	}
 	
 	
-	void ConnectionHandler::kill (SmartPointer<Connection> & conn) {
+	SmartPointer<Connection> ConnectionHandler::Get (const Connection * ptr) noexcept {
 	
-		if (conn->Kill()) {
+		return connections_lock.Execute([&] () mutable {
 		
-			//	WE CAN KILL
+			auto iter=connections.find(const_cast<Connection *>(ptr));
+			
+			if (iter==connections.end()) return SmartPointer<Connection>();
+			
+			return iter->second;
 		
-			//	Extract the reason for the disconnect
-			//	(if any)
-			String reason(conn->Reason());
+		});
+	
+	}
+	
+	
+	SmartPointer<ListeningSocket> ConnectionHandler::Get (const ListeningSocket * ptr) noexcept {
+	
+		return listening_lock.Execute([&] () mutable {
+		
+			auto iter=listening.find(const_cast<ListeningSocket *>(ptr));
 			
-			//	Delete from the collection of managed
-			//	connections
-			connections_lock.Write([&] () mutable {	connections.erase(static_cast<Connection *>(conn));	});
+			if (iter==listening.end()) return SmartPointer<ListeningSocket>();
 			
-			//	Dispatch disconnect callback
-			if (disconnect) enqueue(
-				disconnect,
-				conn,
-				std::move(reason)
+			return iter->second;
+		
+		});
+	
+	}
+	
+	
+	Connection * ConnectionHandler::Add (SmartPointer<Connection> add) {
+	
+		auto ptr=static_cast<Connection *>(add);
+	
+		connections_lock.Execute([&] () mutable {
+		
+			connections.emplace(
+				ptr,
+				std::move(add)
 			);
 		
-		}
+		});
+		
+		return ptr;
 	
 	}
 	
 	
-	void ConnectionHandler::make (SOCKET s, Tuple<IPAddress,UInt16,IPAddress,UInt16> addr) {
+	ListeningSocket * ConnectionHandler::Add (SmartPointer<ListeningSocket> add) {
 	
-		++connected;
+		auto ptr=static_cast<ListeningSocket *>(add);
+		
+		listening_lock.Execute([&] () mutable {
+		
+			listening.emplace(
+				ptr,
+				std::move(add)
+			);
+		
+		});
+		
+		return ptr;
 	
+	}
+	
+	
+	void ConnectionHandler::Panic (std::exception_ptr ex) noexcept {
+	
+		if (panic) try {
+			
+			panic(ex);
+			
+			return;
+			
+		} catch (...) {	}
+		
+		//	Fallback to aborting
+		std::abort();
+	
+	}
+	
+	
+	void ConnectionHandler::worker () {
+	
+		//	Wait for instructions from the constructor
+		lock.Execute([&] () mutable {	while (startup==StartupResult::None) wait.Sleep(lock);	});
+		
+		//	What was the result of startup?
+		//	If failure, end at once
+		if (startup==StartupResult::Failed) return;
+		
+		//	Catch all errors and turn them into
+		//	panics
 		try {
 		
-			//	Dispatch callback so connection
-			//	can be approved or disapproved
-			enqueue([=] () mutable {
+			//	Loop until told to stop
+			for (;;) {
 			
-				bool accepted=false;
-				try {
-			
-					if (accept) accepted=accept(
-						addr.Item<0>(),
-						addr.Item<1>(),
-						addr.Item<2>(),
-						addr.Item<3>()
-					);
-					else accepted=true;
+				//	Get a completion packet
+				auto packet=Port.Get();
 				
-				//	Ignore callback exceptions
-				} catch (...) {	}
+				//	Is it a shutdown command?
+				//	If so, end at once
+				if (packet.Command==nullptr) return;
 				
-				//	If connection was not accepted,
-				//	close the connection and move
-				//	on
-				if (!accepted) {
+				//	Switch on the type of command we're
+				//	handling
+				switch (packet.Command->Type) {
 				
-					closesocket(s);
+					//	Process accept commands against a listening
+					//	socket
+					case CommandType::Accept:
+						reinterpret_cast<ListeningSocket *>(packet.Data)->Complete(std::move(packet));
+						break;
 					
-					return;
+					//	Process all other commands against a connection
+					default:
+						reinterpret_cast<Connection *>(packet.Data)->Complete(std::move(packet));
+						break;
 				
 				}
-				
-				//	Connection was accepted
-				
-				++accepted;
-				
-				SmartPointer<Connection> conn;
-				try {
-				
-					conn=SmartPointer<Connection>::Make(
-						s,
-						addr.Item<0>(),
-						addr.Item<1>(),
-						iocp,
-						addr.Item<2>(),
-						addr.Item<3>()
-					);
-				
-				} catch (...) {
-				
-					closesocket(s);
-					
-					//	We're in an asynchronous callback,
-					//	this will not be transmitted unless
-					//	we do it explicitly
-					do_panic(std::current_exception());
-					
-					throw;
-				
-				}
-				
-				//	Socket is in a connection object now,
-				//	we don't need to manage it
-				
-				//	If the user callback to connect throws,
-				//	we don't catch it, we let this connection
-				//	die.
-				if (connect) connect(conn);
-				
-				//	We care about exceptions now,
-				//	nothing should throw
-				try {
-				
-					//	Add the client to our collection
-					//	of clients
-					connections_lock.Write([&] () mutable {
-					
-						connections.emplace(
-							static_cast<Connection *>(conn),
-							conn
-						);
-					
-					});
-					
-					//	Pump a receive
-					if (!conn->Dispatch()) kill(conn);
-				
-				} catch (...) {
-				
-					do_panic(std::current_exception());
-					
-					throw;
-				
-				}
-			
-			});
-		
-		} catch (...) {
-		
-			closesocket(s);
-			
-			throw;
-		
-		}
-	
-	}
-
-
-	void ConnectionHandler::worker_func () {
-	
-		//	Loop forever, or until told
-		//	to stop
-		for (;;) {
-		
-			//	Get a completion port packet
-			auto packet=iocp.Get();
-			
-			//	If the command is null, that's
-			//	an order to quit
-			if (packet.Command==nullptr) break;
-			
-			switch (packet.Command->Command) {
-			
-				//	ACCEPT
-				case NetworkCommand::Accept:{
-				
-					//	Command is actually an AcceptCommand
-					auto command=reinterpret_cast<AcceptCommand *>(packet.Command);
-					
-					//	Conn is actually a ListeningSocket
-					auto socket=reinterpret_cast<ListeningSocket *>(packet.Conn);
-					
-					//	If the accept succeeded, make a new
-					//	connection
-					if (packet.Result) {
-					
-						//	Get the local and remote addresses
-						//	for this connection
-						auto addr=command->GetEndpoints();
-						
-						//	Create the new connection
-						make(
-							command->Get(),
-							std::move(addr)
-						);
-					
-					}
-					
-					//	Tell the listening socket to clean
-					//	up this command
-					socket->Complete(command);
-					
-					//	Pump a new AcceptCommand
-					socket->Dispatch();
-				
-				}break;
-				
-				//	SEND
-				case NetworkCommand::Send:{
-				
-					sent+=packet.Num;
-				
-					//	Command is actually a send handle
-					SendHandle * send=reinterpret_cast<SendHandle *>(packet.Command);
-					
-					//	Conn is actually a Connection
-					auto conn=get(reinterpret_cast<Connection *>(packet.Conn));
-					
-					conn->Send(packet.Num);
-					
-					if (!send->Complete(packet,pool)) kill(conn);
-					
-					if (conn->Complete(send)) kill(conn);
-				
-				}break;
-				
-				//	RECEIVE
-				case NetworkCommand::Receive:{
-				
-					received+=packet.Num;
-				
-					//	Command is actually a ReceiveCommand
-					auto command=reinterpret_cast<ReceiveCommand *>(packet.Command);
-					
-					//	Conn is actually a Connection
-					auto conn=get(reinterpret_cast<Connection *>(packet.Conn));
-					
-					conn->Receive(packet.Num);
-					
-					if (command->Complete(packet)) {
-					
-						//	Receive success
-						
-						//	Dispatch asynchronous handler
-						enqueue([=] () mutable {
-						
-							//	Dispatch callback
-							try {
-							
-								if (recv) recv(conn,command->Buffer);
-							
-							//	Ignore exceptions -- not our problem
-							} catch (...) {	}
-							
-							//	Pump a new receive
-							if (!conn->Dispatch()) kill(conn);
-						
-						});
-					
-					} else {
-					
-						//	Receive failed
-						
-						kill(conn);
-					
-					}
-					
-					if (conn->Complete()) kill(conn);
-				
-				}break;
 			
 			}
 		
-		}
-	
-	}
-	
-	
-	void ConnectionHandler::worker_init () noexcept {
-	
-		//	Wait for all other workers to startup
-		startup.Acquire();
-		while (!proceed) startup_wait.Sleep(startup);
-		startup.Release();
-		
-		//	Proceed on success
-		if (success) try {
-		
-			worker_func();
-		
 		} catch (...) {
 		
-			do_panic(std::current_exception());
-		
+			Panic(std::current_exception());
+			
 			throw;
 		
 		}
@@ -345,52 +158,16 @@ namespace MCPP {
 	}
 	
 	
-	void ConnectionHandler::do_panic (std::exception_ptr ex) noexcept {
+	static Word num_workers_helper (Nullable<Word> num_workers) noexcept {
 	
-		if (panic) try {
+		//	If the provided nullable integer is
+		//	null, use the number of cores in
+		//	the system, otherwise use the provided
+		//	integer
+		Word retr=num_workers.IsNull() ? HardwareConcurrency() : *num_workers;
 		
-			panic(ex);
-		
-		//	We're already panicking, can't
-		//	do anything about this
-		} catch (...) {	}
-	
-	}
-	
-	
-	ConnectionHandler::~ConnectionHandler () noexcept {
-	
-		//	Order all threads to shutdown
-		for (Word i=0;i<workers.Count();++i) iocp.Dispatch(nullptr,nullptr);
-		
-		//	Wait for all threads to shutdown
-		for (auto & thread : workers) thread.Join();
-		
-		//	Wait for all asynchronous callbacks
-		//	to complete
-		lock.Acquire();
-		while (pending!=0) wait.Sleep(lock);
-		lock.Release();
-		
-		//	Kill all connections
-		connections.clear();
-		
-		//	Kill all listening sockets
-		listening.Clear();
-		
-		//	Close the I/O Completion Port
-		iocp.Destroy();
-		
-		//	Clean up winsock
-		WSACleanup();
-	
-	}
-	
-	
-	static Word num_workers_helper (const Nullable<Word> & in) noexcept {
-	
-		Word retr=in.IsNull() ? HardwareConcurrency() : *in;
-		
+		//	If the result we obtained is zero, bump
+		//	it up to one
 		if (retr==0) retr=1;
 		
 		return retr;
@@ -398,98 +175,188 @@ namespace MCPP {
 	}
 	
 	
-	static void winsock_init () {
+	ConnectionHandler::ConnectionHandler (ThreadPool & pool, Nullable<Word> num_workers, PanicType panic)
+		:	workers(num_workers_helper(num_workers)),
+			Pool(pool),
+			startup(StartupResult::None),
+			panic(std::move(panic))
+	{
 	
-		WSADATA temp;
-		int result=WSAStartup(MAKEWORD(2,2),&temp);
-		if (result!=0) throw std::system_error(
-			std::error_code(
-				result,
-				std::system_category()
-			)
-		);
+		//	Start workers
+		Word n=num_workers_helper(num_workers);
+		try {
+
+			for (Word i=0;i<n;++i) {
+			
+				//	Do this first in case it throws
+				workers.EmplaceBack();
+				
+				//	Start worker
+				workers[workers.Count()-1]=Thread([this] () mutable {	worker();	});
+			
+			}
+			
+		} catch (...) {
+		
+			//	End workers that have already
+			//	been started
+			
+			lock.Execute([&] () mutable {	startup=StartupResult::Failed;	});
+			
+			for (auto & t : workers) t.Join();
+		
+		}
+		
+		//	Initialize statistics
+		Sent=0;
+		Received=0;
+		Incoming=0;
+		Outgoing=0;
+		Accepted=0;
+		Disconnected=0;
+		
+		//	Instruct workers to begin
+		lock.Execute([&] () mutable {
+		
+			startup=StartupResult::Succeeded;
+			wait.WakeAll();
+		
+		});
 	
 	}
 	
 	
-	ConnectionHandler::ConnectionHandler (
-		const Vector<Tuple<IPAddress,UInt16>> & binds,
-		AcceptCallback accept,
-		ConnectCallback connect,
-		DisconnectCallback disconnect,
-		ReceiveCallback recv,
-		PanicCallback panic,
-		ThreadPool & pool,
-		Nullable<Word> num_workers
-	)	:	pool(pool),
-			recv(std::move(recv)),
-			disconnect(std::move(disconnect)),
-			accept(std::move(accept)),
-			connect(std::move(connect)),
-			panic(std::move(panic)),
-			pending(0),
-			listening(binds.Count()),
-			workers(num_workers_helper(num_workers)),
-			proceed(false),
-			success(true)
-	{
+	ConnectionHandler::~ConnectionHandler () noexcept {
 	
-		//	Initialize winsock
-		winsock_init();
+		//	Command all workers to
+		//	shut down
+		for (Word i=0;i<workers.Count();++i) Port.Post();
+		
+		//	Wait for all workers to shut
+		//	down
+		for (auto & t : workers) t.Join();
+		
+		//	Wait for all asynchronous callbacks
+		//	which may depend on this object or
+		//	its connections, or create/insert
+		//	new connections to finish
+		Manager.Wait();
 	
-		//	Initialize statistics
-		sent=0;
-		received=0;
-		connected=0;
-		accepted=0;
+	}
+	
+	
+	void ConnectionHandler::Connect (RemoteEndpoint ep) {
+	
+		//	IPv6 or IPv4?
+		bool is_v6=ep.IP.IsV6();
+	
+		//	Create a socket
+		auto socket=MakeSocket(is_v6);
 		
-		Word num=num_workers_helper(num_workers);
-		
-		//	Create listening sockets
-		for (const auto & ep : binds) {
-		
-			listening.EmplaceBack(
-				ep.Item<0>(),
-				ep.Item<1>(),
-				iocp
-			);
-			
-			//	Each listener gets an asynchronous
-			//	accept for each worker
-			for (Word i=0;i<num;++i) listening[listening.Count()-1].Dispatch();
-		
-		}
-		
-		//	Create workers
+		//	Until the socket is safely in
+		//	a connection object, we're responsible
+		//	for its lifetime
+		SmartPointer<Connection> conn;
 		try {
 		
-			for (Word i=0;i<num;++i) workers.EmplaceBack(
-				[this] () mutable {	worker_init();	}
+			//	Create a connection object for
+			//	this connection
+			conn=SmartPointer<Connection>::Make(
+				socket,
+				ep.IP,
+				ep.Port,
+				//	Bogus IP/port
+				IPAddress::Any(is_v6),
+				0,
+				*this,
+				std::move(ep.Receive),
+				std::move(ep.Disconnect),
+				std::move(ep.Connect)
 			);
 		
 		} catch (...) {
 		
-			//	Notify workers that startup failed,
-			//	and that they should exit at once
-			startup.Acquire();
-			success=false;
-			proceed=true;
-			startup_wait.WakeAll();
-			startup.Release();
-		
-			for (auto & t : workers) t.Join();
+			closesocket(socket);
 			
 			throw;
 		
 		}
 		
-		//	Notify workers that startup succeeded,
-		//	and that they should proceed at
-		//	once
-		startup.Acquire();
-		proceed=true;
-		startup_wait.WakeAll();
-		startup.Release();
+		//	Socket is now safe
+		
+		//	Add the connection to the handler
+		auto ptr=Add(std::move(conn));
+		
+		//	We'll need to rollback by removing
+		//	the connection if this fails
+		try {
+		
+			//	Attach to the completion port
+			ptr->Attach();
+		
+			//	Initiate asynchronous connection
+			ptr->Connect();
+		
+		} catch (...) {
+		
+			Remove(ptr);
+			
+			throw;
+		
+		}
+	
+	}
+	
+	
+	SmartPointer<ListeningSocket> ConnectionHandler::Listen (LocalEndpoint ep) {
+	
+		//	Create a handle to a new listening
+		//	socket
+		auto handle=SmartPointer<ListeningSocket>::Make(
+			std::move(ep),
+			*this
+		);
+		
+		//	Add listening socket
+		auto ptr=Add(handle);
+		
+		//	If an exception is thrown, we
+		//	must rollback
+		try {
+		
+			//	Attach to completion port
+			handle->Attach();
+		
+			//	Dispatch asynchronous accepts
+			for (Word i=0;i<workers.Count();++i) handle->Dispatch();
+		
+		} catch (...) {
+		
+			//	Shutdown
+			handle->Shutdown();
+			
+			//	Remove
+			Remove(ptr);
+			
+			throw;
+		
+		}
+		
+		return handle;
+	
+	}
+	
+	
+	ConnectionHandlerInfo ConnectionHandler::GetInfo () const noexcept {
+	
+		return ConnectionHandlerInfo{
+			Sent,
+			Received,
+			Outgoing,
+			Incoming,
+			Accepted,
+			Disconnected
+		};
 	
 	}
 
