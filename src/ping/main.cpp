@@ -67,7 +67,7 @@ class ServerListPing : public Module {
 			router(
 				request::PacketID,
 				ProtocolState::Status
-			)=[] (ReceiveEvent event) {
+			)=[] (PacketEvent event) {
 			
 				auto & server=Server::Get();
 			
@@ -161,7 +161,7 @@ class ServerListPing : public Module {
 			router(
 				ping_cs::PacketID,
 				ProtocolState::Status
-			)=[] (ReceiveEvent event) {
+			)=[] (PacketEvent event) {
 			
 				auto & packet=event.Data.Get<ping_cs>();
 				

@@ -42,7 +42,7 @@ class Handshake : public Module {
 			Server::Get().Router(
 				handshake::PacketID,
 				ProtocolState::Handshaking
-			)=[] (ReceiveEvent event) {
+			)=[] (PacketEvent event) {
 			
 				auto & packet=event.Data.Get<handshake>();
 				
