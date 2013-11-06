@@ -78,6 +78,10 @@ namespace MCPP {
 				if (result!=ERROR_IO_PENDING) Raise(result);
 			
 			}
+			
+			//	Store the listening socket for
+			//	use when the accept completes
+			this->listening=listening;
 		
 		}
 		
@@ -94,6 +98,15 @@ namespace MCPP {
 		
 		
 		AcceptData AcceptCommand::Get () {
+		
+			//	Update socket's context
+			if (setsockopt(
+				socket,
+				SOL_SOCKET,
+				SO_UPDATE_ACCEPT_CONTEXT,
+				reinterpret_cast<char *>(&listening),
+				sizeof(listening)
+			)==SOCKET_ERROR) RaiseWSA();
 		
 			//	Get the address of the
 			//	GetAcceptExSockaddrs function

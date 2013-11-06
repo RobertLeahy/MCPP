@@ -60,6 +60,8 @@ namespace MCPP {
 		
 		String GetErrorMessage (DWORD code) {
 		
+			//	Attempt to get string from
+			//	system
 			LPWSTR ptr;
 			auto num=FormatMessageW(
 				FORMAT_MESSAGE_ALLOCATE_BUFFER|FORMAT_MESSAGE_FROM_SYSTEM,
@@ -71,10 +73,29 @@ namespace MCPP {
 				nullptr
 			);
 			
+			//	If no characters were returned,
+			//	just return the empty string
 			if (num==0) return String();
 			
+			//	Get rid of trailing carriage return
+			//	line feed, if present
+			for (
+				;
+				(num!=0) &&
+				(
+					(ptr[num-1]=='\r') ||
+					(ptr[num-1]=='\n')
+				);
+				--num
+			);
+			
+			//	Return empty string if there
+			//	are no characters left after
+			//	eliminating trailing carriage
+			//	returns and line feeds, otherwise
+			//	decode
 			String retr;
-			try {
+			if (num!=0) try {
 			
 				retr=UTF16(false).Decode(
 					reinterpret_cast<Byte *>(ptr),

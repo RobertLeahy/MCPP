@@ -382,6 +382,9 @@ namespace MCPP {
 				//	Implementation artifact -- this is
 				//	ignored
 				DWORD num;
+				//	Listening socket -- preserved for updating
+				//	accepting socket's context
+				SOCKET listening;
 				
 				
 				void cleanup () noexcept;
