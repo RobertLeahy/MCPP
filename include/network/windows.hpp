@@ -780,6 +780,80 @@ namespace MCPP {
 			 *		monitored.
 			 */
 			SmartPointer<SendHandle> Send (Vector<Byte> buffer);
+			
+			
+			/**
+			 *	Retrieves the remote IP associated with
+			 *	this connection.
+			 *
+			 *	\return
+			 *		The remote IP associated with this
+			 *		connection.
+			 */
+			IPAddress IP () const noexcept;
+			/** 
+			 *	Retrieves the remote port associated with
+			 *	this connection.
+			 *
+			 *	\return
+			 *		The remote port associated with this
+			 *		connection.
+			 */
+			UInt16 Port () const noexcept;
+			/**
+			 *	Retrieves the number of bytes sent over
+			 *	this connection.
+			 *
+			 *	\return
+			 *		The number of bytes sent over this
+			 *		connection.
+			 */
+			Word Sent () const noexcept;
+			/**
+			 *	Retrieves the number of bytes received on
+			 *	this connection.
+			 *
+			 *	\return
+			 *		The number of bytes received on this
+			 *		connection.
+			 */
+			Word Received () const noexcept;
+			/**
+			 *	Retrieves the number of sends pending on
+			 *	this connection.
+			 *
+			 *	\return
+			 *		The number of send operations pending on
+			 *		this connection.
+			 */
+			Word Pending () const noexcept;
+			/**
+			 *	Disconnects this connection for no reason.
+			 *
+			 *	This function completing is not a guarantee
+			 *	that callbacks related to this connection will
+			 *	no longer be fired, but rather indicates that
+			 *	the socket has been shutdown.
+			 */
+			void Disconnect () noexcept;
+			/**
+			 *	Disconnects this connection for some reason.
+			 *
+			 *	This function completing is not a guarantee
+			 *	that callbacks related to this connection will
+			 *	no longer be fired, but rather indicates that
+			 *	the socket has been shutdown.
+			 *
+			 *	\param [in] reason
+			 *		The reason for which the connection has
+			 *		been terminated.  If the internal reason
+			 *		for this socket being disconnected has
+			 *		already been set either by another call
+			 *		to Disconnect, or by an error internal to
+			 *		the connection handler, this parameter is
+			 *		silently ignored.
+			 */
+			void Disconnect (String reason) noexcept;
 	
 	
 	};
