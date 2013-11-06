@@ -19,7 +19,7 @@ namespace MCPP {
 	 *	Encapsulates information about a packet
 	 *	being received from a client.
 	 */
-	class ReceiveEvent {
+	class PacketEvent {
 	
 	
 		public:
@@ -53,7 +53,7 @@ namespace MCPP {
 			 *	The type of callback which may subscribe
 			 *	to receive events.
 			 */
-			typedef std::function<void (ReceiveEvent)> Type;
+			typedef std::function<void (PacketEvent)> Type;
 	
 	
 		private:
@@ -126,7 +126,7 @@ namespace MCPP {
 			 *	\param [in] state
 			 *		The state the protocol is in.
 			 */
-			void operator () (ReceiveEvent event, ProtocolState state) const;
+			void operator () (PacketEvent event, ProtocolState state) const;
 			
 			
 			/**

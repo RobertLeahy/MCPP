@@ -155,7 +155,12 @@ namespace MCPP {
 			//	PRIVATE METHODS	//
 			//					//
 			inline void server_startup();
-			inline void load_mods();
+			void bind_to (IPAddress, UInt16);
+			void get_default_binds ();
+			LocalEndpoint get_endpoint (IPAddress, UInt16);
+			void get_bind (const String &);
+			void get_binds ();
+			inline void load_mods ();
 			inline void cleanup_events () noexcept;
 			inline void stop_impl ();
 			inline void panic_impl (std::exception_ptr except=std::exception_ptr()) noexcept;
@@ -684,7 +689,7 @@ namespace MCPP {
 			 *	all data currently in that connection's
 			 *	buffer.
 			 */
-			ReceiveCallback OnReceive;
+			ReceiveType OnReceive;
 			/**
 			 *	Invoked when the server panics.
 			 */

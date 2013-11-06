@@ -17,7 +17,7 @@ namespace MCPP {
 	static const String exception_what="{0}: {1}";
 	static const String endpoint_template="{0}:{1}";
 	static const String list_separator=", ";
-	static const String binding_to="Startup: Attempting to bind to {0}";
+	static const String binding_to="Startup: Attempting to bind to {0}:{1}";
 	static const String couldnt_parse_bind="Startup: Could not parse bind \"{0}\"";
 	static const String connected="{0}:{1} connected, there {3} now {2} client{4} connected";
 	static const String disconnected="{0}:{1} disconnected, there {3} now {2} client{4} connected";
@@ -72,15 +72,15 @@ namespace MCPP {
 		verbose_all=false;
 		num_shutdowns=0;
 		
-		OnReceive=[=] (SmartPointer<Connection> conn, Vector<Byte> & buffer) {
+		OnReceive=[=] (ReceiveEvent event) {
 		
 			try {
 			
-				auto client=Clients[*conn];
+				auto client=Clients[*event.Conn];
 				
 				//	Loop while a packet can be
 				//	parsed
-				while (client->Receive(buffer)) Router(
+				while (client->Receive(event.Buffer)) Router(
 					{
 						client,
 						client->GetPacket()
@@ -96,14 +96,14 @@ namespace MCPP {
 					(MaximumBytes!=0) &&
 					(
 						//	Check both buffers
-						(buffer.Count()>MaximumBytes) ||
+						(event.Buffer.Count()>MaximumBytes) ||
 						(client->Count()>MaximumBytes)
 					)
 				) client->Disconnect(buffer_too_long);
 			
 			} catch (...) {
 			
-				conn->Disconnect(error_processing_recv);
+				event.Conn->Disconnect(error_processing_recv);
 				
 				throw;
 			
@@ -138,7 +138,7 @@ namespace MCPP {
 		OnLogin.Clear();
 		OnInstall.Clear();
 		OnShutdown.Clear();
-		OnReceive=ReceiveCallback();
+		OnReceive=ReceiveType();
 	
 	}
 	
@@ -658,6 +658,236 @@ namespace MCPP {
 	}
 	
 	
+	void Server::bind_to (IPAddress ip, UInt16 port) {
+		
+		WriteLog(
+			String::Format(
+				binding_to,
+				ip,
+				port
+			),
+			Service::LogType::Information
+		);
+		
+		connections->Listen(
+			get_endpoint(
+				ip,
+				port
+			)
+		);	
+	
+	}
+	
+	
+	LocalEndpoint Server::get_endpoint (IPAddress ip, UInt16 port) {
+	
+		LocalEndpoint ep;
+		ep.IP=ip;
+		ep.Port=port;
+		ep.Connect=[this] (ConnectEvent event) mutable {
+		
+			//	Save IP and port number
+			IPAddress ip=event.Conn->IP();
+			UInt16 port=event.Conn->Port();
+			
+			try {
+			
+				//	Create client object
+				auto client=SmartPointer<Client>::Make(std::move(event.Conn));
+				
+				//	Add to list of connected clients
+				Clients.Add(client);
+				
+				//	Fire event handler
+				OnConnect(std::move(client));
+			
+			} catch (...) {
+			
+				Panic(std::current_exception());
+				
+				throw;
+			
+			}
+			
+			try {
+			
+				//	Log
+				auto clients=Clients.Count();
+				WriteLog(
+					String::Format(
+						connected,
+						ip,
+						port,
+						clients,
+						(clients==1) ? "is" : "are",
+						(clients==1) ? "" : "s"
+					),
+					Service::LogType::Information
+				);
+			
+			} catch (...) {	}
+		
+		};
+		ep.Disconnect=[this] (DisconnectEvent event) mutable {
+		
+			try {
+			
+				//	Look up the client
+				auto client=Clients[*event.Conn];
+				
+				//	Remove the client from the
+				//	list
+				Clients.Remove(*event.Conn);
+				
+				//	Fire event handler
+				OnDisconnect(client,event.Reason.IsNull() ? String() : *event.Reason);
+			
+			} catch (...) {
+			
+				Panic(std::current_exception());
+				
+				throw;
+			
+			}
+			
+			try {
+				
+				//	Log
+				String disconnect_template;
+				
+				//	If there's no reason, choose
+				//	the template with no reason
+				if (
+					event.Reason.IsNull() ||
+					(event.Reason->Size()==0)
+				) {
+				
+					disconnect_template=disconnected;
+				
+				} else {
+				
+					//	Fill the reason into the template
+					disconnect_template=String::Format(
+						disconnected_with_reason,
+						*event.Reason
+					);
+				
+				}
+				
+				auto clients=Clients.Count();
+				WriteLog(
+					String::Format(
+						disconnect_template,
+						event.Conn->IP(),
+						event.Conn->Port(),
+						clients,
+						(clients==1) ? "is" : "are",
+						(clients==1) ? "" : "s"
+					),
+					Service::LogType::Information
+				);
+				
+			} catch (...) {	}
+		
+		};
+		ep.Receive=[this] (ReceiveEvent event) mutable {	OnReceive(std::move(event));	};
+		
+		return ep;
+	
+	}
+	
+	
+	void Server::get_default_binds () {
+	
+		bind_to(IPAddress::Any(false),default_port);
+		bind_to(IPAddress::Any(true),default_port);
+	
+	}
+	
+	
+	static Nullable<IPAddress> get_ip (String & str) {
+	
+		str.Trim();
+	
+		Nullable<IPAddress> retr;
+	
+		try {
+		
+			retr.Construct(str);
+		
+		} catch (...) {	}
+		
+		return retr;
+	
+	}
+	
+	
+	static const Regex endpoint_split("(?<!\\:)\\:(?!\\:)");
+	
+	
+	void Server::get_bind (const String & str) {
+	
+		//	Split on colon to separate IP
+		//	address from port
+		auto split=endpoint_split.Split(str);
+		
+		//	Filter out garbage
+		if (
+			(split.Count()==0) ||
+			(split.Count()>2)
+		) return;
+		
+		//	IPs that we'll bind to
+		Vector<IPAddress> ips;
+		//	Port that we'll bind to
+		UInt16 port=default_port;
+		
+		//	Get the IP
+		auto ip=get_ip(split[0]);
+		
+		//	If it's null we add both
+		//	IPv6 and IPv4 addresses
+		if (ip.IsNull()) {
+		
+			ips.Add(IPAddress::Any(true));
+			ips.Add(IPAddress::Any(true));
+		
+		//	Otherwise add the specified
+		//	IP
+		} else {
+		
+			ips.Add(*ip);
+		
+		}
+		
+		//	If there was a second element in
+		//	the split, it's the port, attempt
+		//	to get it
+		if (split.Count()==2) split[1].ToInteger(&port);
+		
+		//	BIND
+		for (auto & ip : ips) bind_to(ip,port);
+	
+	}
+	
+	
+	static const Regex bind_split(";");
+
+	
+	void Server::get_binds () {
+	
+		//	Get binds
+		auto binds_str=data->GetSetting(binds_setting);
+		
+		//	If there are no binds,
+		//	go with the defaults
+		if (binds_str.IsNull()) get_default_binds();
+		//	Parse and add binds
+		else for (auto & str : bind_split.Split(*binds_str)) get_bind(str);
+	
+	}
+	
+	
 	static const String mods_dir("mods");
 	static const String startup_prepend("Startup: ");
 
@@ -700,271 +930,37 @@ namespace MCPP {
 		//	Grab settings
 		
 		//	Maximum number of bytes to buffer
-		Nullable<String> max_bytes_str(data->GetSetting(max_bytes_setting));
-		if (
-			max_bytes_str.IsNull() ||
-			!max_bytes_str->ToInteger(&MaximumBytes)
-		) MaximumBytes=default_max_bytes;
+		MaximumBytes=data->GetSetting(max_bytes_setting,default_max_bytes);
 		
 		//	Maximum number of players
-		Nullable<String> max_players_str(data->GetSetting(max_players_setting));
-		if (
-			max_players_str.IsNull() ||
-			!max_players_str->ToInteger(&MaximumPlayers)
-		) MaximumPlayers=default_max_players;
+		MaximumPlayers=data->GetSetting(max_players_setting,default_max_players);
 
 		//	Initialize a thread pool
 		
 		//	Attempt to grab number of threads
 		//	from the data source
-		Nullable<String> num_threads_str(data->GetSetting(num_threads_setting));
-		
-		Word num_threads;
-		if (
-			num_threads_str.IsNull() ||
-			!num_threads_str->ToInteger(&num_threads) ||
-			(num_threads==0)
-		) num_threads=default_num_threads;
-		
-		//	Panic callback
-		PanicType panic([=] () -> void {	Panic();	});
+		auto num_threads=data->GetSetting(num_threads_setting,default_num_threads);
 		
 		//	Fire up the thread pool
-		pool.Construct(num_threads,panic);
+		pool.Construct(
+			num_threads,
+			[this] () mutable {	Panic();	}
+		);
+		
+		//	Fire up connection handler
+		connections.Construct(
+			*pool,
+			Nullable<Word>(),
+			[this] (std::exception_ptr ex) mutable {	Panic(std::move(ex));	}
+		);
 		
 		//	Install mods
 		OnInstall(true);
 		mods->Install();
 		OnInstall(false);
 		
-		//	Get binds
-		Nullable<String> binds_str(data->GetSetting(binds_setting));
-		
-		Vector<Tuple<IPAddress,UInt16>> binds;
-		
-		//	Parse binds
-		if (!binds_str.IsNull()) {
-		
-			//	Binds are separated by a semi-colon
-			Vector<String> split(Regex(";").Split(*binds_str));
-			
-			for (String & str : split) {
-			
-				bool set_port=false;
-				bool set_ip=false;
-			
-				//	Attempt to extract port number
-				RegexMatch port_match=Regex(
-					"(?<!\\:)\\:\\s*(\\d+)\\s*$",
-					RegexOptions().SetRightToLeft()
-				).Match(str);
-				
-				UInt16 port_no;
-				
-				if (
-					port_match.Success() &&
-					port_match[1].Value().ToInteger(&port_no)
-				) set_port=true;
-				else port_no=default_port;
-				
-				IPAddress ip(IPAddress::Any());
-				
-				//	Attempt to extract IP address
-				RegexMatch ip_match=Regex(
-					"^(?:[^\\:]|\\:(?=\\:))+"
-				).Match(str);
-				
-				if (ip_match.Success()) {
-				
-					try {
-					
-						IPAddress extracted_ip(ip_match.Value().Trim());
-						
-						ip=extracted_ip;
-						
-						set_ip=true;
-					
-					} catch (...) {	}
-				
-				}
-				
-				//	Did we actually set either of
-				//	the values?
-				if (set_port || set_ip) {
-				
-					//	Add bind
-					binds.EmplaceBack(ip,port_no);
-				
-				} else {
-				
-					//	Log that we couldn't parse this bind
-					WriteLog(
-						String::Format(
-							couldnt_parse_bind,
-							str
-						),
-						Service::LogType::Warning
-					);
-					
-				}
-			
-			}
-		
-		//	No binds
-		} else {
-		
-			no_binds:
-			
-			//	IPv4 all, default port
-			binds.EmplaceBack(IPAddress::Any(),default_port);
-			//	IPv6 all, default port
-			binds.EmplaceBack(IPAddress::Any(true),default_port);
-		
-		}
-		
-		//	If no binds
-		if (binds.Count()==0) goto no_binds;
-		
-		//	Log binds
-		String binds_desc;
-		for (Word i=0;i<binds.Count();++i) {
-		
-			if (i!=0) binds_desc << list_separator;
-			
-			binds_desc << String::Format(
-				endpoint_template,
-				binds[i].Item<0>(),
-				binds[i].Item<1>()
-			);
-		
-		}
-		
-		WriteLog(
-			String::Format(
-				binding_to,
-				binds_desc
-			),
-			Service::LogType::Information
-		);
-		
-		//	Try and fire up the connection
-		//	manager
-		connections.Construct(
-			binds,
-			OnAccept,
-			[=] (SmartPointer<Connection> conn) {
-			
-				//	Save IP and port number
-				IPAddress ip=conn->IP();
-				UInt16 port=conn->Port();
-			
-				try {
-					
-					//	Create client object
-					auto client=SmartPointer<Client>::Make(
-						std::move(
-							conn
-						)
-					);
-					
-					//	Add to the client list
-					Clients.Add(client);
-					
-					//	Fire event handler
-					OnConnect(std::move(client));
-					
-				} catch (...) {
-				
-					//	Panic on error
-					Panic();
-					
-					throw;
-				
-				}
-				
-				try {
-					
-					//	Log
-					auto clients=Clients.Count();
-					WriteLog(
-						String::Format(
-							connected,
-							ip,
-							port,
-							clients,
-							(clients==1) ? "is" : "are",
-							(clients==1) ? "" : "s"
-						),
-						Service::LogType::Information
-					);
-					
-				} catch (...) {	}
-			
-			},
-			[=] (SmartPointer<Connection> conn, String reason) {
-			
-				try {
-				
-					//	Look up the client
-					auto client=Clients[*conn];
-					
-					//	Remove the client from the
-					//	list
-					Clients.Remove(*conn);
-					
-					//	Fire event handler
-					OnDisconnect(client,reason);
-					
-				} catch (...) {
-				
-					//	Panic on error
-					Panic();
-					
-					throw;
-				
-				}
-				
-				try {
-					
-					//	Log
-					String disconnect_template;
-					
-					//	If there's no reason, choose
-					//	the template with no reason
-					if (reason.Size()==0) {
-					
-						disconnect_template=disconnected;
-					
-					} else {
-					
-						//	Fill the reason into the template
-						disconnect_template=String::Format(
-							disconnected_with_reason,
-							reason
-						);
-					
-					}
-					
-					auto clients=Clients.Count();
-					WriteLog(
-						String::Format(
-							disconnect_template,
-							conn->IP(),
-							conn->Port(),
-							clients,
-							(clients==1) ? "is" : "are",
-							(clients==1) ? "" : "s"
-						),
-						Service::LogType::Information
-					);
-					
-				} catch (...) {	}
-			
-			},
-			OnReceive,
-			[this] (std::exception_ptr ex) mutable {	Panic(ex);	},
-			*pool
-		);
+		//	Bind
+		get_binds();
 	
 	}
 	

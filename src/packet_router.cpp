@@ -90,7 +90,7 @@ namespace MCPP {
 	}
 	
 	
-	void PacketRouter::operator () (ReceiveEvent event, ProtocolState state) const {
+	void PacketRouter::operator () (PacketEvent event, ProtocolState state) const {
 	
 		auto & callback=(*this)(event.Data.ID,state);
 		
