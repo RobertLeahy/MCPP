@@ -7,6 +7,9 @@
 
 
 #include <rleahylib/rleahylib.hpp>
+#include <cstdlib>
+#include <type_traits>
+#include <utility>
 
 
 namespace MCPP {
@@ -207,6 +210,23 @@ namespace MCPP {
 			 */
 			virtual Nullable<String> GetSetting (const String & setting) = 0;
 			/**
+			 *	Retrieves the value of a setting converted
+			 *	to an arbitrary type.
+			 *
+			 *	\tparam T
+			 *		The type as which to retrieve the setting.
+			 *
+			 *	\param [in] setting
+			 *		The name of the setting to retrieve.
+			 *
+			 *	\return
+			 *		The value of \em setting, or \em default_value
+			 *		if the value of \em setting does not exist, or
+			 *		could not be converted to a \em T.
+			 */
+			template <typename T>
+			T GetSetting (const String & setting, T default_value);
+			/**
 			 *	When overriden in a derived class, sets the
 			 *	value of a setting.
 			 *
@@ -279,6 +299,149 @@ namespace MCPP {
 	
 	
 	};
+	 
+	 
+	template <typename T, typename=void>
+	class SettingConverter {
+	
+	
+		public:
+		
+		
+			static T Get (DataProvider & dp, const String & setting, T default_value) {
+			
+				return default_value;
+			
+			}
+	
+	
+	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	 
+	 
+	template <>
+	class SettingConverter<String,void> {
+	
+	
+		public:
+		
+		
+			static String Get (DataProvider & dp, const String & setting, String default_value) {
+			
+				auto val=dp.GetSetting(setting);
+				
+				return val.IsNull() ? default_value : std::move(*val);
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	class SettingConverter<T,typename std::enable_if<std::is_integral<T>::value && !std::is_same<T,bool>::value>::type> {
+	
+	
+		public:
+		
+		
+			static T Get (DataProvider & dp, const String & setting, T default_value) {
+			
+				auto val=dp.GetSetting(setting);
+				
+				if (val.IsNull()) return default_value;
+				
+				T retr;
+				if (val->ToInteger(&retr)) return retr;
+				
+				return default_value;
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	class SettingConverter<T,typename std::enable_if<std::is_floating_point<T>::value>::type> {
+	
+	
+		public:
+		
+		
+			static T Get (DataProvider & dp, const String & setting, T default_value) {
+			
+				auto val=dp.GetSetting(setting);
+				
+				if (val.IsNull()) return default_value;
+				
+				auto c_str=val->ToCString();
+				auto end_ptr=c_str.begin();
+				T retr;
+				if (std::is_same<T,Single>::value) retr=static_cast<T>(strtof(end_ptr,&end_ptr));
+				else if (std::is_same<T,Double>::value) retr=static_cast<T>(strtod(end_ptr,&end_ptr));
+				else retr=static_cast<T>(strtold(end_ptr,&end_ptr));
+				
+				if (end_ptr==c_str.begin()) return default_value;
+				
+				return retr;
+			
+			}
+	
+	
+	};
+	
+	
+	template <>
+	class SettingConverter<bool,void> {
+	
+	
+		public:
+		
+		
+			static bool Get (DataProvider & dp, const String & setting, bool default_value) {
+			
+				auto val=dp.GetSetting(setting);
+				
+				if (val.IsNull()) return default_value;
+				
+				if (Regex(
+					"^\\s*(?:t(?:rue)?|y(?:es)?)\\s*$",
+					RegexOptions().SetIgnoreCase()
+				).IsMatch(*val)) return true;
+				
+				if (Regex(
+					"^\\s*(?:no?|f(?:alse)?)\\s*$",
+					RegexOptions().SetIgnoreCase()
+				).IsMatch(*val)) return false;
+				
+				return default_value;
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	T DataProvider::GetSetting (const String & setting, T default_value) {
+	
+		return SettingConverter<typename std::decay<T>::type>::Get(
+			*this,
+			setting,
+			std::forward<T>(default_value)
+		);
+	
+	}
+	
+	
+	/**
+	 *	\endcond
+	 */
 
 
 }
