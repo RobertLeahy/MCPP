@@ -32,7 +32,7 @@ bin/mods/mcpp_plugin_message.dll \
 bin/mods/mcpp_time.dll
 
 
-#	MINECRAFT.NET AUTHENTICATION
+#	AUTHENTICATION
 
 
 bin/mods/mcpp_auth.dll: \
@@ -40,6 +40,17 @@ $(MOD_OBJ) \
 obj/auth/main.o | \
 $(MOD_LIB)
 	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+	
+	
+#	VANILLA AUTHENTICATION
+
+
+bin/mods/mcpp_auth_vanilla.dll: \
+$(MOD_OBJ) \
+obj/auth/vanilla.o | \
+$(MOD_LIB) \
+bin/mods/mcpp_auth.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_auth.dll
 	
 	
 #	BANS
