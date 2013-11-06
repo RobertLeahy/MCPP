@@ -328,6 +328,19 @@ namespace MCPP {
 	
 	
 	};
+	
+	
+	/**
+	 *	The different states through which
+	 *	a send transitions.
+	 */
+	enum class SendState {
+	
+		Sending,	/**<	The send is either waiting or currently being sent.	*/
+		Sent,		/**<	The send completed successfully.	*/
+		Failed		/**<	The send failed.	*/
+	
+	};
 
 
 }
