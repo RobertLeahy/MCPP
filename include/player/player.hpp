@@ -239,7 +239,7 @@ namespace MCPP {
 			void on_connect (SmartPointer<Client>);
 			void on_disconnect (SmartPointer<Client>, const String &);
 			void on_login (SmartPointer<Client>);
-			void position_handler (ReceiveEvent);
+			void position_handler (PacketEvent);
 			void set_spawn (std::function<void ()>);
 			void set_spawn (Int32, Int32, Int32, bool);
 			void get_spawn (std::function<void ()> then=std::function<void ()>());

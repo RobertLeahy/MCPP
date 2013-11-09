@@ -112,7 +112,7 @@ namespace MCPP {
 	static const String protocol_error("Protocol error");
 	
 	
-	void Players::position_handler (ReceiveEvent event) {
+	void Players::position_handler (PacketEvent event) {
 	
 		auto player=get(event.From);
 		

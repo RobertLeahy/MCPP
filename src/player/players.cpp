@@ -134,7 +134,7 @@ namespace MCPP {
 		
 		server.OnLogin.Add([this] (SmartPointer<Client> client) {	on_login(std::move(client));	});
 		
-		auto handler=[this] (ReceiveEvent event) {	position_handler(std::move(event));	};
+		auto handler=[this] (PacketEvent event) {	position_handler(std::move(event));	};
 		
 		//	Handle incoming player-related
 		//	packets
