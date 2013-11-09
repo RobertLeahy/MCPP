@@ -61,7 +61,7 @@ namespace MCPP {
 			auto * ptr=reinterpret_cast<const unsigned char *>(pub_key.begin());
 		
 			//	Attempt to decode
-			if (d2i_RSAPublicKey(
+			if (d2i_RSA_PUBKEY(
 				reinterpret_cast<RSA **>(&key),
 				&ptr,
 				static_cast<int>(SafeWord(pub_key.Count()))
@@ -209,7 +209,7 @@ namespace MCPP {
 	
 		//	Get the length of buffer that we
 		//	need
-		int len=i2d_RSAPublicKey(
+		int len=i2d_RSA_PUBKEY(
 			reinterpret_cast<RSA *>(
 				const_cast<void *>(
 					key
@@ -230,7 +230,7 @@ namespace MCPP {
 		
 		//	Encode
 		auto * ptr=reinterpret_cast<unsigned char *>(retr.begin());
-		if (i2d_RSAPublicKey(
+		if (i2d_RSA_PUBKEY(
 			reinterpret_cast<RSA *>(
 				const_cast<void *>(
 					key
