@@ -136,7 +136,7 @@ class VanillaAuth : public Module {
 		}
 		
 		
-		Status login_start (ReceiveEvent & event) {
+		Status login_start (PacketEvent & event) {
 		
 			auto data=get(event.From);
 			
@@ -226,7 +226,7 @@ class VanillaAuth : public Module {
 		}
 		
 		
-		Status encryption_request (ReceiveEvent & event) {
+		Status encryption_request (PacketEvent & event) {
 		
 			auto data=get(event.From);
 			
@@ -345,12 +345,12 @@ class VanillaAuth : public Module {
 			server.Router(
 				start::PacketID,
 				ProtocolState::Login
-			)=[this] (ReceiveEvent event) mutable {	handle(login_start(event),event.From);	};
+			)=[this] (PacketEvent event) mutable {	handle(login_start(event),event.From);	};
 			
 			server.Router(
 				key_response::PacketID,
 				ProtocolState::Login
-			)=[this] (ReceiveEvent event) mutable {	handle(encryption_request(event),event.From);	};
+			)=[this] (PacketEvent event) mutable {	handle(encryption_request(event),event.From);	};
 		
 		}
 
