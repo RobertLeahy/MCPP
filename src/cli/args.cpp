@@ -3,82 +3,55 @@
 
 
 namespace MCPP {
+	
+	
+	static const Regex regex("^\\s*(?:\\-|\\/)(.*)$");
 
 
-	InvalidArg::InvalidArg (Word which) noexcept : which(which) {	}
-
-
-	Word InvalidArg::Which () const noexcept {
-
-		return which;
-
+	static Nullable<CommandLineArgument> get (const String * & begin, const String * end) {
+	
+		Nullable<CommandLineArgument> retr;
+		
+		//	If there's nothing left to parse,
+		//	return nothing
+		if (begin==end) return retr;
+		
+		retr.Construct();
+		
+		//	Record raw flag
+		retr->RawFlag=*begin;
+		
+		//	Try and parse flag
+		auto match=regex.Match(*begin);
+		++begin;
+		if (!match.Success()) return retr;
+		
+		//	Store parsed flag
+		retr->Flag.Construct(match[1].Value());
+		
+		//	Get all arguments which follow
+		for (
+			;
+			(begin!=end) &&
+			!regex.IsMatch(*begin);
+			++begin
+		) retr->Arguments.Add(*begin);
+		
+		return retr;
+	
 	}
 
 
-	Args::Args (std::unordered_map<String,Vector<String>> args) noexcept : args(std::move(args)) {	}
-
-
-	bool Args::IsSet (const String & arg) const {
-
-		return args.count(arg)!=0;
-
-	}
-
-
-	const Vector<String> * Args::Get (const String & arg) const {
-
-		auto iter=args.find(arg);
+	void ParseCommandLineArguments (const Vector<const String> & args, std::function<void (CommandLineArgument)> callback) {
+	
+		//	If there are no arguments to
+		//	parse, just return
+		if (args.Count()<=1) return;
 		
-		if (iter==args.end()) return nullptr;
-		
-		return &(iter->second);
-
-	}
-
-
-	static const Regex arg_regex("^(?:\\-|\\/)(.+)$");
-
-
-	Args Args::Parse (const Vector<const String> & args) {
-
-		std::unordered_map<
-			String,
-			Vector<String>
-		> retr;
-		
-		for (Word i=1;i<args.Count();++i) {
-		
-			auto match=arg_regex.Match(args[i]);
-			
-			//	If this isn't a properly-formatted
-			//	argument, throw
-			if (!match.Success()) throw InvalidArg(i);
-			
-			//	Extract all arguments attached to
-			//	this argument
-			Vector<String> assoc;
-			while (
-				((i+1)<args.Count()) &&
-				!arg_regex.IsMatch(args[i+1])
-			) assoc.Add(args[++i]);
-			
-			String arg(match[1].Value().ToLower());
-			
-			//	If this argument is already present,
-			//	merge the attached arguments, otherwise
-			//	insert
-			auto iter=retr.find(arg);
-			
-			if (iter==retr.end()) retr.emplace(
-				std::move(arg),
-				std::move(assoc)
-			);
-			else for (auto & a : assoc) iter->second.Add(std::move(a));
-		
-		}
-		
-		return Args(std::move(retr));
-
+		Nullable<CommandLineArgument> arg;
+		auto begin=args.begin()+1;
+		while (!(arg=get(begin,args.end())).IsNull()) callback(std::move(*arg));
+	
 	}
 	
 	

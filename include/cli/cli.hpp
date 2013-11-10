@@ -454,57 +454,44 @@ namespace MCPP {
 	};
 	
 	
-	class InvalidArg : public std::exception {
-
-
-		private:
-		
-		
-			Word which;
-			
-			
+	/**
+	 *	A parsed command line argument.
+	 */
+	class CommandLineArgument {
+	
+	
 		public:
 		
 		
-			InvalidArg () = delete;
-			InvalidArg (Word which) noexcept;
-			
-			
-			Word Which () const noexcept;
-
-
+			/**
+			 *	The raw flag as it was entered on
+			 *	the command line.
+			 */
+			String RawFlag;
+			/**
+			 *	The flag as parsed.
+			 */
+			Nullable<String> Flag;
+			/**
+			 *	The arguments attached to the flag.
+			 */
+			Vector<String> Arguments;
+	
+	
 	};
-
-
-	class Args {
-
-
-		private:
-		
-		
-			std::unordered_map<
-				String,
-				Vector<String>
-			> args;
-			
-			
-			Args (std::unordered_map<String,Vector<String>> args) noexcept;
-			
-			
-		public:
-		
-		
-			static Args Parse (const Vector<const String> & args);
-		
-		
-			Args () = delete;
-			
-			
-			bool IsSet (const String & arg) const;
-			const Vector<String> * Get (const String & arg) const;
-
-
-	};
+	
+	
+	/**
+	 *	Parses command line arguments.
+	 *
+	 *	\param [in] args
+	 *		The command line arguments.
+	 *	\param [in] callback
+	 *		A callback which shall be invoked
+	 *		each time command line arguments
+	 *		are parsed.
+	 */
+	void ParseCommandLineArguments (const Vector<const String> & args, std::function<void (CommandLineArgument)> callback);
 
 
 }
