@@ -53,7 +53,7 @@ namespace MCPP {
 		server.Router(
 			type::PacketID,
 			ProtocolState::Play
-		)=[this] (ReceiveEvent event) mutable {
+		)=[this] (PacketEvent event) mutable {
 
 			//	If there's no installed handler,
 			//	abort at once
