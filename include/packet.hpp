@@ -2371,6 +2371,18 @@ namespace MCPP {
 				
 				
 				};
+				
+				
+				class TabComplete : public Base, public IDPacket<0x3A> {
+				
+				
+					public:
+					
+					
+						Vector<String> Match;
+				
+				
+				};
 			
 			
 			}
@@ -2484,6 +2496,18 @@ namespace MCPP {
 						Single Yaw;
 						Single Pitch;
 						bool OnGround;
+				
+				
+				};
+				
+				
+				class TabComplete : public Base, public IDPacket<0x14> {
+				
+				
+					public:
+					
+					
+						String Text;
 				
 				
 				};
