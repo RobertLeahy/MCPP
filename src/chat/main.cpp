@@ -77,14 +77,177 @@ namespace MCPP {
 	}
 	
 	
+	typedef Packets::Play::Clientbound::ChatMessage packet_type;
+	
+	
+	static ChatMessage copy (const ChatMessage & message, const Vector<ChatStyle> & stack) {
+	
+		//	Copy everything except the actual
+		//	body of the message
+		ChatMessage retr;
+		retr.From=message.From;
+		retr.To=message.To;
+		retr.Recipients=message.Recipients;
+		retr.Echo=message.Echo;
+		
+		for (auto s : stack) retr << s;
+		
+		return retr;
+	
+	}
+	
+	
+	static Vector<String> get_lines (const String & str) {
+	
+		Vector<String> retr;
+	
+		Vector<CodePoint> curr;
+		bool trailing=false;
+		for (auto cp : str.CodePoints()) {
+		
+			//	The "trailing" variable monitors
+			//	for a trailing newline, which requires
+			//	the insertion of an empty string at
+			//	the end
+			//
+			//	Since another iteration of the loop implies
+			//	that there's a character after the newline,
+			//	we reset the variable to false on each
+			//	iteration
+			trailing=false;
+		
+			//	Skip carriage returns
+			if (cp=='\r') continue;
+			
+			//	Append on newline
+			if (cp=='\n') {
+			
+				retr.EmplaceBack(std::move(curr));
+				
+				trailing=true;
+				
+				continue;
+			
+			}
+			
+			//	Otherwise just add code point
+			//	and move on
+			curr.Add(cp);
+		
+		}
+		
+		//	Append last if necessary
+		if (
+			(curr.Count()!=0) ||
+			trailing
+		) retr.EmplaceBack(std::move(curr));
+		
+		return retr;
+	
+	}
+	
+	
+	static Vector<packet_type> preprocess (const ChatMessage & message) {
+	
+		//	Maintain our own stack
+		Vector<ChatStyle> stack;
+		
+		//	Chat messages we've split this chat
+		//	message into
+		Vector<ChatMessage> messages;
+		//	Start with one message
+		messages.Add(copy(message,stack));
+		
+		//	Loop over each element in the
+		//	message we were passed in
+		for (auto & token : message.Message) {
+			
+			switch (token.Type) {
+			
+				//	Maintain our own stack by intercepting
+				//	push and pop commands
+				case ChatFormat::Push:
+					stack.Add(token.Style);
+					break;
+				case ChatFormat::Pop:
+					if (stack.Count()!=0) stack.Delete(stack.Count()-1);
+					break;
+				//	Check segments for new lines, and create
+				//	new messages for each newline
+				case ChatFormat::Segment:{
+				
+					auto lines=get_lines(token.Segment);
+					
+					for (Word i=0;i<lines.Count();++i) {
+					
+						//	If this isn't the first line, create a
+						//	new message
+						if (i!=0) messages.Add(copy(message,stack));
+						
+						//	Skip empty strings
+						if (lines[i].Size()==0) continue;
+						
+						messages[messages.Count()-1] << lines[i];
+					
+					}
+				
+				}continue;
+				default:break;
+			
+			}
+			
+			messages[messages.Count()-1] << token;
+		
+		}
+		
+		//	Parse messages into packets
+		Vector<packet_type> retr;
+		for (auto & m : messages) {
+		
+			packet_type packet;
+			packet.Value=Chat::Format(m);
+			
+			retr.Add(std::move(packet));
+			
+		}
+		
+		return retr;
+	
+	}
+	
+	
+	static void send (SmartPointer<Client> client, const Vector<packet_type> & packets) {
+	
+		client->Atomic([&] () mutable {	for (auto & packet : packets) client->Send(packet);	});
+	
+	}
+	
+	
 	static const String server_username("SERVER");
 	
 	
 	Vector<String> Chat::Send (const ChatMessage & message) {
 	
-		//	Create the packet
-		Packets::Play::Clientbound::ChatMessage packet;
-		packet.Value=Format(message);
+		//	As of 1.7.2 Mojang has broken the client's
+		//	rendering of newline characters.  The client
+		//	now renders them as "LF" in a box, rather
+		//	than actually inserting a line break.
+		//
+		//	Therefore a workaround is necessary.  This
+		//	preprocess method takes and breaks a single
+		//	ChatMessage into many ChatMessages, each one
+		//	containing a single line.  It then creates
+		//	a packet from each of these ChatMessages.
+		//
+		//	By using the Atomic method on the Client
+		//	object, we're able to send all these packets
+		//	without any risk of other packets being sent
+		//	in between.
+		//
+		//	It's objectively bad design, but it's not
+		//	my fault -- I'm just working around Mojang's
+		//	poor design decisions.
+		auto packets=preprocess(message);
 		
 		//	List of clients to whom the message
 		//	could not be delivered
@@ -94,7 +257,7 @@ namespace MCPP {
 		//	an echo message
 		if (message.Echo && !message.From.IsNull()) {
 		
-			const_cast<ChatMessage &>(message).From->Send(packet);
+			send(message.From,packets);
 		
 			return retr;
 		
@@ -108,7 +271,7 @@ namespace MCPP {
 			(message.Recipients.Count()==0)
 		) {
 		
-			for (auto & client : server.Clients) client->Send(packet);
+			for (auto & client : server.Clients) send(client,packets);
 			
 			return retr;
 		
@@ -198,7 +361,7 @@ namespace MCPP {
 				//	YES
 			
 				//	Send
-				client->Send(packet);
+				send(client,packets);
 				
 				//	Remove from collection
 				//
@@ -213,7 +376,7 @@ namespace MCPP {
 		
 		//	Deliver to users we're delivering to
 		//	by handle
-		for (auto & client : message.Recipients) const_cast<SmartPointer<Client> &>(client)->Send(packet);
+		for (auto & client : message.Recipients) send(client,packets);
 		
 		//	Build the list of recipients who could
 		//	not be found/delivered to
