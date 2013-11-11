@@ -534,7 +534,7 @@ namespace MCPP {
 			
 			//	Offset the start of the
 			//	"add" array appropriately
-			add_offset+=16*16*16;
+			add_offset+=16*16*16*2;
 			if (skylight) add_offset+=(16*16*16)/2;
 			
 			//	If the "add" array will be
