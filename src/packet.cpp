@@ -487,7 +487,13 @@ namespace MCPP {
 	
 	static String print_value (const JSON::Value & json) {
 	
-		return JSON::ToString(json);
+		String retr;
+		retr	<<	Newline
+				<<	add_tabs(JSON::ToString(json))
+				<<	Newline
+				<<	add_tabs(JSON::Serialize(json));
+				
+		return retr;
 	
 	}
 	
