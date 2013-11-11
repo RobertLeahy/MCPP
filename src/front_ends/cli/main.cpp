@@ -174,7 +174,7 @@ static const Tuple<Regex,ProtocolState> states []={
 	},
 	{
 		Regex(
-			"^\\sp(?:lay)?\\s*$",
+			"^\\s*p(?:lay)?\\s*$",
 			RegexOptions().SetIgnoreCase()
 		),
 		ProtocolState::Play
