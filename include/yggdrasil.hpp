@@ -218,7 +218,8 @@ namespace Yggdrasil {
 	typedef std::function<void (BooleanType)> ValidateCallback;
 	typedef std::function<void (BooleanType)> SignoutCallback;
 	typedef std::function<void (BooleanType)> InvalidateCallback;
-	typedef std::function<void (bool)> SessionCallback;
+	typedef std::function<void (bool)> ClientSessionCallback;
+	typedef std::function<void (Nullable<String>)> ServerSessionCallback;
 	typedef std::function<void (const Request &)> RequestCallback;
 	typedef std::function<void (const Response &)> ResponseCallback;
 
@@ -370,7 +371,7 @@ namespace Yggdrasil {
 				const String & server_id,
 				const Vector<Byte> & secret,
 				const Vector<Byte> & public_key,
-				SessionCallback callback
+				ClientSessionCallback callback
 			);
 			
 			
@@ -395,7 +396,7 @@ namespace Yggdrasil {
 				const String & server_id,
 				const Vector<Byte> & secret,
 				const Vector<Byte> & public_key,
-				SessionCallback callback
+				ServerSessionCallback callback
 			);
 			
 			

@@ -12,8 +12,7 @@ static const String content_type("application/json");
 static const String url("https://authserver.mojang.com/");
 static const String client_url("http://session.minecraft.net/game/joinserver.jsp?user={0}&sessionId={1}&serverId={2}");
 static const String client_good("OK");
-static const String server_url("http://session.minecraft.net/game/checkserver.jsp?user={0}&serverId={1}");
-static const String server_good("YES");
+static const String server_url("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={0}&serverId={1}");
 static const String token_template("token:{0}:{1}");
 static const String auth_ep("authenticate");
 static const String refresh_ep("refresh");
@@ -580,7 +579,7 @@ namespace Yggdrasil {
 		const String & server_id,
 		const Vector<Byte> & secret,
 		const Vector<Byte> & public_key,
-		SessionCallback callback
+		ClientSessionCallback callback
 	) {
 	
 		#pragma GCC diagnostic push
@@ -598,7 +597,7 @@ namespace Yggdrasil {
 			
 				try {
 				
-					if ((status==200) && (response==server_good)) result=true;
+					if ((status==200) && (response==client_good)) result=true;
 				
 				} catch (...) {	}
 				
@@ -616,7 +615,7 @@ namespace Yggdrasil {
 		const String & server_id,
 		const Vector<Byte> & secret,
 		const Vector<Byte> & public_key,
-		SessionCallback callback
+		ServerSessionCallback callback
 	) {
 	
 		#pragma GCC diagnostic push
@@ -629,15 +628,35 @@ namespace Yggdrasil {
 			),
 			[callback=std::move(callback)] (Word status, String response) {
 			
-				bool result=false;
-			
+				Nullable<String> result;
+				
 				try {
 				
-					if ((status==200) && (response==server_good)) result=true;
+					if (status==200) {
+					
+						//	Parse JSON
+						auto obj=parse(response);
+						
+						//	Ensure JSON structure is valid and
+						//	extract user's UUID
+						if (obj.Pairs) {
+						
+							auto iter=obj.Pairs->find("id");
+							
+							if (
+								(iter!=obj.Pairs->end()) &&
+								(iter->second.Is<String>())
+							) result.Construct(
+								std::move(iter->second.Get<String>())
+							);
+						
+						}
+					
+					}
 				
 				} catch (...) {	}
 				
-				callback(result);
+				callback(std::move(result));
 			
 			}
 		);
