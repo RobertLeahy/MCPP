@@ -268,7 +268,7 @@ class VanillaAuth : public Module {
 					data->ServerID,
 					data->Secret,
 					key.PublicKey(),
-					[=,client=event.From] (bool result) mutable {
+					[=,client=event.From] (Nullable<String> result) mutable {
 					
 						try {
 							
@@ -278,8 +278,8 @@ class VanillaAuth : public Module {
 							//	out
 							if (data.IsNull()) return;
 							
-							if (result) authenticate(client,data);
-							else client->Disconnect(authentication_failed);
+							if (result.IsNull()) client->Disconnect(authentication_failed);
+							else authenticate(client,data);
 						
 						} catch (...) {
 						
