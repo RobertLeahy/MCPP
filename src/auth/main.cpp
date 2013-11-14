@@ -14,9 +14,10 @@ namespace MCPP {
 	//	Key which must be set to enable debugging
 	static const String debug_key("auth");
 	//	Debug logging templates
-	static const String http_request("HTTP GET request => {0}");
+	static const String http_request("HTTP request => {0}");
 	static const String http_response("HTTP response <= {0} - Status {1} - Time elapsed {2}ns - Body: {3}");
-	static const String http_response_failed("HTTP response <= {0} internal error after {1}ns");
+	static const String http_request_failed("HTTP request => {0} failed after {1}ns");
+	static const String http_request_failed_reason(" with reason \"{0}\"");
 	//	Module information
 	static const Word priority=1;
 	static const String name("Authentication API");
@@ -48,25 +49,40 @@ namespace MCPP {
 				if (debug()) {
 				
 					auto & server=Server::Get();
-				
-					if (response.Status==0) server.WriteLog(
-						String::Format(
-							http_response_failed,
-							response.URL,
-							response.Elapsed
-						),
-						Service::LogType::Debug
-					);
-					else server.WriteLog(
-						String::Format(
-							http_response,
-							response.URL,
-							response.Status,
-							response.Elapsed,
+					
+					if (response.Status==0) {
+						
+						String log(
+							String::Format(
+								http_request_failed,
+								response.URL,
+								response.Elapsed
+							)
+						);
+						if (response.Body.Size()!=0) log << String::Format(
+							http_request_failed_reason,
 							response.Body
-						),
-						Service::LogType::Debug
-					);
+						);
+						
+						server.WriteLog(
+							log,
+							Service::LogType::Debug
+						);
+					
+					} else {
+				
+						server.WriteLog(
+							String::Format(
+								http_response,
+								response.URL,
+								response.Status,
+								response.Elapsed,
+								response.Body
+							),
+							Service::LogType::Debug
+						);
+						
+					}
 				
 				}
 			
