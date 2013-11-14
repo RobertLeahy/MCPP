@@ -1,4 +1,11 @@
+#include <rleahylib/rleahylib.hpp>
+#include <chat/chat.hpp>
 #include <info/info.hpp>
+#include <server.hpp>
+#include <thread_pool.hpp>
+
+
+using namespace MCPP;
 
 
 static const String name("Thread Pool Information");
@@ -102,26 +109,4 @@ class PoolInfo : public Module, public InformationProvider {
 };
 
 
-static Nullable<PoolInfo> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(PoolInfo)
