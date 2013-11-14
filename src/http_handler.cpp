@@ -1,8 +1,8 @@
 #include <http_handler.hpp>
-#include <stdexcept>
 #include <new>
-#include <utility>
+#include <stdexcept>
 #include <system_error>
+#include <utility>
 
 
 namespace MCPP {
@@ -366,18 +366,11 @@ namespace MCPP {
 		
 		#ifdef CURLMOPT_PIPELINING
 		CURLMcode result;
-		if (
-			((result=curl_multi_setopt(
-				multi,
-				CURLMOPT_PIPELINING,
-				static_cast<long>(0)
-			))!=CURLM_OK) /*||
-			((result=curl_multi_setopt(
-				multi,
-				CURLMOPT_MAX_TOTAL_CONNECTIONS,
-				static_cast<long>(0)
-			))!=CURLM_OK)*/
-		) throw std::runtime_error(
+		if ((result=curl_multi_setopt(
+			multi,
+			CURLMOPT_PIPELINING,
+			static_cast<long>(0)
+		))!=CURLM_OK) throw std::runtime_error(
 			curl_multi_strerror(
 				result
 			)
