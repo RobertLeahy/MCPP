@@ -16,7 +16,8 @@ bin/mods/mcpp_command_whisper.dll \
 	
 bin/mods/mcpp_command.dll: \
 $(MOD_OBJ) \
-obj/command/main.o | \
+obj/command/command.o \
+obj/command/commands.o | \
 $(MOD_LIB) \
 bin/mods/mcpp_chat.dll
 	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_chat.dll
