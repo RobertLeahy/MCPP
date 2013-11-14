@@ -128,7 +128,7 @@ namespace MCPP {
 				
 					status_string_done(
 						status_code,
-						err.IsNull() ? String () : std::move(*err)
+						err.IsNull() ? String() : std::move(*err)
 					);
 				
 				} else {
