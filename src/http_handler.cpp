@@ -12,6 +12,13 @@ namespace MCPP {
 	static const char * curl_error="cURL error";
 	
 	
+	//	Settings
+	
+	//	Maximum number of 3xx headers that a cURL
+	//	request may follow before failing
+	static const long max_redirs=5;
+	
+	
 	static size_t write_callback (char * ptr, size_t size, size_t nmemb, void * userdata) noexcept {
 
 		try {
@@ -504,6 +511,12 @@ namespace MCPP {
 				curl,
 				CURLOPT_READDATA,
 				request.get()
+			))!=CURLE_OK) ||
+			//	Set maximum number of redirects
+			((result=curl_easy_setopt(
+				curl,
+				CURLOPT_MAXREDIRS,
+				max_redirs
 			))!=CURLE_OK)
 			//	If DEBUG is defined, verbose
 			//#ifdef DEBUG
