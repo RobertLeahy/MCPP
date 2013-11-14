@@ -118,7 +118,7 @@ namespace MCPP {
 	}
 	
 	
-	void HTTPRequest::Done (Word status_code) noexcept {
+	void HTTPRequest::Done (Word status_code, Nullable<String> err) noexcept {
 	
 		try {
 		
@@ -126,7 +126,10 @@ namespace MCPP {
 			
 				if (status_code==0) {
 				
-					status_string_done(status_code,String());
+					status_string_done(
+						status_code,
+						err.IsNull() ? String () : std::move(*err)
+					);
 				
 				} else {
 				

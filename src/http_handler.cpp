@@ -300,7 +300,15 @@ namespace MCPP {
 							if (msg->data.result!=CURLE_OK) {
 							
 								//	FAIL
-								request->Done(0);
+								
+								request->Done(
+									0,
+									String(
+										curl_easy_strerror(
+											msg->data.result
+										)
+									)
+								);
 								
 							} else {
 							

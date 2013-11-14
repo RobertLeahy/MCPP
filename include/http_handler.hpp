@@ -127,7 +127,7 @@ namespace MCPP {
 		
 			Word Write (const Byte * ptr, Word size) noexcept;
 			Word Read (Byte * ptr, Word size) noexcept;
-			void Done (Word status_code) noexcept;
+			void Done (Word status_code, Nullable<String> err=Nullable<String>()) noexcept;
 			bool Header (const String & key, const String & value) noexcept;
 			const Vector<Byte> & URL () const noexcept;
 			const Vector<Byte> & Body () const noexcept;
