@@ -4,6 +4,7 @@ bin/mods/mcpp_command_chat_log.dll \
 bin/mods/mcpp_command_get.dll \
 bin/mods/mcpp_command_kick.dll \
 bin/mods/mcpp_command_op.dll \
+bin/mods/mcpp_command_permissions.dll \
 bin/mods/mcpp_command_set.dll \
 bin/mods/mcpp_command_shutdown.dll \
 bin/mods/mcpp_command_time.dll \
@@ -69,6 +70,17 @@ obj/op/command.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_op.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+	
+	
+#	PERMISSIONS
+
+
+bin/mods/mcpp_command_permissions.dll: \
+$(MOD_OBJ) \
+obj/permissions/command.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_permissions.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll
 	
 	
 #	CONFIGURATION
