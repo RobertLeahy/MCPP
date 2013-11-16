@@ -75,12 +75,12 @@ class CLIApp {
 		
 		~CLIApp () noexcept {
 		
-			//	Kill the server
-			Server::Get().Destroy();
-		
 			//	Make sure the CLI is not attached
 			//	to the wrapper as we shut down
 			cli.ClearProvider();
+		
+			//	Kill the server
+			Server::Get().Destroy();
 		
 		}
 		
