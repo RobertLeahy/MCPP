@@ -2383,6 +2383,19 @@ namespace MCPP {
 				
 				
 				};
+				
+				
+				class PluginMessage : public Base, public IDPacket<0x3F> {
+				
+				
+					public:
+					
+					
+						String Channel;
+						Vector<Byte> Data;
+				
+				
+				};
 			
 			
 			}
@@ -2508,6 +2521,19 @@ namespace MCPP {
 					
 					
 						String Text;
+				
+				
+				};
+				
+				
+				class PluginMessage : public Base, public IDPacket<0x17> {
+				
+				
+					public:
+					
+					
+						String Channel;
+						Vector<Byte> Data;
 				
 				
 				};
