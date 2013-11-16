@@ -29,7 +29,7 @@ namespace MCPP {
 			 *	The client from which the packet was
 			 *	received.
 			 */
-			SmartPointer<Client> & From;
+			SmartPointer<Client> From;
 			/**
 			 *	The packet which was received.
 			 */
