@@ -66,7 +66,7 @@ class BrandInfo : public Module, public InformationProvider {
 			for (auto & client : Server::Get().Clients) {
 			
 				//	Ignore unauthenticated users
-				if (client->GetState()==ClientState::Authenticated) {
+				if (client->GetState()==ProtocolState::Play) {
 				
 					auto brand=Brands::Get().Get(client);
 				
@@ -91,26 +91,4 @@ class BrandInfo : public Module, public InformationProvider {
 };
 
 
-static Nullable<BrandInfo> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(BrandInfo)

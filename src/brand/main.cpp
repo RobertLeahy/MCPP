@@ -15,7 +15,6 @@ namespace MCPP {
 	static const String name("MC|Brand Handling");
 	static const Word priority=1;
 	static const String channel("MC|Brand");
-	static const String brand("Minecraft++");	//	TODO: Add version information
 	static const String verbose_key("brand");
 	static const String identifying_template("Identifying as \"{0}\" to {1}:{2}");
 	static const String identified_template("{0}:{1} identified as \"{2}\"");
@@ -38,9 +37,6 @@ namespace MCPP {
 	void Brands::Install () {
 	
 		auto & server=Server::Get();
-		
-		//	Encode brand string
-		encoded=UTF8().Encode(brand);
 	
 		//	Install into server
 		
@@ -63,7 +59,7 @@ namespace MCPP {
 			if (server.IsVerbose(verbose_key)) server.WriteLog(
 				String::Format(
 					identifying_template,
-					brand,
+					Server::Name,
 					client->IP(),
 					client->Port()
 				),
@@ -71,11 +67,11 @@ namespace MCPP {
 			);
 		
 			//	Send brand
-			PluginMessages::Get().Send(
+			PluginMessages::Get().Send(PluginMessage{
 				std::move(client),
 				channel,
-				encoded
-			);
+				UTF8().Encode(Server::Name)
+			});
 		
 		});
 		
@@ -83,29 +79,30 @@ namespace MCPP {
 		//	MC|Brand
 		PluginMessages::Get().Add(
 			channel,
-			[this] (SmartPointer<Client> client, String, Vector<Byte> buffer) mutable {
+			[this] (PluginMessage message) mutable {
 			
-				String client_brand=UTF8().Decode(
-					buffer.begin(),
-					buffer.end()
+				auto brand=UTF8().Decode(
+					message.Buffer.begin(),
+					message.Buffer.end()
 				);
 				
 				auto & server=Server::Get();
 				if (server.IsVerbose(verbose_key)) server.WriteLog(
 					String::Format(
 						identified_template,
-						client->IP(),
-						client->Port(),
-						client_brand
+						message.Endpoint->IP(),
+						message.Endpoint->Port(),
+						brand
 					),
 					Service::LogType::Debug
 				);
-			
+				
 				lock.Write([&] () mutable {
 				
-					auto iter=brands.find(client);
+					auto iter=brands.find(message.Endpoint);
+					
 					if (iter!=brands.end()) iter->second.Construct(
-						std::move(client_brand)
+						std::move(brand)
 					);
 				
 				});
