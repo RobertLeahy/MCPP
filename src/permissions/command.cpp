@@ -1,7 +1,9 @@
 #include <rleahylib/rleahylib.hpp>
+#include <chat/chat.hpp>
 #include <command/command.hpp>
 #include <permissions/permissions.hpp>
 #include <mod.hpp>
+#include <algorithm>
 
 
 using namespace MCPP;
@@ -22,6 +24,7 @@ static const String identifiers []={
 };
 static const String group_arg("-g");
 static const String all_arg("-a");
+static const String quiet_arg("-q");
 
 
 class PermissionsCommand : public Module, public Command {
@@ -38,6 +41,7 @@ class PermissionsCommand : public Module, public Command {
 			
 				bool All;
 				bool Group;
+				bool Quiet;
 				String Name;
 				Vector<String> Args;
 		
@@ -54,6 +58,7 @@ class PermissionsCommand : public Module, public Command {
 			retr.Construct();
 			retr->All=false;
 			retr->Group=false;
+			retr->Quiet=false;
 			bool first=true;
 			bool complete=false;
 			for (auto & s : args) {
@@ -62,27 +67,21 @@ class PermissionsCommand : public Module, public Command {
 				
 					if (s==group_arg) {
 					
-						if (retr->Group) {
-						
-							retr.Destroy();
-							
-							break;
-						
-						}
+						if (retr->Group) break;
 					
 						retr->Group=true;
 					
 					} else if (s==all_arg) {
 					
-						if (retr->All) {
-						
-							retr.Destroy();
-							
-							break;
-						
-						}
+						if (retr->All) break;
 					
 						retr->All=true;
+						
+					} else if (s==quiet_arg) {
+					
+						if (retr->Quiet) break;
+						
+						retr->Quiet=true;
 					
 					} else {
 					
@@ -96,8 +95,6 @@ class PermissionsCommand : public Module, public Command {
 				
 				} else if (retr->All) {
 				
-					retr.Destroy();
-					
 					break;
 					
 				} else {
@@ -205,32 +202,127 @@ class PermissionsCommand : public Module, public Command {
 		}
 		
 		
-		static void add (PermissionsHandle handle, Arguments args) {
+		static ChatMessage add_remove (PermissionsHandle handle, Arguments args, bool add) {
+		
+			ChatMessage retr;
+			ChatMessage send;
 			
-			handle.Add(std::move(args.Args[0]));
+			if (add) send << ChatStyle::BrightGreen << "Adding to ";
+			else send << ChatStyle::Red << "Removing from ";
+			
+			send	<<	(handle.IsGroup() ? "group" : "user")
+					<<	" "
+					<<	ChatStyle::Bold
+					<<	handle.Name()
+					<<	ChatFormat::Pop
+					<<	" group "
+					<<	ChatStyle::Bold
+					<<	args.Args[0];
+					
+			if (add) handle.Add(std::move(args.Args[0]));
+			else handle.Remove(std::move(args.Args[0]));
+			
+			if (args.Quiet) retr=std::move(send);
+			else Chat::Get().Send(send);
+			
+			return retr;
 		
 		}
 		
 		
-		static void remove (PermissionsHandle handle, Arguments args) {
+		static ChatMessage add (PermissionsHandle handle, Arguments args) {
 		
-			handle.Remove(std::move(args.Args[0]));
-		
-		}
-		
-		
-		static void grant (PermissionsHandle handle, Arguments args) {
-		
-			if (args.All) handle.Grant();
-			else for (auto & s : args.Args) handle.Grant(std::move(s));
+			return add_remove(
+				std::move(handle),
+				std::move(args),
+				true
+			);
 		
 		}
 		
 		
-		static void revoke (PermissionsHandle handle, Arguments args) {
+		static ChatMessage remove (PermissionsHandle handle, Arguments args) {
 		
-			if (args.All) handle.Revoke();
-			else for (auto & s : args.Args) handle.Revoke(std::move(s));
+			return add_remove(
+				std::move(handle),
+				std::move(args),
+				false
+			);
+		
+		}
+		
+		
+		static ChatMessage grant_revoke (PermissionsHandle handle, Arguments args, bool grant) {
+		
+			ChatMessage retr;
+			ChatMessage send;
+			
+			std::sort(args.Args.begin(),args.Args.end());
+			
+			if (grant) send << ChatStyle::BrightGreen << "Granting";
+			else send << ChatStyle::Red << "Revoking from";
+			
+			send	<<	" "
+					<<	(handle.IsGroup() ? "group" : "user")
+					<<	" "
+					<<	ChatStyle::Bold
+					<<	handle.Name()
+					<<	ChatFormat::Pop
+					<<	" ";
+			
+			if (args.All) {
+			
+				send	<<	ChatStyle::Bold
+						<<	"all permissions";
+						
+				handle.Revoke();
+			
+			} else {
+			
+				send	<<	"permissions: "
+						<<	ChatStyle::Bold;
+			
+				bool first=true;
+				for (auto & s : args.Args) {
+
+					if (first) first=false;
+					else send << ", ";
+					
+					send << s;
+					
+					if (grant) handle.Grant(std::move(s));
+					else handle.Revoke(std::move(s));
+				
+				}
+			
+			}
+			
+			if (args.Quiet) retr=std::move(send);
+			else Chat::Get().Send(send);
+			
+			return retr;
+		
+		}
+		
+		
+		static ChatMessage grant (PermissionsHandle handle, Arguments args) {
+		
+			return grant_revoke(
+				std::move(handle),
+				std::move(args),
+				true
+			);
+		
+		}
+		
+		
+		static ChatMessage revoke (PermissionsHandle handle, Arguments args) {
+		
+			return grant_revoke(
+				std::move(handle),
+				std::move(args),
+				false
+			);
 		
 		}
 
@@ -383,21 +475,23 @@ class PermissionsCommand : public Module, public Command {
 			
 			}
 			
+			retr.Status=CommandStatus::Success;
+			
 			//	Invoke
 			switch (get_type(event.Identifier)) {
 			
 				case Type::Add:
-					add(std::move(handle),std::move(*args));
+					retr.Message=add(std::move(handle),std::move(*args));
 					break;
 				case Type::Remove:
-					remove(std::move(handle),std::move(*args));
+					retr.Message=remove(std::move(handle),std::move(*args));
 					break;
 				case Type::Grant:
-					grant(std::move(handle),std::move(*args));
+					retr.Message=grant(std::move(handle),std::move(*args));
 					break;
 				case Type::Revoke:
 				default:
-					revoke(std::move(handle),std::move(*args));
+					retr.Message=revoke(std::move(handle),std::move(*args));
 					break;
 				
 			}
