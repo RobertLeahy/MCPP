@@ -273,6 +273,8 @@ namespace MCPP {
 		
 			for (auto & client : server.Clients) send(client,packets);
 			
+			Log(message);
+			
 			return retr;
 		
 		}
