@@ -3,6 +3,9 @@
  */
  
  
+#pragma once
+ 
+ 
 #include <rleahylib/rleahylib.hpp>
 #include <cstring>
 #include <exception>
