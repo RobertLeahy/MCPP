@@ -52,6 +52,7 @@ obj/noise.o \
 obj/packet.o \
 obj/packet_router.o \
 obj/rsa_key.o \
+obj/serializer.o \
 obj/server.o \
 obj/sha1.o \
 obj/url.o \
