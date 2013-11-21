@@ -2839,16 +2839,14 @@ namespace MCPP {
 		Vector<Byte>
 	>::type Serialize (const T & packet) {
 	
-		using namespace PacketImpl;
-	
-		typedef PacketMap<T::State,T::Direction,T::PacketID> type;
-		typedef Serializer<VarInt<UInt32>> serializer;
+		typedef PacketImpl::PacketMap<T::State,T::Direction,T::PacketID> type;
+		typedef PacketImpl::Serializer<PacketImpl::VarInt<UInt32>> serializer;
 		
 		//	Obtain a buffer reasonably sized
 		//	for the packet-in-question
 		Vector<Byte> buffer(
 			Word(
-				SafeWord(SizeImpl<0,type>(&packet))+
+				SafeWord(PacketImpl::SizeImpl<0,type>(&packet))+
 				SafeWord(serializer::Size(T::PacketID))
 			)
 		);
@@ -2857,7 +2855,7 @@ namespace MCPP {
 		serializer::ToBytes(buffer,T::PacketID);
 		
 		//	Place all elements in the buffer
-		SerializeImpl<0,type>(buffer,&packet);
+		PacketImpl::SerializeImpl<0,type>(buffer,&packet);
 		
 		//	Get the length of the buffer,
 		//	for the length header
