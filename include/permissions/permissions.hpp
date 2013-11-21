@@ -598,10 +598,6 @@ namespace MCPP {
 			mutable RWLock lock;
 			
 			
-			//	Settings
-			Word save_frequency;
-			
-			
 			static bool is_verbose ();
 			
 			
@@ -616,7 +612,6 @@ namespace MCPP {
 			
 			void load ();
 			void save () const;
-			void save_loop () const;
 			
 			
 		public:

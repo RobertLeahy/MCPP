@@ -1,8 +1,11 @@
 #include <permissions/permissions.hpp>
+#include <save/save.hpp>
+#include <serializer.hpp>
 #include <server.hpp>
 #include <singleton.hpp>
 #include <cstring>
 #include <exception>
+#include <type_traits>
 
 
 using namespace MCPP;
@@ -16,12 +19,9 @@ namespace MCPP {
 	static const String name("Permissions");
 	
 	
-	static const String save_frequency_key("permissions_save_frequency");
-	static const Word save_frequency_default=120000;
 	static const String save_key("permissions");
 	static const String error_parsing("Error parsing permissions tables: \"{0}\" at byte {1}");
 	static const String debug_key("permissions");
-	static const String save_log("Saved permissions tables - took {0}ns - next in {1}ms");
 	
 	
 	bool Permissions::is_verbose () {
@@ -169,299 +169,79 @@ namespace MCPP {
 	}
 	
 	
-	class PermissionsParserError : public std::exception {
-	
-	
-		public:
-		
-		
-			Word Where;
-			const String & What;
-			
-			
-			PermissionsParserError (Word where, const String & what) : Where(where), What(what) {	}
-	
-	
-	};
-	
-	
-	class PermissionsParserResult {
-	
-	
-		public:
-		
-		
-			std::unordered_map<String,PermissionsSet> Users;
-			std::unordered_map<String,PermissionsSet> Groups;
-	
-	
-	};
-	
-	
-	static const String & insufficient_bytes="Insufficient bytes";
-	static const String & invalid_boolean="Invalid boolean value";
-	
-	
-	class PermissionsParser {
+	template <typename T>
+	class Serializer<Set<T>> {
 	
 	
 		private:
 		
 		
-			const Byte * start;
-			const Byte * begin;
-			const Byte * end;
-			Vector<Byte> buffer;
-			
-			
-			Word loc () const noexcept {
-			
-				return static_cast<Word>(begin-start);
-			
-			}
-			
-			
-			[[noreturn]]
-			void raise () const {
-			
-				throw PermissionsParserError(
-					loc(),
-					insufficient_bytes
-				);
-			
-			}
-			
-			
-			void check (Word len) const {
-			
-				if (static_cast<Word>(end-begin)<len) raise();
-			
-			}
-			
-			
-			bool get_boolean () {
-			
-				//	Make sure we can actually extract
-				//	a byte
-				if (begin==end) raise();
-				
-				//	Make sure next byte is a valid
-				//	boolean value
-				if (!(
-					(*begin==0) ||
-					(*begin==1)
-				)) throw PermissionsParserError(
-					loc(),
-					invalid_boolean
-				);
-				
-				bool retr=*begin==1;
-				
-				++begin;
-				
-				return retr;
-			
-			}
-			
-			
-			Word get_length () {
-			
-				//	Make sure we can actually extract
-				//	a 32-bit unsigned integer
-				check(sizeof(UInt32));
-				
-				UInt32 val;
-				std::memcpy(&val,begin,sizeof(val));
-				begin+=sizeof(val);
-				
-				//	Fix endianness if necessary
-				if (!Endianness::IsBigEndian<UInt32>()) Endianness::FixEndianness(&val);
-				
-				return val;
-			
-			}
-			
-			
-			String get_string () {
-			
-				//	Get the length of the string (in code units)
-				auto len=get_length();
-				
-				//	Check to make sure there's enough bytes
-				//	to extract
-				check(len);
-				
-				//	Decode
-				auto retr=UTF8().Decode(
-					begin,
-					begin+len
-				);
-				
-				begin+=len;
-				
-				return retr;
-			
-			}
-			
-			
-			PermissionsSet get_permissions_set () {
-			
-				PermissionsSet retr;
-				
-				//	Get number of groups
-				Word groups=get_length();
-				//	Loop and get each of those groups
-				for (Word i=0;i<groups;++i) retr.Groups.insert(get_string());
-				
-				//	Is the set default full or
-				//	default empty?
-				bool full=get_boolean();
-				
-				//	If the set is full, fill it
-				if (full) retr.Individual.Fill();
-				
-				//	Get number of permissions added to
-				//	or removed from the set
-				Word individual=get_length();
-				//	Loop and get each of them
-				for (Word i=0;i<individual;++i) {
-				
-					if (full) retr.Individual.Remove(get_string());
-					else retr.Individual.Add(get_string());
-				
-				}
-				
-				return retr;
-			
-			}
-			
-			
-			void write (bool bln) {
-			
-				buffer.Add(bln ? 1 : 0);
-			
-			}
-			
-			
-			void write (Word len) {
-			
-				union {
-					UInt32 val;
-					Byte buffer [sizeof(val)];
-				};
-				val=static_cast<UInt32>(SafeWord(len));
-				
-				if (!Endianness::IsBigEndian<Word>()) Endianness::FixEndianness(&val);
-				
-				for (auto b : buffer) this->buffer.Add(b);
-			
-			}
-			
-			
-			void write (const String & str) {
-			
-				auto encoded=UTF8().Encode(str);
-				
-				write(encoded.Count());
-				
-				for (auto b : encoded) buffer.Add(b);
-			
-			}
-			
-			
-			void write (const PermissionsSet & set) {
-			
-				//	Write groups
-				write(set.Groups.size());
-				for (auto & str : set.Groups) write(str);
-				
-				//	Write set
-				write(set.Individual.Full());
-				write(set.Individual.Count());
-				for (auto & str : set.Individual) write(str);
-			
-			}
-			
-			
-			void write (const std::unordered_map<String,PermissionsSet> & map) {
-			
-				write(map.size());
-				
-				for (auto & pair : map) {
-				
-					write(pair.first);
-					write(pair.second);
-				
-				}
-			
-			}
-			
-			
+			typedef typename std::decay<T>::type type;
+	
+	
 		public:
 		
 		
-			PermissionsParserResult operator () (const Byte * begin, const Byte * end) {
+			static Set<T> FromBytes (const Byte * & begin, const Byte * end) {
 			
-				this->start=begin;
-				this->begin=begin;
-				this->end=end;
+				auto full=Serializer<bool>::FromBytes(begin,end);
+				Set<T> retr(full);
+			
+				auto len=Serializer<UInt32>::FromBytes(begin,end);
 				
-				PermissionsParserResult retr;
+				for (UInt32 i=0;i<len;++i) {
 				
-				//	Get the number of groups
-				Word groups=get_length();
-				//	Loop and get each of those groups
-				for (Word i=0;i<groups;++i) {
-				
-					//	Get the name
-					auto name=get_string();
+					auto obj=Serializer<type>::FromBytes(begin,end);
 					
-					//	Get the associated permissions
-					//	set
-					auto set=get_permissions_set();
-					
-					//	Add to set
-					retr.Groups.emplace(
-						std::move(name),
-						std::move(set)
-					);
+					if (full) retr.Remove(std::move(obj));
+					else retr.Add(std::move(obj));
 				
 				}
 				
-				//	Get the number of users
-				Word users=get_length();
-				//	Loop and get each of those users
-				for (Word i=0;i<users;++i) {
-				
-					//	Get the name
-					auto name=get_string();
-					//	All usernames are all lowercase
-					name.ToLower();
-					
-					//	Get the associated permissions
-					//	set
-					auto set=get_permissions_set();
-					
-					//	Add to set
-					retr.Users.emplace(
-						std::move(name),
-						std::move(set)
-					);
-				
-				}
-				
-				//	Done!
 				return retr;
 			
 			}
 			
 			
-			Vector<Byte> operator () (const std::unordered_map<String,PermissionsSet> & users, const std::unordered_map<String,PermissionsSet> & groups) {
+			static void ToBytes (Vector<Byte> & buffer, const Set<T> & obj) {
+			
+				Serializer<bool>::ToBytes(buffer,obj.Full());
 				
-				write(groups);
-				write(users);
+				Serializer<UInt32>::ToBytes(
+					buffer,
+					static_cast<UInt32>(SafeWord(obj.Count()))
+				);
 				
-				return std::move(buffer);
+				for (const auto & o : obj) Serializer<type>::ToBytes(buffer,o);
+			
+			}
+	
+	
+	};
+	
+	
+	template <>
+	class Serializer<PermissionsSet> {
+	
+	
+		public:
+		
+		
+			static PermissionsSet FromBytes (const Byte * & begin, const Byte * end) {
+			
+				auto groups=Serializer<std::unordered_set<String>>::FromBytes(begin,end);
+				return PermissionsSet{
+					Serializer<Set<String>>::FromBytes(begin,end),
+					std::move(groups)
+				};
+			
+			}
+			
+			
+			static void ToBytes (Vector<Byte> & buffer, const PermissionsSet & obj) {
+			
+				Serializer<std::unordered_set<String>>::ToBytes(buffer,obj.Groups);
+				Serializer<Set<String>>::ToBytes(buffer,obj.Individual);
 			
 			}
 	
@@ -470,60 +250,27 @@ namespace MCPP {
 	
 	
 	void Permissions::load () {
-	
-		//	Permissions are saved as follows
-		//	(all big endian):
-		//
-		//	1.	An unsigned 32-bit integer
-		//		specifying the number of groups
-		//	2.	A number of groups equal to
-		//		the number given.
-		//	3.	An unsigned 32-bit integer
-		//		specifying the number of users.
-		//	4.	A number of users equal to the
-		//		number given.
-		//
-		//	Users and groups are stored as follows:
-		//
-		//	1.	Name.
-		//	2.	Number of associated groups.
-		//	3.	Names of associated groups.
-		//	4.	Whether the set is full or not.
-		//	5.	Number of permissions either in the
-		//		set, or removed from it.
-		//	6.	Names of all permissions either in
-		//		the set (if set is not full) or removed
-		//		from the set (if the set is full).
-		//
-		//	Strings are serialized as:
-		//
-		//	1.	Length (in code units).
-		//	2.	UTF-8 encoding.
 		
-		auto & server=Server::Get();
-	
-		//	Attempt to get data from backing store
-		auto buffer=server.Data().GetBinary(save_key);
+		auto buffer=ByteBuffer::Load(save_key);
 		
-		//	If nothing was loaded, proceed
-		if (buffer.IsNull()) return;
+		//	If nothing was loaded, end at once
+		if (buffer.Count()==0) return;
 		
-		PermissionsParserResult result;
+		std::unordered_map<String,PermissionsSet> groups;
+		std::unordered_map<String,PermissionsSet> users;
 		try {
 		
-			result=PermissionsParser()(
-				buffer->begin(),
-				buffer->end()
-			);
+			groups=buffer.FromBytes<decltype(groups)>();
+			users=buffer.FromBytes<decltype(users)>();
 		
-		} catch (const PermissionsParserError & e) {
+		} catch (const ByteBufferError & e) {
 		
 			//	Log problem
-			server.WriteLog(
+			Server::Get().WriteLog(
 				String::Format(
 					error_parsing,
-					e.What,
-					e.Where
+					e.what(),
+					e.Where()
 				),
 				Service::LogType::Error
 			);
@@ -533,65 +280,24 @@ namespace MCPP {
 		}
 		
 		//	Move results into this object
-		users=std::move(result.Users);
-		groups=std::move(result.Groups);
+		this->users=std::move(users);
+		this->groups=std::move(groups);
 	
 	}
 	
 	
 	void Permissions::save () const {
 	
-		//	Read lock while we save
-		auto buffer=lock.Read([&] () {	return PermissionsParser()(users,groups);	});
+		ByteBuffer buffer;
+	
+		lock.Read([&] () {
 		
-		//	Write
-		Server::Get().Data().SaveBinary(save_key,buffer.begin(),buffer.Count());
-	
-	}
-	
-	
-	void Permissions::save_loop () const {
-	
-		auto & server=Server::Get();
-	
-		try {
+			buffer.ToBytes(groups);
+			buffer.ToBytes(users);
 		
-			Timer timer(Timer::CreateAndStart());
-	
-			//	Save
-			save();
-			
-			auto elapsed=timer.ElapsedNanoseconds();
-			
-			//	Debug log if applicable
-			if (is_verbose()) server.WriteLog(
-				String::Format(
-					save_log,
-					elapsed,
-					save_frequency
-				),
-				Service::LogType::Debug
-			);
-			
-			//	Loop
-			server.Pool().Enqueue(
-				save_frequency,
-				[this] () {	save_loop();	}
-			);
-			
-		} catch (...) {
+		});
 		
-			//	Panic on throw
-			
-			try {
-			
-				server.Panic(std::current_exception());
-				
-			} catch (...) {	}
-			
-			throw;
-		
-		}
+		buffer.Save(save_key);
 	
 	}
 
@@ -689,24 +395,12 @@ namespace MCPP {
 	
 	
 	void Permissions::Install () {
-	
-		auto & server=Server::Get();
-		
-		//	Hook into shutdown event (to save
-		//	permissions tables)
-		server.OnShutdown.Add([this] () {	save();	});
-		
-		//	Load settings
-		save_frequency=server.Data().GetSetting(save_frequency_key,save_frequency_default);
 		
 		//	Load permissions tables
 		load();
 		
-		//	Begin save loop
-		server.Pool().Enqueue(
-			save_frequency,
-			[this] () {	save_loop();	}
-		);
+		//	Subscribe to save loop
+		SaveManager::Get().Add([this] () {	save();	});
 	
 	}
 
