@@ -25,6 +25,7 @@ bin/mods/mcpp_entity_id.dll \
 bin/mods/mcpp_favicon.dll \
 bin/mods/mcpp_handshake.dll \
 bin/mods/mcpp_keep_alive.dll \
+bin/mods/mcpp_save.dll \
 bin/mods/mcpp_op.dll \
 bin/mods/mcpp_permissions.dll \
 bin/mods/mcpp_ping.dll \
@@ -118,6 +119,16 @@ $(MOD_LIB)
 bin/mods/mcpp_keep_alive.dll: \
 $(MOD_OBJ) \
 obj/keep_alive/main.o | \
+$(MOD_LIB)
+	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+	
+	
+#	SAVE LOOP
+
+
+bin/mods/mcpp_save.dll: \
+$(MOD_OBJ) \
+obj/save/main.o | \
 $(MOD_LIB)
 	$(GPP) -shared -o $@ $^ $(MOD_LIB)
 
