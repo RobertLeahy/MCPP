@@ -791,6 +791,16 @@ namespace MCPP {
 		
 		};
 		ep.Receive=[this] (ReceiveEvent event) mutable {	OnReceive(std::move(event));	};
+		ep.Accept=[this] (AcceptEvent event) mutable {
+		
+			return OnAccept(
+				event.RemoteIP,
+				event.RemotePort,
+				event.LocalIP,
+				event.LocalPort
+			);
+		
+		};
 		
 		return ep;
 	
