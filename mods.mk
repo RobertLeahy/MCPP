@@ -153,8 +153,9 @@ $(MOD_OBJ) \
 obj/permissions/permissions.o \
 obj/permissions/permissions_handle.o \
 obj/permissions/permissions_table_entry.o | \
-$(MOD_LIB)
-	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+$(MOD_LIB) \
+bin/mods/mcpp_save.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_save.dll
 	
 	
 #	PING
