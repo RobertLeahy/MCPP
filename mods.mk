@@ -14,11 +14,12 @@ include command.mk
 include info.mk
 include player.mk
 include world.mk
+include test.mk
 
 
 mods: \
 bin/mods/mcpp_auth.dll \
-bin/mods/mcpp_ban.dll \
+bin/mods/mcpp_blacklist.dll \
 bin/mods/mcpp_brand.dll \
 bin/mods/mcpp_disconnect.dll \
 bin/mods/mcpp_entity_id.dll \
@@ -55,14 +56,15 @@ bin/mods/mcpp_auth.dll
 	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_auth.dll
 	
 	
-#	BANS
+#	BLACKLIST
 
 
-bin/mods/mcpp_ban.dll: \
+bin/mods/mcpp_blacklist.dll: \
 $(MOD_OBJ) \
-obj/ban/main.o | \
-$(MOD_LIB)
-	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+obj/blacklist/main.o | \
+$(MOD_LIB) \
+bin/mods/mcpp_save.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_save.dll
 	
 	
 #	BRAND IDENTIFICATION

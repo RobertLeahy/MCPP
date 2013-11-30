@@ -1,5 +1,6 @@
 mods: \
 bin/mods/mcpp_command.dll \
+bin/mods/mcpp_command_blacklist.dll \
 bin/mods/mcpp_command_chat_log.dll \
 bin/mods/mcpp_command_get.dll \
 bin/mods/mcpp_command_kick.dll \
@@ -26,6 +27,18 @@ bin/mods/mcpp_chat.dll
 	
 	
 COMMAND_LIB:=$(MOD_LIB) bin/mods/mcpp_chat.dll bin/mods/mcpp_command.dll
+
+
+#	BLACKLIST
+
+
+bin/mods/mcpp_command_blacklist.dll: \
+$(MOD_OBJ) \
+obj/blacklist/command.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_permissions.dll \
+bin/mods/mcpp_blacklist.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll bin/mods/mcpp_blacklist.dll
 
 
 #	SERVER LOG THROUGH CHAT

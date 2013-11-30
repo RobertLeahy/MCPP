@@ -1,6 +1,7 @@
 mods: \
 bin/mods/mcpp_info.dll \
 bin/mods/mcpp_info_ban.dll \
+bin/mods/mcpp_info_blacklist.dll \
 bin/mods/mcpp_info_brand.dll \
 bin/mods/mcpp_info_client.dll \
 bin/mods/mcpp_info_data_provider.dll \
@@ -38,6 +39,17 @@ obj/ban/info.o | \
 $(INFO_LIB) \
 bin/mods/mcpp_ban.dll
 	$(GPP) -shared -o $@ $^ $(INFO_LIB) bin/mods/mcpp_ban.dll
+	
+	
+#	BLACKLIST
+
+
+bin/mods/mcpp_info_blacklist.dll: \
+$(MOD_OBJ) \
+obj/blacklist/info.o | \
+$(INFO_LIB) \
+bin/mods/mcpp_blacklist.dll
+	$(GPP) -shared -o $@ $^ $(INFO_LIB) bin/mods/mcpp_blacklist.dll
 	
 	
 #	BRANDS
