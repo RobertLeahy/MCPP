@@ -880,11 +880,11 @@ namespace MCPP {
 		
 			//	Connections
 			std::unordered_map<Connection *,SmartPointer<Connection>> connections;
-			Mutex connections_lock;
+			mutable Mutex connections_lock;
 			
 			//	Listening sockets
 			std::unordered_map<ListeningSocket *,SmartPointer<ListeningSocket>> listening;
-			Mutex listening_lock;
+			mutable Mutex listening_lock;
 			
 			
 			//	Worker threads

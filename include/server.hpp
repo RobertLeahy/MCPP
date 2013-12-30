@@ -357,6 +357,14 @@ namespace MCPP {
 			 */
 			ModuleLoader & Loader ();
 			/**
+			 *	Gets the server's connection handler.
+			 *
+			 *	\return
+			 *		A reference to the server's connection
+			 *		handler.
+			 */
+			ConnectionHandler & Handler ();
+			/**
 			 *	A list of clients connected to the
 			 *	server.
 			 */

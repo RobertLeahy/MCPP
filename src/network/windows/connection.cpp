@@ -19,7 +19,15 @@ namespace MCPP {
 			
 			return true;
 		
-		})) ::shutdown(socket,SD_BOTH);
+		})) {
+		
+			//	Maintain statistics within
+			//	the handler
+			++handler.Disconnected;
+		
+			::shutdown(socket,SD_BOTH);
+			
+		}
 	
 	}
 	

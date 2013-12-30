@@ -303,7 +303,7 @@ namespace MCPP {
 			 */
 			Word Received;
 			/**
-			 *	Number of outgnow Ioing connections that have
+			 *	Number of outgoing connections that have
 			 *	been successfully established by the
 			 *	connection handler.
 			 */
@@ -325,6 +325,21 @@ namespace MCPP {
 			 *	terminated for any reason.
 			 */
 			Word Disconnected;
+			/**
+			 *	Number of sockets the connection handler
+			 *	is listening on.
+			 */
+			Word Listening;
+			/**
+			 *	Number of connected sockets the connection
+			 *	handler is currently managing.
+			 */
+			Word Connected;
+			/**
+			 *	Number of worker threads the connection
+			 *	handler is currently managing.
+			 */
+			Word Workers;
 	
 	
 	};
@@ -348,5 +363,6 @@ namespace MCPP {
 
 #ifdef ENVIRONMENT_WINDOWS
 #include <network/windows.hpp>
+#else
+#include <network/posix.hpp>
 #endif
- 

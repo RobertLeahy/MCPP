@@ -106,6 +106,10 @@ namespace MCPP {
 						
 					}
 					
+					//	The connection is accepted, increment
+					//	statistic within handler
+					++handler.Accepted;
+					
 					SmartPointer<Connection> conn;
 					try {
 					

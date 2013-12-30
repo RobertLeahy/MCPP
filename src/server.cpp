@@ -626,6 +626,15 @@ namespace MCPP {
 		return *mods;
 	
 	}
+	
+	
+	ConnectionHandler & Server::Handler () {
+	
+		if (connections.IsNull()) throw std::out_of_range(NullPointerError);
+		
+		return *connections;
+	
+	}
 
 		
 	String Server::GetMessageOfTheDay () {

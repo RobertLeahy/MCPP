@@ -349,13 +349,19 @@ namespace MCPP {
 	
 	ConnectionHandlerInfo ConnectionHandler::GetInfo () const noexcept {
 	
+		Word listening=listening_lock.Execute([&] () {	return this->listening.size();	});
+		Word connected=connections_lock.Execute([&] () {	return connections.size();	});
+	
 		return ConnectionHandlerInfo{
 			Sent,
 			Received,
 			Outgoing,
 			Incoming,
 			Accepted,
-			Disconnected
+			Disconnected,
+			listening,
+			connected,
+			workers.Count()
 		};
 	
 	}

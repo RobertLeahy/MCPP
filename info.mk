@@ -5,6 +5,7 @@ bin/mods/mcpp_info_blacklist.dll \
 bin/mods/mcpp_info_brand.dll \
 bin/mods/mcpp_info_client.dll \
 bin/mods/mcpp_info_data_provider.dll \
+bin/mods/mcpp_info_handler.dll \
 bin/mods/mcpp_info_mcpp.dll \
 bin/mods/mcpp_info_mods.dll \
 bin/mods/mcpp_info_op.dll \
@@ -79,6 +80,16 @@ $(INFO_LIB)
 bin/mods/mcpp_info_data_provider.dll: \
 $(MOD_OBJ) \
 obj/info/dp.o | \
+$(INFO_LIB)
+	$(GPP) -shared -o $@ $^ $(INFO_LIB)
+	
+	
+#	HANDLER
+
+
+bin/mods/mcpp_info_handler.dll: \
+$(MOD_OBJ) \
+obj/info/handler.o | \
 $(INFO_LIB)
 	$(GPP) -shared -o $@ $^ $(INFO_LIB)
 	
