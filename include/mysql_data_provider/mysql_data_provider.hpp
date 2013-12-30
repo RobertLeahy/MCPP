@@ -560,7 +560,7 @@ namespace MCPP {
 			virtual void DeleteBinary (const String &) override;
 			
 			
-			virtual Nullable<String> GetSetting (const String &) override;
+			virtual Nullable<String> RetrieveSetting (const String &) override;
 			virtual void SetSetting (const String &, const Nullable<String> &) override;
 			virtual void DeleteSetting (const String &) override;
 			

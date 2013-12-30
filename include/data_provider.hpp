@@ -195,9 +195,10 @@ namespace MCPP {
 			virtual void DeleteBinary (const String & key) = 0;
 			
 			
+			virtual Nullable<String> RetrieveSetting (const String & setting) = 0;
 			/**
-			 *	When overriden in a derived class, retrieves
-			 *	the value of a setting.
+			 *	Retrieves the value of a setting converted to
+			 *	an arbitrary type.
 			 *
 			 *	\param [in] setting
 			 *		The name of the setting to retrieve.
@@ -208,7 +209,8 @@ namespace MCPP {
 			 *		backing store supports storing null values
 			 *		and the value is null.
 			 */
-			virtual Nullable<String> GetSetting (const String & setting) = 0;
+			template <typename T=String>
+			Nullable<T> GetSetting (const String & setting);
 			/**
 			 *	Retrieves the value of a setting converted
 			 *	to an arbitrary type.
@@ -308,9 +310,9 @@ namespace MCPP {
 		public:
 		
 		
-			static T Get (DataProvider & dp, const String & setting, T default_value) {
+			static Nullable<T> Get (String value) {
 			
-				return default_value;
+				return Nullable<T>();
 			
 			}
 	
@@ -330,11 +332,9 @@ namespace MCPP {
 		public:
 		
 		
-			static String Get (DataProvider & dp, const String & setting, String default_value) {
+			static Nullable<String> Get (String value) {
 			
-				auto val=dp.GetSetting(setting);
-				
-				return val.IsNull() ? default_value : std::move(*val);
+				return Nullable<String>(std::move(value));
 			
 			}
 	
@@ -349,16 +349,14 @@ namespace MCPP {
 		public:
 		
 		
-			static T Get (DataProvider & dp, const String & setting, T default_value) {
+			static Nullable<T> Get (String value) {
 			
-				auto val=dp.GetSetting(setting);
+				Nullable<T> retr;
 				
-				if (val.IsNull()) return default_value;
+				T val;
+				if (value.ToInteger(&val)) retr.Construct(val);
 				
-				T retr;
-				if (val->ToInteger(&retr)) return retr;
-				
-				return default_value;
+				return retr;
 			
 			}
 	
@@ -373,20 +371,23 @@ namespace MCPP {
 		public:
 		
 		
-			static T Get (DataProvider & dp, const String & setting, T default_value) {
+			static Nullable<T> Get (String value) {
 			
-				auto val=dp.GetSetting(setting);
+				Nullable<T> retr;
 				
-				if (val.IsNull()) return default_value;
-				
-				auto c_str=val->ToCString();
+				auto c_str=value.ToCString();
 				auto end_ptr=c_str.begin();
-				T retr;
-				if (std::is_same<T,Single>::value) retr=static_cast<T>(strtof(end_ptr,&end_ptr));
-				else if (std::is_same<T,Double>::value) retr=static_cast<T>(strtod(end_ptr,&end_ptr));
-				else retr=static_cast<T>(strtold(end_ptr,&end_ptr));
+				T val=(
+					std::is_same<T,Single>::value
+						?	static_cast<T>(strtof(end_ptr,&end_ptr))
+						:	(
+								std::is_same<T,Double>::value
+									?	static_cast<T>(strtod(end_ptr,&end_ptr))
+									:	static_cast<T>(strtold(end_ptr,&end_ptr))
+							)
+				);
 				
-				if (end_ptr==c_str.begin()) return default_value;
+				if (end_ptr!=c_str.begin()) retr.Construct(val);
 				
 				return retr;
 			
@@ -403,23 +404,20 @@ namespace MCPP {
 		public:
 		
 		
-			static bool Get (DataProvider & dp, const String & setting, bool default_value) {
-			
-				auto val=dp.GetSetting(setting);
+			static bool Get (String value) {
 				
-				if (val.IsNull()) return default_value;
+				Nullable<bool> retr;
 				
 				if (Regex(
 					"^\\s*(?:t(?:rue)?|y(?:es)?)\\s*$",
 					RegexOptions().SetIgnoreCase()
-				).IsMatch(*val)) return true;
-				
-				if (Regex(
+				).IsMatch(value)) retr.Construct(true);
+				else if (Regex(
 					"^\\s*(?:no?|f(?:alse)?)\\s*$",
 					RegexOptions().SetIgnoreCase()
-				).IsMatch(*val)) return false;
+				).IsMatch(value)) retr.Construct(false);
 				
-				return default_value;
+				return retr;
 			
 			}
 	
@@ -428,13 +426,23 @@ namespace MCPP {
 	
 	
 	template <typename T>
+	Nullable<T> DataProvider::GetSetting (const String & setting) {
+	
+		auto value=RetrieveSetting(setting);
+		
+		return value.IsNull() ? Nullable<T>() : SettingConverter<typename std::decay<T>::type>::Get(
+			std::move(*value)
+		);
+	
+	}
+	
+	
+	template <typename T>
 	T DataProvider::GetSetting (const String & setting, T default_value) {
 	
-		return SettingConverter<typename std::decay<T>::type>::Get(
-			*this,
-			setting,
-			std::forward<T>(default_value)
-		);
+		auto value=GetSetting<T>(setting);
+		
+		return value.IsNull() ? default_value : std::move(*value);
 	
 	}
 	
