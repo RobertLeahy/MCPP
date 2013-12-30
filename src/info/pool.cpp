@@ -1,6 +1,7 @@
 #include <rleahylib/rleahylib.hpp>
 #include <chat/chat.hpp>
 #include <info/info.hpp>
+#include <mod.hpp>
 #include <server.hpp>
 #include <thread_pool.hpp>
 
@@ -11,7 +12,7 @@ using namespace MCPP;
 static const String name("Thread Pool Information");
 static const Word priority=1;
 static const String identifier("pool");
-static const String help("Display information about the server's pool of worker threads.");
+static const String help("Displays information about the server's pool of worker threads.");
 
 
 static const String pool_template("Running: {0}, Queued: {1}, Scheduled: {2}");
