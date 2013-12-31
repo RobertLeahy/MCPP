@@ -17,17 +17,12 @@ namespace MCPP {
 			
 			is_shutdown=true;
 			
+			//	Fail all remaining receives
+			for (auto & pair : sends) pair.second->Fail();
+			
 			return true;
 		
-		})) {
-		
-			//	Maintain statistics within
-			//	the handler
-			++handler.Disconnected;
-		
-			::shutdown(socket,SD_BOTH);
-			
-		}
+		})) ::shutdown(socket,SD_BOTH);
 	
 	}
 	
@@ -68,6 +63,10 @@ namespace MCPP {
 		
 			//	Make sure the socket is shutdown
 			shutdown();
+			
+			//	Maintain statistics within
+			//	the handler
+			++handler.Disconnected;
 			
 			//	Fire event
 			//	Fire event asynchronously
@@ -358,11 +357,12 @@ namespace MCPP {
 	
 	Connection::~Connection () noexcept {
 	
+		//	Make sure the socket is
+		//	shutdown
+		shutdown();
+	
 		//	Close the socket
 		closesocket(socket);
-		
-		//	Fail all remaining receives
-		for (auto & pair : sends) pair.second->Fail();
 	
 	}
 	
