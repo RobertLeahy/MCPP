@@ -275,7 +275,8 @@ class PermissionsCommand : public Module, public Command {
 				send	<<	ChatStyle::Bold
 						<<	"all permissions";
 						
-				handle.Revoke();
+				if (grant) handle.Grant();
+				else handle.Revoke();
 			
 			} else {
 			
