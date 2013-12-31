@@ -393,9 +393,11 @@ namespace MCPP {
 	
 		typedef Packets::Play::Clientbound::TabComplete reply;
 		typedef Packets::Play::Serverbound::TabComplete request;
+		
+		auto & server=Server::Get();
 	
 		//	Install auto complete handler
-		Server::Get().Router(
+		server.Router(
 			request::PacketID,
 			request::State
 		)=[this] (PacketEvent event) mutable {
@@ -444,6 +446,10 @@ namespace MCPP {
 		
 		};
 		#pragma GCC diagnostic pop
+		
+		//	Install as command interpreter into
+		//	the server
+		server.SetCommandInterpreter(this);
 	
 	}
 	
@@ -454,7 +460,7 @@ namespace MCPP {
 		
 		auto result=execute(
 			SmartPointer<Client>(),
-			str
+			String("/")+str
 		);
 		
 		if (!result.IsNull()) retr=Chat::ToString(*result);
