@@ -11,15 +11,183 @@
 using namespace MCPP;
 
 
+class RunningToggle {
+
+
+	private:
+	
+	
+		mutable Mutex lock;
+		bool is_running;
+		
+		
+	public:
+	
+	
+		RunningToggle () noexcept : is_running(false) {	}
+		
+		
+		template <typename T, typename... Args>
+		bool WhileRunning (T && callback, Args &&... args) const noexcept(noexcept(callback(std::forward<Args>(args)...))) {
+		
+			bool retr=false;
+			
+			lock.Acquire();
+			
+			try {
+			
+				if (is_running) {
+				
+					callback(std::forward<T>(args)...);
+					
+					retr=true;
+					
+				}
+			
+			} catch (...) {
+			
+				lock.Release();
+				
+				throw;
+			
+			}
+			
+			lock.Release();
+			
+			return retr;
+		
+		}
+		
+		
+		void Start () noexcept {
+		
+			lock.Execute([&] () mutable {	is_running=true;	});
+		
+		}
+		
+		
+		void Stop () noexcept {
+		
+			lock.Execute([&] () mutable	{	is_running=false;	});
+		
+		}
+
+
+};
+
+
+static const Regex command_regex("^\\/(.*)$");
+static const String unspecified_error("Error");
+static const String command_result_template("Result of \"/{0}\":");
+static const String server_not_running("Server is not running.");
+
+
 class ServerWrapper : public CLIProvider {
 
 
 	private:
 	
 	
+		const RunningToggle & status;
+	
+	
 		virtual void operator () (String in) override {
 		
+			auto & server=Server::Get();
+		
+			//	Is it a command?
+			auto match=command_regex.Match(in);
+			//	If we couldn't execute the task-in-question
+			//	because the server wasn't running, report it
+			if (!(match.Success() ? status.WhileRunning([&] () {
+				
+				//	Attempt to get command interpreter
+				CommandInterpreter * interpreter;
+				try {
+				
+					interpreter=&(server.GetCommandInterpreter());
+				
+				//	Exception is thrown when command
+				//	interpreter cannot be retrieved,
+				//	i.e. when one has not been set
+				} catch (const std::exception & e) {
+				
+					WriteLog(
+						e.what(),
+						Service::LogType::Error
+					);
+					
+					return;
+				
+				} catch (...) {
+				
+					WriteLog(
+						unspecified_error,
+						Service::LogType::Error
+					);
+					
+					return;
+				
+				}
+				
+				//	Execute command
+				auto result=(*interpreter)(match[1].Value());
+				//	Output result if one was provided
+				if (!(result.IsNull() || (result->Size()==0))) {
+				
+					String log(
+						String::Format(
+							command_result_template,
+							match[1].Value()
+						)
+					);
+					log << Newline << *result;
+					
+					WriteLog(
+						log,
+						Service::LogType::Information
+					);
+				
+				}
 			
+			}) : status.WhileRunning([&] () {
+			
+				//	Attempt to get chat provider
+				ChatProvider * provider;
+				try {
+				
+					provider=&(server.GetChatProvider());
+				
+				//	Exception is thrown when chat provider
+				//	cannot be retrieved, i.e. when one has
+				//	not been set
+				} catch (const std::exception & e) {
+				
+					WriteLog(
+						e.what(),
+						Service::LogType::Error
+					);
+					
+					return;
+				
+				} catch (...) {
+				
+					WriteLog(
+						unspecified_error,
+						Service::LogType::Error
+					);
+					
+					return;
+				
+				}
+				
+				//	Send chat message
+				provider->Send(in);
+			
+			}))) WriteLog(
+				server_not_running,
+				Service::LogType::Warning
+			);
 		
 		}
 	
@@ -27,7 +195,7 @@ class ServerWrapper : public CLIProvider {
 	public:
 	
 	
-		ServerWrapper () {
+		ServerWrapper (const RunningToggle & status) : status(status) {
 	
 			auto & server=Server::Get();
 			
@@ -62,6 +230,12 @@ class CLIApp {
 		Nullable<Vector<PacketID>> packets;
 		//	Keys to log
 		Nullable<Vector<String>> keys;
+		//	Manages the status of the server
+		//	so that the provider does not
+		//	unsafely attempt to access and use
+		//	the command interpreter or
+		//	chat provider
+		RunningToggle status;
 	
 	
 	public:
@@ -92,7 +266,7 @@ class CLIApp {
 				do_restart=false;
 			
 				//	Create wrapper
-				wrapper.Construct();
+				wrapper.Construct(status);
 				
 				//	Install wrapper into CLI
 				cli.SetProvider(&(*wrapper));
@@ -145,11 +319,13 @@ class CLIApp {
 				
 				//	Start the server
 				server.Start();
+				status.Start();
 				
 				//	Wait as the server runs
 				if (cli.Wait()==CLI::ShutdownReason::Panic) std::abort();
 				
 				//	Shutdown server
+				status.Stop();
 				Server::Destroy();
 				
 			} while (do_restart);
