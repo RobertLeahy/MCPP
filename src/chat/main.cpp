@@ -218,7 +218,7 @@ namespace MCPP {
 	
 	static void send (SmartPointer<Client> client, const Vector<packet_type> & packets) {
 	
-		client->Atomic([&] () mutable {	for (auto & packet : packets) client->Send(packet);	});
+		if (!client.IsNull()) client->Atomic([&] () mutable {	for (auto & packet : packets) client->Send(packet);	});
 	
 	}
 	
