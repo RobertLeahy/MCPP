@@ -127,8 +127,8 @@ bin/mods/mcpp_command_shutdown.dll: \
 $(MOD_OBJ) \
 obj/shutdown/main.o | \
 $(COMMAND_LIB) \
-bin/mods/mcpp_op.dll
-	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+bin/mods/mcpp_permissions.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll
 	
 	
 #	DISPLAY TIME

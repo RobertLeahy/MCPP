@@ -1,613 +1,615 @@
 #include <chat/chat.hpp>
 #include <command/command.hpp>
-#include <op/op.hpp>
+#include <permissions/permissions.hpp>
+#include <mod.hpp>
 #include <server.hpp>
-#include <memory>
 #include <utility>
 
 
-namespace MCPP {
+using namespace MCPP;
 
 
-	static const String name("Shutdown/Restart Command");
-	static const String identifier("shutdown");
-	static const Word priority=1;
-	static const String summary("Shuts down or restarts the server.");
-	static const String help(
-		"Syntax: /shutdown [restart|cancel] [quiet] [<time>]\n"
-		"Instructs the server to shutdown and—if \"restart\" is specified—restart.\n"
-		"If a time (in seconds) is specified the server will wait that long before restarting.\n"
-		"Will broadcast countdown through chat unless \"quiet\" is specified.\n"
-		"If \"cancel\" is specified, any restart or shutdown currently pending will be cancelled.\n"
-		"Upon cancellation a broadcast will be sent unless \"quiet\" is specified."
-	);
+static const String name("Shutdown/Restart Command");
+static const Word priority=1;
+static const String shutdown_identifier("shutdown");
+static const String restart_identifier("restart");
+static const String shutdown_summary("Shuts down the server.");
+static const String restart_summary("Restarts the server.");
+static const String shutdown_desc("shutdown");
+static const String restart_desc("restart");
+static const String shutdown_desc_initial_cap("Shutdown");
+static const String restart_desc_initial_cap("Restart");
+static const String help(
+	"Syntax: /{0} [cancel] [quiet] [<time>]\n"
+	"Instructs the server to {1}.\n"
+	"If a time (in seconds) is specified the server will delay the {1} for that amount of time after the command is executed.\n"
+	"Will broadcast through chat unless \"quiet\" is specified.\n"
+	"If \"cancel\" is specified, any shutdown or restart currently pending will be cancelled.\n"
+	"Upon cancellation a broadcast will be sent unless \"quiet\" is specified."
+);
+static const String cancel_arg("cancel");
+static const String quiet_arg("quiet");
+static const String no_pending("There is no pending shutdown or restart.");
+static const String pending("Another shutdown or restart is pending.");
+static const String cancelled("Pending {0} cancelled");
+static const String by(" by {0}");
+static const String requested("{0} requested");
+static const String in(" in {0}");
+static const String announcement("Server {0} in {1}");
+
+
+//	Time templates
+static const String time_separator(", ");
+static const String time_template("{0} {1}");
+static const String day("day");
+static const String hour("hour");
+static const String minute("minute");
+static const String second("second");
+static const String days("days");
+static const String hours("hours");
+static const String minutes("minutes");
+static const String seconds("seconds");
+static const Word mps=1000;
+static const Word mpm=60*mps;
+static const Word mph=60*mpm;
+static const Word mpd=24*mph;
+
+
+static inline String get_worker (Word & milliseconds, Word per, const String & singular, const String & plural) {
+
+	String retr;
 	
+	if (milliseconds>=per) {
 	
-	//	Parsing
-	static const Regex is_restart(
-		"(?:^|\\s)restart(?:$|\\s)",
-		RegexOptions().SetIgnoreCase()
-	);
-	static const Regex is_cancel(
-		"(?:^|\\s)cancel(?:$|\\s)",
-		RegexOptions().SetIgnoreCase()
-	);
-	static const Regex is_quiet(
-		"(?:^|\\s)quiet(?:$|\\s)",
-		RegexOptions().SetIgnoreCase()
-	);
-	static const Regex extract_time(
-		"(?:^|\\s)(\\d+)(?:$|\\s)"
-	);
-	static const Regex last_word(
-		"[^\\s]*$"
-	);
-	static const String word_regex(
-		"(?:^|\\s){0}"
-	);
-	
-	
-	//	Arguments
-	static const String restart("restart");
-	static const String cancel("cancel");
-	static const String quiet("quiet");
-	
-	
-	//	Logging
-	static const String shutdown_label("Shutdown");
-	static const String restart_label("Restart");
-	static const String cancelled("{0} cancelled");
-	static const String announcement("{0} in {1}");
-	static const String log("{0} requested by {1}");
-	static const String shutdown_log("Shutting down");
-	static const String restart_log("Restarting");
-	static const String separator(" ");
-	
-	
-	//	Time templates
-	static const String time_separator(", ");
-	static const String time_template("{0} {1}");
-	static const String day("day");
-	static const String hour("hour");
-	static const String minute("minute");
-	static const String second("second");
-	static const String days("days");
-	static const String hours("hours");
-	static const String minutes("minutes");
-	static const String seconds("seconds");
-	static const Word mps=1000;
-	static const Word mpm=60*mps;
-	static const Word mph=60*mpm;
-	static const Word mpd=24*mph;
-	
-	
-	static inline String get_worker (Word & milliseconds, Word per, const String & singular, const String & plural) {
-	
-		String retr;
+		Word num=milliseconds/per;
 		
-		if (milliseconds>=per) {
+		retr=String::Format(
+			time_template,
+			num,
+			(num==1) ? singular : plural
+		);
 		
-			Word num=milliseconds/per;
-			
-			retr=String::Format(
-				time_template,
-				num,
-				(num==1) ? singular : plural
-			);
-			
-			if ((milliseconds%per)!=0) retr << time_separator;
-			
-			milliseconds-=num*per;
+		if ((milliseconds%per)!=0) retr << time_separator;
+		
+		milliseconds-=num*per;
+	
+	}
+	
+	return retr;
+
+}
+
+
+static inline String get_days (Word & milliseconds) {
+
+	return get_worker(
+		milliseconds,
+		mpd,
+		day,
+		days
+	);
+
+}
+
+
+static inline String get_hours (Word & milliseconds) {
+
+	return get_worker(
+		milliseconds,
+		mph,
+		hour,
+		hours
+	);
+
+}
+
+
+static inline String get_minutes (Word & milliseconds) {
+
+	return get_worker(
+		milliseconds,
+		mpm,
+		minute,
+		minutes
+	);
+
+}
+
+
+static inline String get_seconds (Word & milliseconds) {
+
+	return get_worker(
+		milliseconds,
+		mps,
+		second,
+		seconds
+	);
+
+}
+
+
+static inline String get_time (Word milliseconds) {
+
+	String retr(get_days(milliseconds));
+	retr << get_hours(milliseconds);
+	retr << get_minutes(milliseconds);
+	retr << get_seconds(milliseconds);
+	return retr;
+
+}
+
+
+static inline Word get_next_impl (Word curr, Word modulo) noexcept {
+
+	return ((curr%modulo)==0) ? (curr-modulo) : ((curr/modulo)*modulo);
+
+}
+
+
+static inline Word get_next (Word curr) noexcept {
+
+	//	15 seconds or less, send an announcement
+	//	every second
+	if (curr<=(15*mps)) return get_next_impl(curr,mps);
+	
+	//	A minute or less, send an announcement
+	//	every 15 seconds
+	if (curr<=mpm) return get_next_impl(curr,15*mps);
+	
+	//	Fifteen minutes or less, send an
+	//	announcement every minute
+	if (curr<=(15*mpm)) return get_next_impl(curr,mpm);
+	
+	//	An hour or less, send an announcement
+	//	every 15 minutes
+	if (curr<=mph) return get_next_impl(curr,15*mpm);
+	
+	//	Over an hour, send an announcement every
+	//	hour
+	return get_next_impl(curr,mph);
+
+}
+
+
+class ShutdownInfo {
+
+
+	public:
+	
+	
+		//	Whether or not this shutdown is
+		//	quiet, i.e. whether or not it will
+		//	broadcast a countdown through chat
+		bool Quiet;
+		//	How many seconds should be delayed
+		//	before the shutdown/restart
+		Word When;
+		//	Whether or not this is a restart
+		//	request
+		bool Restart;
+		//	Who requested this shutdown or
+		//	restart
+		Nullable<String> RequestedBy;
+		//	Whether this is a cancellation request
+		//	or not
+		bool Cancel;
+		
+		
+		ShutdownInfo () noexcept : Quiet(false), When(0), Cancel(false) {	}
+
+
+};
+
+
+class Shutdown : public Module, public Command {
+
+
+	private:
+	
+	
+		//	Current shutdown/restart event
+		Mutex lock;
+		SmartPointer<ShutdownInfo> info;
+	
+	
+		static bool is_shutdown (const String & identifier) {
+		
+			return identifier==shutdown_identifier;
 		
 		}
 		
-		return retr;
-	
-	}
-	
-	
-	static inline String get_days (Word & milliseconds) {
-	
-		return get_worker(
-			milliseconds,
-			mpd,
-			day,
-			days
-		);
-	
-	}
-	
-	
-	static inline String get_hours (Word & milliseconds) {
-	
-		return get_worker(
-			milliseconds,
-			mph,
-			hour,
-			hours
-		);
-	
-	}
-	
-	
-	static inline String get_minutes (Word & milliseconds) {
-	
-		return get_worker(
-			milliseconds,
-			mpm,
-			minute,
-			minutes
-		);
-	
-	}
-	
-	
-	static inline String get_seconds (Word & milliseconds) {
-	
-		return get_worker(
-			milliseconds,
-			mps,
-			second,
-			seconds
-		);
-	
-	}
-	
-	
-	static inline String get_time (Word milliseconds) {
-	
-		String retr(get_days(milliseconds));
-		retr << get_hours(milliseconds);
-		retr << get_minutes(milliseconds);
-		retr << get_seconds(milliseconds);
-		return retr;
-	
-	}
-	
-	
-	static inline Word get_next_impl (Word curr, Word modulo) noexcept {
-	
-		return ((curr%modulo)==0) ? (curr-modulo) : ((curr/modulo)*modulo);
-	
-	}
-	
-	
-	static inline Word get_next (Word curr) noexcept {
-	
-		//	15 seconds or less, send an announcement
-		//	every second
-		if (curr<=(15*mps)) return get_next_impl(curr,mps);
 		
-		//	A minute or less, send an announcement
-		//	every 15 seconds
-		if (curr<=mpm) return get_next_impl(curr,15*mps);
+		SmartPointer<ShutdownInfo> parse (const CommandEvent & event) {
 		
-		//	Fifteen minutes or less, send an
-		//	announcement every minute
-		if (curr<=(15*mpm)) return get_next_impl(curr,mpm);
-		
-		//	An hour or less, send an announcement
-		//	every 15 minutes
-		if (curr<=mph) return get_next_impl(curr,15*mpm);
-		
-		//	Over an hour, send an announcement every
-		//	hour
-		return get_next_impl(curr,mph);
-	
-	}
-	
-	
-	//	Contains information about a
-	//	shutdown/restart request
-	class ShutdownInfo {
-	
-		
-		public:
-		
-		
-			//	Whether the shutdown is
-			//	quiet or not
-			bool Quiet;
-			//	How long until shutdown
-			//	when the task will wake
-			//	up again
-			Word Next;
-			//	How long until shutdown
-			//	when the task last woke
-			//	up
-			Word Last;
-			//	How long since the task
-			//	last woke up
-			Timer Since;
-			//	Whether or not this is
-			//	a restart request
-			bool Restart;
-			//	Who requested this shutdown
-			//	or restart
-			Nullable<String> RequestedBy;
-			//	Must be held to modify/read
-			//	this structure (except the
-			//	worker function, which doesn't
-			//	need to lock to read, as it's
-			//	the only thread allowed to
-			//	modify the structure)
-			Mutex Lock;
-		
-	
-	};
-
-
-	class Shutdown : public Module, public Command {
-	
-	
-		private:
-		
-		
-			Mutex lock;
-			SmartPointer<ShutdownInfo> info;
+			auto retr=SmartPointer<ShutdownInfo>::Make();
 			
+			//	Parse arguments
+			bool time_specified=false;
+			for (const auto & arg : event.Arguments) {
 			
-			inline void do_shutdown (SmartPointer<ShutdownInfo> info) const {
+				if (arg==cancel_arg) {
+				
+					//	Don't specify the same flag multiple
+					//	times
+					if (retr->Cancel) goto syntax_error;
+					
+					retr->Cancel=true;
+					
+				} else if (arg==quiet_arg) {
+				
+					//	Don't specify the same flag multiple
+					//	times
+					if (retr->Quiet) goto syntax_error;
+					
+					retr->Quiet=true;
+				
+				} else if (arg.ToInteger(&(retr->When))) {
+				
+					//	Don't specify the delay multiple
+					//	times
+					if (time_specified) goto syntax_error;
+					
+					time_specified=true;
+				
+				} else {
+				
+					//	Couldn't parse
+					goto syntax_error;
+					
+				}
 			
-				auto & server=Server::Get();
+			}
 			
-				server.WriteLog(
-					info->Restart ? restart_log : shutdown_log,
+			//	You can't delay a cancellation
+			if (retr->Cancel && time_specified) goto syntax_error;
+			
+			//	Shutdown or restart?
+			retr->Restart=!is_shutdown(event.Identifier);
+			//	Who requested this action?
+			if (!event.Issuer.IsNull()) retr->RequestedBy.Construct(event.Issuer->GetUsername());
+			
+			return retr;
+			
+			//	Control jumps here when there's a
+			//	syntax error and null should be
+			//	returned
+			syntax_error:
+			retr=SmartPointer<ShutdownInfo>();
+			return retr;
+		
+		}
+		
+		
+		void error (ChatMessage & message, String text) {
+		
+			message	<<	ChatStyle::Bold
+					<<	ChatStyle::Red
+					<<	std::move(text);
+		
+		}
+		
+		
+		void success (ChatMessage & message, String text) {
+		
+			message <<	ChatStyle::Bold
+					<<	ChatStyle::BrightGreen
+					<<	std::move(text);
+		
+		}
+		
+		
+		void warning (ChatMessage & message, String text) {
+		
+			message	<<	ChatStyle::Bold
+					<<	ChatStyle::Yellow
+					<<	std::move(text);
+		
+		}
+		
+		
+		void cancel (CommandEvent event, const ShutdownInfo & info, CommandResult & retr) {
+		
+			//	Get the pending restart/shutdown
+			auto cancelled=lock.Execute([&] () mutable {	return std::move(this->info);	});
+			
+			//	If there was no pending restart/shutdown,
+			//	this command was erroneous
+			if (cancelled.IsNull()) {
+			
+				error(retr.Message,no_pending);
+			
+			//	Otherwise we cancelled it
+			} else {
+			
+				//	Prepare a message
+				String log(
+					String::Format(
+						::cancelled,
+						cancelled->Restart ? restart_desc : shutdown_desc
+					)
+				);
+				
+				//	If this is quiet, we just send this
+				//	back to the issuer
+				if (info.Quiet) success(retr.Message,log);
+				
+				//	Before we write to the log, we get the
+				//	person (if any) who cancelled this shutdown
+				if (!info.RequestedBy.IsNull()) log << String::Format(
+					by,
+					*info.RequestedBy
+				);
+				
+				//	If this isn't quiet, we send this to everyone
+				//	now
+				if (!info.Quiet) {
+				
+					ChatMessage broadcast;
+					success(broadcast,log);
+					Chat::Get().Send(broadcast);
+				
+				}
+				
+				//	Write out to the log
+				Server::Get().WriteLog(
+					log,
 					Service::LogType::Information
 				);
+			
+			}
+		
+		}
+		
+		
+		void worker (SmartPointer<ShutdownInfo> info, Word remaining) {
+			
+			//	Ensure that this shutdown/restart
+			//	event is still enqueued
+			if (lock.Execute([&] () {	return static_cast<const ShutdownInfo *>(this->info);	})!=static_cast<ShutdownInfo *>(info)) return;
+			
+			auto & server=Server::Get();
+			
+			//	Actually shutdown/restart if applicable
+			if (remaining==0) {
 				
 				if (info->Restart) server.Restart();
 				else server.Stop();
+				
+				return;
 			
 			}
 			
+			server.PanicOnThrow([&] () mutable {
 			
-			inline bool do_maintenance (const SmartPointer<ShutdownInfo> & info) {
-			
-				lock.Acquire();
-				if (this->info!=info) {
-				
-					//	Cancelled
-					
-					lock.Release();
-					
-					return false;
-				
-				}
-				//	If this action is to be
-				//	performed at once, remove
-				//	the pending action
-				if (info->Next==0) this->info=SmartPointer<ShutdownInfo>();
-				lock.Release();
-				
-				return true;
-			
-			}
-			
-			
-			inline void do_periodic (SmartPointer<ShutdownInfo> info) const {
-			
+				Word next;
+				//	If the shutdown/restart is quiet, there's no
+				//	reason for this task to run again until it
+				//	comes time to actually restart/shutdown
 				if (info->Quiet) {
 				
-					info->Lock.Execute([&] () mutable {
-					
-						info->Next=0;
-						info->Since=Timer::CreateAndStart();
-					
-					});
-					
+					next=0;
+				
 				} else {
-			
+				
+					next=get_next(remaining);
+				
 					//	Send announcement
 					ChatMessage message;
-					message	<<	ChatStyle::Bold
-							<<	ChatStyle::Yellow
-							<<	String::Format(
-									announcement,
-									info->Restart ? restart_label : shutdown_label,
-									get_time(info->Next)
-								);
+					warning(
+						message,
+						String::Format(
+							announcement,
+							info->Restart ? restart_desc : shutdown_desc,
+							get_time(remaining)
+						)
+					);
+					
 					Chat::Get().Send(message);
 				
-					//	When will the next iteration be?
-					Word next=get_next(info->Next);
-					
-					//	Update structure
-					info->Lock.Execute([&] () mutable {
-					
-						info->Last=info->Next;
-						info->Next=next;
-						info->Since=Timer::CreateAndStart();
-					
-					});
-					
 				}
-			
-				//	Enqueue next iteration
 				
-				//	Calculate next iteration time here
-				//	to avoid undefined behaviour (using
-				//	info to calculate the time and
-				//	moving it into the lambda)
-				Word when=info->Last-info->Next;
-				
-				//	C++14 explicitly supports
-				//	generalized lambda capture,
-				//	and GCC has supported this
-				//	particular syntax since 4.5,
-				//	so I see now reason not to
-				//	take advantage of it
+				//	Enqueue next iteration				
 				#pragma GCC diagnostic push
 				#pragma GCC diagnostic ignored "-Wpedantic"
-				Server::Get().Pool().Enqueue(
-					when,
-					[=,info=std::move(info)] () mutable {	worker_func(std::move(info));	}
+				server.Pool().Enqueue(
+					remaining-next,
+					[this,info=std::move(info),next] () mutable {	worker(std::move(info),next);	}
 				);
 				#pragma GCC diagnostic pop
 			
-			}
-			
-			
-			void worker_func (SmartPointer<ShutdownInfo> info) {
-			
-				Server::PanicOnThrow([&] () mutable {
-				
-					//	Make sure our shutdown/restart
-					//	request wasn't cancelled
-					if (!do_maintenance(info)) return;
-					
-					//	Are we to perform the action
-					//	at once?
-					if (info->Next==0) do_shutdown(std::move(info));
-					//	Otherwise...
-					else do_periodic(std::move(info));
-				
-				});
-			
-			}
-	
-	
-		public:
+			});
+		
+		}
 		
 		
-			virtual const String & Name () const noexcept override {
+		void execute (CommandEvent event, SmartPointer<ShutdownInfo> info, CommandResult & retr) {
+		
+			//	We test to see if there's already a pending
+			//	restart/shutdown.  If there is we do not
+			//	proceed, otherwise we install the new
+			//	information block
+			if (lock.Execute([&] () mutable {
 			
-				return name;
-			
-			}
-			
-			
-			virtual Word Priority () const noexcept override {
-			
-				return priority;
-			
-			}
-			
-			
-			virtual void Install () override {
-			
-				Commands::Get().Add(this);
-			
-			}
-			
-			
-			virtual const String & Identifier () const noexcept override {
-			
-				return identifier;
-			
-			}
-			
-			
-			virtual const String & Summary () const noexcept override {
-			
-				return summary;
-			
-			}
-			
-			
-			virtual const String & Help () const noexcept override {
-			
-				return help;
-			
-			}
-			
-			
-			virtual bool Check (SmartPointer<Client> client) const noexcept override {
-			
-				return Ops::Get().IsOp(client->GetUsername());
-			
-			}
-			
-			
-			virtual Vector<String> AutoComplete (const String & args) const {
-			
-				//	Attempt to extract the last word
-				auto match=last_word.Match(args);
+				if (!this->info.IsNull()) return false;
 				
-				Vector<String> retr;
+				this->info=info;
 				
-				Regex matcher(String::Format(
-					word_regex,
-					Regex::Escape(
-						match.Value()
+				return true;
+			
+			})) try {
+			
+				//	Log/return message to issuer
+				String log(
+					String::Format(
+						requested,
+						info->Restart ? restart_desc_initial_cap : shutdown_desc_initial_cap
 					)
-				));
+				);
+				if (info->When!=0) log << String::Format(
+					in,
+					get_time(info->When)
+				);
 				
-				if (
-					matcher.IsMatch(restart) &&
-					!is_restart.IsMatch(args)
-				) retr.Add(restart);
+				success(retr.Message,log);
 				
-				if (
-					matcher.IsMatch(quiet) &&
-					!is_quiet.IsMatch(args)
-				) retr.Add(quiet);
+				if (!info->RequestedBy.IsNull()) log << String::Format(
+					by,
+					*info->RequestedBy
+				);
 				
-				if (
-					matcher.IsMatch(cancel) &&
-					!is_cancel.IsMatch(args)
-				) retr.Add(cancel);
+				auto & server=Server::Get();
+				
+				server.WriteLog(
+					log,
+					Service::LogType::Information
+				);
+				
+				//	Enqueue task
+				#pragma GCC diagnostic push
+				#pragma GCC diagnostic ignored "-Wpedantic"				
+				server.Pool().Enqueue(
+					[this,info=std::move(info)] () mutable {
+					
+						Word remaining=info->When;
+					
+						worker(
+							std::move(info),
+							remaining
+						);
+					
+					}
+				);
+				#pragma GCC diagnostic pop
+				
+			//	On error, dequeue shutdown/restart
+			} catch (...) {
+			
+				lock.Execute([&] () mutable {	this->info=SmartPointer<ShutdownInfo>();	});
+				
+				throw;
+			
+			}
+			//	Another shutdown/restart pending
+			else error(retr.Message,pending);
+		
+		}
+
+
+	public:
+	
+	
+		virtual const String & Name () const noexcept override {
+		
+			return name;
+		
+		}
+		
+		
+		virtual Word Priority () const noexcept override {
+		
+			return priority;
+		
+		}
+		
+		
+		virtual void Install () override {
+		
+			auto & commands=Commands::Get();
+			commands.Add(
+				shutdown_identifier,
+				this
+			);
+			commands.Add(
+				restart_identifier,
+				this
+			);
+		
+		}
+		
+		
+		virtual void Summary (const String & identifier, ChatMessage & message) override {
+		
+			message << (is_shutdown(identifier) ? shutdown_summary : restart_summary);
+		
+		}
+		
+		
+		virtual void Help (const String & identifier, ChatMessage & message) override {
+		
+			message << String::Format(
+				help,
+				identifier,
+				is_shutdown(identifier) ? shutdown_desc : restart_desc
+			);
+		
+		}
+		
+		
+		virtual bool Check (const CommandEvent & event) override {
+		
+			return event.Issuer.IsNull() ? true : Permissions::Get().GetUser(event.Issuer).Check(event.Identifier);
+		
+		}
+		
+		
+		virtual CommandResult Execute (CommandEvent event) override {
+		
+			CommandResult retr;
+		
+			//	Parse
+			auto info=parse(event);
+			
+			//	Abort immediately on syntax errors
+			if (!info) {
+			
+				retr.Status=CommandStatus::SyntaxError;
 				
 				return retr;
 			
 			}
 			
+			//	Convert seconds to milliseconds
+			try {
 			
-			virtual bool Execute (SmartPointer<Client> client, const String & args, ChatMessage & message) {
+				info->When=static_cast<Word>(SafeWord(info->When)*SafeWord(1000));
 			
-				//	Are we cancelling a restart/shutdown
-				//	request?
-				if (is_cancel.IsMatch(args)) {
+			} catch (...) {
+			
+				//	We report this overflow as a syntax error
+				retr.Status=CommandStatus::SyntaxError;
 				
-					//	Null the shutdown request (cancelling
-					//	it), and load it (so we can determine
-					//	whether anything was actually cancelled
-					//	at all)
-					lock.Acquire();
-					auto info=std::move(this->info);
-					lock.Release();
-					
-					if (!info.IsNull()) {
-					
-						//	We cancelled a shutdown
-						
-						//	Broadcast if not quiet, otherwise
-						//	just return the cancelled message
-						//	to the requester
-						Nullable<ChatMessage> broadcast;
-						bool quiet=is_quiet.IsMatch(args);
-						if (!quiet) broadcast.Construct();
-						ChatMessage & m=quiet ? message : *broadcast;
-						
-						m	<<	ChatStyle::BrightGreen
-							<<	ChatStyle::Bold
-							<<	String::Format(
-									cancelled,
-									info->Restart ? restart_label : shutdown_label
-								);
-								
-						//	Send if applicable
-						if (!quiet) Chat::Get().Send(*broadcast);
-					
-					}
-					
-					//	Done
-					return true;
-				
-				}
-				
-				//	Create a shutdown info structure
-				//	to hold information about this
-				//	shutdown event
-				auto info=SmartPointer<ShutdownInfo>::Make();
-				
-				//	Parse the request
-				
-				//	Quiet?
-				info->Quiet=is_quiet.IsMatch(args);
-				
-				//	Restart?
-				info->Restart=is_restart.IsMatch(args);
-				
-				//	Time?
-				auto match=extract_time.Match(args);
-				if (match.Success()) {
-				
-					Word seconds;
-					if (!match[1].Value().ToInteger(&seconds)) return false;
-				
-					try {
-					
-						info->Next=Word(SafeWord(seconds)*SafeWord(1000));
-					
-					} catch (...) {
-					
-						//	Number of seconds specified was
-						//	too large
-						
-						return false;
-					
-					}
-				
-				}
-				
-				//	Initialize remaining fields
-				info->Last=info->Next;
-				if (!client.IsNull()) info->RequestedBy.Construct(client->GetUsername());
-				
-				auto & server=Server::Get();
-				
-				//	If the shutdown/restart is not
-				//	immediate, there's logging et cetera
-				//	to do
-				if (info->Next!=0) {
-				
-					String str(String::Format(
-						announcement,
-						info->Restart ? restart_label : shutdown_label,
-						get_time(info->Next)
-					));
-					
-					//	If this shutdown/restart is quiet,
-					//	return the announcement to the
-					//	requester
-					if (info->Quiet) message << ChatStyle::Yellow << ChatStyle::Bold << str;
-					
-					//	Log
-					
-					if (!client.IsNull()) str=String::Format(
-						log,
-						str,
-						client->GetUsername()
-					);
-					
-					server.WriteLog(
-						str,
-						Service::LogType::Information
-					);
-				
-				}
-				
-				lock.Execute([&] () mutable {
-				
-					//	Enqueue worker
-					Server::Get().Pool().Enqueue([=] () mutable {	worker_func(std::move(info));	});
-					
-					this->info=std::move(info);
-					
-				});
-				
-				return true;
+				return retr;
 			
 			}
-	
-	
-	};
-
-
-}
-
-
-static Nullable<Shutdown> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
+			
+			//	Notwithstanding syntax errors, the only
+			//	other possibility is "success".
+			//
+			//	Success may still "fail" -- i.e. may not
+			//	restart the server or enqueue a restart, but
+			//	it will appear to be a success from the
+			//	point-of-view of the command interpreter
+			retr.Status=CommandStatus::Success;
+			
+			//	Handle cancellations
+			if (info->Cancel) cancel(
+				std::move(event),
+				*info,
+				retr
+			);
+			//	Handle actual shutdown/restart
+			else execute(
+				std::move(event),
+				std::move(info),
+				retr
+			);
+			
+			return retr;
 		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
+		}
 
 
-}
+};
+
+
+INSTALL_MODULE(Shutdown)
