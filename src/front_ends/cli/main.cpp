@@ -263,7 +263,9 @@ class CLIApp {
 		
 			do {
 			
+				//	Reset
 				do_restart=false;
+				cli.ResetState();
 			
 				//	Create wrapper
 				wrapper.Construct(status);
@@ -633,7 +635,7 @@ static const String help_string(
 	"\n"
 	"Use CTRL+C at anytime to shut the server down\n"
 	"\n"
-	"Enter \"chat\" to see the chat log, \"log\" to see the server log"
+	"Enter \"/chat\" to see the chat log, \"/log\" to see the server log"
 );
 //	Arguments which will cause help to be
 //	displayed
