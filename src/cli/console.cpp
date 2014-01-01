@@ -294,6 +294,13 @@ namespace MCPP {
 				}
 			
 			} catch (...) {
+
+				//	Restore original console
+				//	mode before we terminate
+				SetConsoleMode(
+					in,
+					mode
+				);
 			
 				//	PANIC
 				
@@ -303,6 +310,8 @@ namespace MCPP {
 				
 				//	Can't handle this
 				} catch (...) {	}
+				
+				return;
 			
 			}
 			

@@ -395,6 +395,13 @@ namespace MCPP {
 	}
 	
 	
+	void CLI::ResetState () noexcept {
+	
+		lock.Execute([&] () mutable {	if (reason!=ShutdownReason::Panic) reason=ShutdownReason::None;	});
+	
+	}
+	
+	
 	void CLI::Shutdown () noexcept {
 	
 		stop(ShutdownReason::Stop);

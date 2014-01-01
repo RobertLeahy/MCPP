@@ -446,6 +446,10 @@ namespace MCPP {
 			 */
 			ShutdownReason GetState () const noexcept;
 			/**
+			 *	Resets the CLI's current state.
+			 */
+			void ResetState () noexcept;
+			/**
 			 *	Requests that the CLI shut down.
 			 */
 			void Shutdown () noexcept;
