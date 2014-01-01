@@ -2,12 +2,11 @@ mods: \
 bin/mods/mcpp_command.dll \
 bin/mods/mcpp_command_blacklist.dll \
 bin/mods/mcpp_command_chat_log.dll \
-bin/mods/mcpp_command_get.dll \
 bin/mods/mcpp_command_kick.dll \
 bin/mods/mcpp_command_op.dll \
 bin/mods/mcpp_command_permissions.dll \
 bin/mods/mcpp_command_save.dll \
-bin/mods/mcpp_command_set.dll \
+bin/mods/mcpp_command_settings.dll \
 bin/mods/mcpp_command_shutdown.dll \
 bin/mods/mcpp_command_time.dll \
 bin/mods/mcpp_command_verbose.dll \
@@ -51,17 +50,6 @@ $(COMMAND_LIB) \
 bin/mods/mcpp_op.dll \
 bin/data_provider.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll bin/data_provider.dll
-	
-	
-#	DISPLAY SETTINGS THROUGH CHAT
-
-
-bin/mods/mcpp_command_get.dll: \
-$(MOD_OBJ) \
-obj/settings/get.o | \
-$(COMMAND_LIB) \
-bin/mods/mcpp_op.dll
-	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
 	
 	
 #	KICK
@@ -112,12 +100,12 @@ bin/mods/mcpp_save.dll
 #	CONFIGURATION
 
 
-bin/mods/mcpp_command_set.dll: \
+bin/mods/mcpp_command_settings.dll: \
 $(MOD_OBJ) \
-obj/settings/set.o | \
+obj/settings/main.o | \
 $(COMMAND_LIB) \
-bin/mods/mcpp_op.dll
-	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+bin/mods/mcpp_permissions.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll
 	
 	
 #	SHUTDOWN/RESTART SERVER
