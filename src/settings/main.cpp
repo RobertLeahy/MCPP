@@ -37,7 +37,7 @@ static const String value []={
 	"\" has value \"",
 	"\""
 };
-static const Regex set_regex("^\\S+\\s+(\\S.*)$");
+static const Regex set_regex("^\\s*\\S+\\s+(\\S.*)$");
 static const char * parsing_irregularity="Irregularity while parsing arguments";
 static const String cleared []={
 	"Setting \"",
