@@ -9,6 +9,7 @@
 #include <rleahylib/rleahylib.hpp>
 #include <chat/chat.hpp>
 #include <command/command.hpp>
+#include <mod.hpp>
 #include <unordered_map>
 
 
