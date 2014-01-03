@@ -1,5 +1,12 @@
+#include <rleahylib/rleahylib.hpp>
 #include <command/command.hpp>
 #include <chat/chat.hpp>
+#include <mod.hpp>
+#include <server.hpp>
+#include <utility>
+
+
+using namespace MCPP;
 
 
 static const Word priority=1;
@@ -11,8 +18,8 @@ static const String help(
 	"Sends a private message to <player name>.\n"
 	"Note that this message will still be logged."
 );
-static const Regex whitespace("\\s");
-static const Regex parse("^([^\\s]+)\\s+(.+)$");
+static const Regex extract_message("^\\s*\\S+\\s+(\\S.*)$");
+static const String dne("User \"{0}\" does not exist");
 
 
 class Whisper : public Module, public Command {
@@ -37,110 +44,136 @@ class Whisper : public Module, public Command {
 		
 		virtual void Install () override {
 		
-			Commands::Get().Add(this);
+			Commands::Get().Add(
+				identifier,
+				this
+			);
 		
 		}
 		
 		
-		virtual const String & Summary () const noexcept override {
+		virtual void Summary (const String &, ChatMessage & message) override {
 		
-			return summary;
-		
-		}
-		
-		
-		virtual const String & Help () const noexcept override {
-		
-			return help;
+			message << summary;
 		
 		}
 		
 		
-		virtual const String & Identifier () const noexcept override {
+		virtual void Help (const String &, ChatMessage & message) override {
 		
-			return identifier;
+			message << help;
 		
 		}
 		
 		
-		virtual Vector<String> AutoComplete (const String & args) const override {
+		virtual Vector<String> AutoComplete (const CommandEvent & event) override {
 		
 			Vector<String> retr;
-		
-			//	Is there whitespace in the args
-			//	listing?
-			//
-			//	If so a username has been specified
-			//	and there's nothing we can do
-			if (whitespace.IsMatch(args)) return retr;
 			
-			//	The list of completions is the
-			//	list of users whose usernames
-			//	begin with the specified string
-			auto matches=Server::Get().Clients.Get(
-				args,
+			//	If there's more than one argument,
+			//	there's no autocompletions that can
+			//	be made
+			if (event.Arguments.Count()>1) return retr;
+			
+			auto & clients=Server::Get().Clients;
+			
+			//	If there's no arguments, the autocompletions
+			//	is the name of every logged in player
+			if (event.Arguments.Count()==0) {
+			
+				for (auto & client : clients) if (
+					(client!=event.Issuer) &&
+					(client->GetState()==ProtocolState::Play)
+				) retr.Add(client->GetUsername());
+				
+				return retr;
+			
+			}
+			
+			//	If there's just the one argument, every
+			//	player whose name matches is an autocompletion
+			for (auto & client : clients.Get(
+				event.Arguments[0],
 				ClientSearch::Begin
-			);
-			
-			//	Extract usernames
-			for (auto & client : matches) retr.Add(client->GetUsername());
+			)) retr.Add(client->GetUsername());
 			
 			return retr;
 		
 		}
 		
 		
-		virtual bool Execute (SmartPointer<Client> client, const String & args, ChatMessage & message) override {
+		virtual CommandResult Execute (CommandEvent event) override {
 		
-			//	Attempt to parse args
-			auto match=parse.Match(args);
+			CommandResult retr;
+		
+			//	There needs to be more than two arguments
+			if (event.Arguments.Count()<=1) {
 			
-			if (!match.Success()) return false;
+				retr.Status=CommandStatus::SyntaxError;
+				
+				return retr;
 			
-			//	Prepare a message
+			}
+			
+			//	Extract the message
+			auto match=extract_message.Match(event.RawArguments);
+			//	If a message could not be extracted,
+			//	the syntax of the command was incorrect
+			if (!match.Success()) {
+			
+				retr.Status=CommandStatus::SyntaxError;
+				
+				return retr;
+			
+			}
+			
+			//	Command will always succeed now
+			retr.Status=CommandStatus::Success;
+			
+			//	Prepare a whisper
 			ChatMessage whisper(
-				client,
-				match[1].Value(),
-				match[2].Value()
+				event.Issuer,
+				event.Arguments[0],
+				match[1].Value()
 			);
 			
+			auto & chat=Chat::Get();
+			
 			//	Attempt to send
-			if (Chat::Get().Send(whisper).Count()==0) {
+			if (chat.Send(whisper).Count()==0) {
 			
 				//	Delivery success -- could not be
 				//	delivered to zero recipients (meaning
 				//	intended recipient exists)
 				
-				//	Send it back to original sender
-				
-				//	If the original sender is the server,
-				//	it'll show up in the chat log, so don't
-				//	echo
-				if (!client.IsNull()) {
+				//	Send back to original sender, unless
+				//	the original sender is the server, in
+				//	which case it'll show up in the chat
+				//	log
+				if (!event.Issuer.IsNull()) {
 				
 					whisper.Echo=true;
 					
-					message=std::move(whisper);
-					
+					chat.Send(whisper);
+				
 				}
 			
 			} else {
 			
-				//	Delivery failure -- could not be
-				//	delivered to at least one recipient
-				//	(meaning intended recipient does not
-				//	exist).
+				//	Delivery failure -- could not be delivered
+				//	to at least one recipient (meaning intended
+				//	recipient does not exist).
 				
-				//	Transmit error to caller
-				message	<< ChatStyle::Red
-						<< ChatStyle::Bold
-						<< "User \""
-						<< match[1].Value()
-						<< "\" does not exist";
+				retr.Message	<<	ChatStyle::Bold
+								<<	ChatStyle::Red
+								<<	String::Format(
+										dne,
+										event.Arguments[0]
+									);
 			
 			}
 			
-			return true;
+			return retr;
 		
 		}
 
