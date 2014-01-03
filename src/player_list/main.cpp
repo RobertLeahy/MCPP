@@ -1,7 +1,15 @@
-#include <common.hpp>
-#include <utility>
+#include <rleahylib/rleahylib.hpp>
+#include <client.hpp>
+#include <hash.hpp>
+#include <mod.hpp>
+#include <packet.hpp>
+#include <server.hpp>
+#include <limits>
 #include <unordered_map>
-#include <functional>
+#include <utility>
+
+
+using namespace MCPP;
 
 
 //	The frequency with which every player's
@@ -12,101 +20,177 @@ static const String name("Player List Support");
 static const Word priority=1;
 
 
-class PlayerListInfo {
-
-
-	public:
-	
-	
-		//	The client
-		SmartPointer<Client> Conn;
-		//	Whether or not other clients
-		//	have been notified that this
-		//	client logged in.
-		bool Sent;
-	
-	
-		PlayerListInfo (SmartPointer<Client> client) noexcept : Conn(std::move(client)), Sent(false) {	}
-		PlayerListInfo () = default;
-
-
-};
-
-
 class PlayerList : public Module {
 
 
 	private:
 	
 	
-		//	The packet we'll be dealing with
-		typedef PacketTypeMap<0xC9> pt;
-		
-		
-		//	Periodic callback to keep pings in the
-		//	clients' lists up to date
-		std::function<void ()> callback;
+		typedef Packets::Play::Clientbound::PlayerListItem packet_type;
 	
 	
-		//	The onlogin event (which we use to trigger
-		//	player list updates) is not guaranteed to
-		//	fire with any particular ordering with respect
-		//	to the ondisconnect event (which we also use
-		//	to send player list updates).
-		//
-		//	The Notchian server gets around this issue
-		//	in two ways:
-		//
-		//	1.	It's a single-threaded piece of garbage.
-		//	2.	It sends one packet per user to every
-		//		user per tick.
-		//
-		//	Both of these design choices are moronic, like
-		//	so much else about the raw implementation of
-		//	vanilla Minecraft.
-		//
-		//	The way we will reconcile this issue is by
-		//	maintaining our own map of connected users.
-		//
-		//	Whenever the module is ready to generate some
-		//	event, it'll lock the map and deal with a snapshot
-		//	of the data, thereby insuring consistency.
-		//
-		//	It will set the flag in each user's data structure
-		//	when it sends an initial list update with that
-		//	user flagged as connected.  This tells
-		//	the ondisconnect event that it can send
-		//	player list updates disconnecting that user.
-		//
-		//	When a player list update is sent specifying
-		//	that a user has gone offline, that user shall
-		//	be removed from this data structure, which means
-		//	that if the onlogin event is not synchronized
-		//	it shall just be ignored and no updates
-		//	for that player will ever be sent.
-		//
-		//	Similarly, the disconnect handler will avoid
-		//	firing off updates if no client was ever
-		//	notified that the client logged in in the
-		//	first place.
-		//
-		//	Moreover, the server will periodically update
-		//	all players (just not once every tick) so that
-		//	ping information in each client is up-to-date.
-		std::unordered_map<const Connection *,PlayerListInfo> map;
-		Mutex map_lock;
+		std::unordered_map<
+			SmartPointer<Client>,
+			//	This boolean value indicates
+			//	whether disconnect processing
+			//	has occurred
+			bool
+		> map;
+		Mutex lock;
 		
 		
-	public:
-	
-	
-		virtual Word Priority () const noexcept override {
+		typedef decltype(packet_type::Ping) ping_type;
 		
-			return priority;
+		
+		static ping_type get_ping (Word ping) noexcept {
+		
+			constexpr auto ping_max=std::numeric_limits<ping_type>::max();
+			
+			return (ping>ping_max) ? ping_max : static_cast<ping_type>(ping);
 		
 		}
 		
 		
+		static packet_type get_packet (const SmartPointer<Client> & client, bool online) {
+		
+			packet_type retr;
+			retr.Name=client->GetUsername();
+			retr.Online=online;
+			retr.Ping=get_ping(client->Ping);
+			
+			return retr;
+		
+		}
+		
+		
+		Vector<packet_type> get_packets () {
+		
+			Vector<packet_type> retr(map.size());
+			
+			for (auto & pair : map) if (!pair.second) retr.Add(
+				get_packet(
+					pair.first,
+					true
+				)
+			);
+			
+			return retr;
+		
+		}
+		
+		
+		void login (SmartPointer<Client> client) {
+		
+			lock.Execute([&] () mutable {
+			
+				//	Attempt to find this client
+				//	in the map
+				auto loc=map.find(client);
+				
+				//	If there's an entry, it means
+				//	that disconnect processing has occurred,
+				//	delete and return
+				if (loc!=map.end()) {
+				
+					map.erase(loc);
+					
+					return;
+				
+				}
+				
+				//	Otherwise disconnect processing has not
+				//	occurred, and we may proceed
+				
+				//	Send a full update to this connecting
+				//	client
+				for (auto & packet : get_packets()) client->Send(packet);
+				
+				//	Insert an entry specifying that disconnect
+				//	processing has not occurred
+				map.emplace(
+					client,
+					false
+				);
+				
+				//	Send packet to all connected clients
+				//	who are in the correct state
+				auto packet=get_packet(client,true);
+				for (auto & c : Server::Get().Clients) if (c->GetState()==ProtocolState::Play) c->Send(packet);
+			
+			});
+		
+		}
+		
+		
+		void disconnect (SmartPointer<Client> client) {
+		
+			lock.Execute([&] () mutable {
+			
+				//	Attempt to find this client in the
+				//	map
+				auto loc=map.find(client);
+				
+				//	If there's no entry, this means that
+				//	no client has been notified that this
+				//	client ever connected/was online, and
+				//	therefore we simply add an entry and
+				//	proceed without sending packets
+				if (loc==map.end()) {
+				
+					map.emplace(
+						client,
+						true
+					);
+					
+					return;
+				
+				}
+				
+				//	Remove the player's entry -- they're
+				//	disconnected
+				map.erase(loc);
+				
+				//	Otherwise we send a packet to all connected
+				//	clients notifying them
+				auto packet=get_packet(client,false);
+				for (auto & c : Server::Get().Clients) if (
+					(c!=client) &&
+					(c->GetState()==ProtocolState::Play)
+				) c->Send(packet);
+			
+			});
+		
+		}
+		
+		
+		void periodic () {
+		
+			auto & server=Server::Get();
+			
+			lock.Execute([&] () mutable {
+			
+				auto packets=get_packets();
+				
+				//	Loop over all connected clients in the
+				//	Play state and send them these packets
+				for (auto & c : server.Clients)
+				if (c->GetState()==ProtocolState::Play)
+				for (auto & packet : packets) c->Send(packet);
+			
+			});
+			
+			//	Execute the task again after a delay
+			server.Pool().Enqueue(
+				update_freq,
+				[this] () mutable {	periodic();	}
+			);
+		
+		}
+
+
+	public:
+	
+	
 		virtual const String & Name () const noexcept override {
 		
 			return name;
@@ -114,209 +198,22 @@ class PlayerList : public Module {
 		}
 		
 		
+		virtual Word Priority () const noexcept override {
+		
+			return priority;
+		
+		}
+		
+		
 		virtual void Install () override {
 		
-			//	We need to handle connect
-			//	events to keep the set
-			//	up to date
-			Server::Get().OnConnect.Add([=] (SmartPointer<Client> client) {
+			auto & server=Server::Get();
 			
-				map_lock.Execute([&] () {
-				
-					auto ptr=client->GetConn();
-				
-					map.emplace(
-						ptr,
-						PlayerListInfo(std::move(client))
-					);
-				
-				});
-				
-			});
-			
-			//	We need to handle disconnect
-			//	events to keep the set up
-			//	to date and to send messages
-			//	to the other connected clients
-			Server::Get().OnDisconnect.Add([=] (SmartPointer<Client> client, const String &) {
-			
-				//	Get consistent state
-				map_lock.Execute([&] () {
-				
-					auto conn=client->GetConn();
-					
-					//	Fetch data
-					auto data=std::move(map[conn]);
-					
-					//	Remove
-					map.erase(conn);
-					
-					//	Only proceed if an update
-					//	for this client was sent
-					if (data.Sent) {
-					
-						//	Prepare a packet
-						Packet packet;
-						packet.SetType<pt>();
-						
-						packet.Retrieve<pt,0>()=client->GetUsername();
-						packet.Retrieve<pt,1>()=false;
-						packet.Retrieve<pt,2>()=static_cast<pt::RetrieveType<2>::Type>(client->Ping);
-						
-						//	Send to all other clients
-						//	who have received their
-						//	initial updates
-						for (auto & kvp : map) {
-						
-							if (
-								//	This client has had their
-								//	listing populated
-								kvp.second.Sent &&
-								//	This client is not the client
-								//	we're disconnecting
-								(kvp.second.Conn->GetConn()!=client->GetConn())
-							) kvp.second.Conn->Send(packet);
-						
-						}
-					
-					}
-				
-				});
-				
-			});
-			
-			//	We need to handle login to populate both
-			//	the player logging in, and to keep
-			//	all the other players up-to-date
-			Server::Get().OnLogin.Add([=] (SmartPointer<Client> client) {
-			
-				//	Get consistent state
-				map_lock.Execute([&] () {
-				
-					//	Has this player been disconnected?
-					auto loc=map.find(client->GetConn());
-					
-					//	No, proceed
-					if (loc!=map.end()) {
-					
-						auto & data=loc->second;
-						
-						//	Mark this player as having
-						//	been processed
-						data.Sent=true;
-						
-						//	Generate an update packet about
-						//	this user
-						Packet packet;
-						packet.SetType<pt>();
-						packet.Retrieve<pt,0>()=client->GetUsername();
-						packet.Retrieve<pt,1>()=true;
-						packet.Retrieve<pt,2>()=client->Ping;
-					
-						//	Scan the list of users
-						//	
-						//	Give this user information on
-						//	all connected users (including
-						//	himself)
-						//
-						//	Give all other users information
-						//	on this user.
-						for (auto & kvp : map) {
-						
-							if (kvp.second.Sent) {
-							
-								auto & conn=kvp.second.Conn;
-								
-								//	It's the user who's logging in
-								if (conn->GetConn()==client->GetConn()) {
-								
-									//	Send a packet about himself
-									client->Send(packet);
-								
-								//	It's a different user
-								} else {
-								
-									//	Create and send a packet about
-									//	the user who's logging in to this
-									//	user
-									Packet curr;
-									curr.SetType<pt>();
-									curr.Retrieve<pt,0>()=conn->GetUsername();
-									curr.Retrieve<pt,1>()=true;
-									curr.Retrieve<pt,2>()=conn->Ping;
-									
-									client->Send(curr);
-									
-									//	Send a packet to this user
-									//	about the user logging in
-									conn->Send(packet);
-								
-								}
-							
-							}
-						
-						}
-					
-					}
-				
-				});
-			
-			});
-			
-			//	Prepare a periodic callback which
-			//	will update the listings of all
-			//	connected users who have received
-			//	their initial update.
-			callback=[=] () {
-			
-				//	Get consistent state
-				map_lock.Execute([&] () {
-				
-					//	Create the packets that will
-					//	be sent to each user
-					Vector<Packet> packets;
-					for (auto & kvp : map) {
-					
-						if (kvp.second.Sent) {
-						
-							auto & client=kvp.second.Conn;
-							
-							Packet packet;
-							packet.SetType<pt>();
-							packet.Retrieve<pt,0>()=client->GetUsername();
-							packet.Retrieve<pt,1>()=true;
-							packet.Retrieve<pt,2>()=client->Ping;
-						
-						}
-					
-					}
-					
-					//	Now send all those packets
-					for (auto & kvp : map) {
-					
-						if (kvp.second.Sent) {
-						
-							for (auto & packet : packets) kvp.second.Conn->Send(packet);
-						
-						}
-					
-					}
-				
-				});
-				
-				//	Schedule this callback
-				//	again
-				Server::Get().Pool().Enqueue(
-					update_freq,
-					callback
-				);
-			
-			};
-			//	Schedule this callback to run
-			//	initially
-			Server::Get().Pool().Enqueue(
+			server.OnLogin.Add([this] (SmartPointer<Client> client) mutable {	login(std::move(client));	});
+			server.OnDisconnect.Add([this] (SmartPointer<Client> client, const String &) mutable {	disconnect(std::move(client));	});
+			server.Pool().Enqueue(
 				update_freq,
-				callback
+				[this] () mutable {	periodic();	}
 			);
 		
 		}
@@ -325,36 +222,4 @@ class PlayerList : public Module {
 };
 
 
-static Module * mod_ptr=nullptr;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (mod_ptr==nullptr) try {
-		
-			mod_ptr=new PlayerList();
-		
-		} catch (...) {	}
-		
-		return mod_ptr;
-	
-	}
-	
-	
-	void Unload () {
-	
-		if (mod_ptr!=nullptr) {
-		
-			delete mod_ptr;
-			
-			mod_ptr=nullptr;
-		
-		}
-	
-	}
-
-
-}
+INSTALL_MODULE(PlayerList)

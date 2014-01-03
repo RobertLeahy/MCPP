@@ -2373,6 +2373,20 @@ namespace MCPP {
 				};
 				
 				
+				class PlayerListItem : public Base, public IDPacket<0x38> {
+				
+				
+					public:
+					
+					
+						String Name;
+						bool Online;
+						Int16 Ping;
+				
+				
+				};
+				
+				
 				class TabComplete : public Base, public IDPacket<0x3A> {
 				
 				
