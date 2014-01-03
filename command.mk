@@ -45,8 +45,8 @@ bin/mods/mcpp_command_kick.dll: \
 $(MOD_OBJ) \
 obj/kick/main.o | \
 $(COMMAND_LIB) \
-bin/mods/mcpp_op.dll
-	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+bin/mods/mcpp_permissions.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll
 	
 	
 #	PERMISSIONS
