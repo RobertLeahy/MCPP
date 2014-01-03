@@ -2,7 +2,6 @@ mods: \
 bin/mods/mcpp_command.dll \
 bin/mods/mcpp_command_blacklist.dll \
 bin/mods/mcpp_command_kick.dll \
-bin/mods/mcpp_command_op.dll \
 bin/mods/mcpp_command_permissions.dll \
 bin/mods/mcpp_command_save.dll \
 bin/mods/mcpp_command_settings.dll \
@@ -45,17 +44,6 @@ bin/mods/mcpp_blacklist.dll
 bin/mods/mcpp_command_kick.dll: \
 $(MOD_OBJ) \
 obj/kick/main.o | \
-$(COMMAND_LIB) \
-bin/mods/mcpp_op.dll
-	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
-	
-	
-#	OP/DEOP
-
-
-bin/mods/mcpp_command_op.dll: \
-$(MOD_OBJ) \
-obj/op/command.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_op.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
