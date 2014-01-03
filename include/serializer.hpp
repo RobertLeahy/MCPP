@@ -397,6 +397,43 @@ namespace MCPP {
 	};
 	
 	
+	template <typename T>
+	class Serializer<Nullable<T>> {
+	
+	
+		public:
+		
+		
+			static Nullable<T> FromBytes (const Byte * & begin, const Byte * end) {
+			
+				Nullable<T> retr;
+				
+				if (Serializer<bool>::FromBytes(begin,end)) retr.Construct(Serializer<T>::FromBytes(begin,end));
+				
+				return retr;
+			
+			}
+			
+			
+			static void ToBytes (Vector<Byte> & buffer, const Nullable<T> & obj) {
+			
+				if (obj.IsNull()) {
+				
+					Serializer<bool>::ToBytes(buffer,false);
+					
+					return;
+				
+				}
+				
+				Serializer<bool>::ToBytes(buffer,true);
+				Serializer<T>::ToBytes(buffer,*obj);
+			
+			}
+	
+	
+	};
+	
+	
 	/**
 	 *	\endcond
 	 */

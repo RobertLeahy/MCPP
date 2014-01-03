@@ -26,6 +26,18 @@ bin/mods/mcpp_chat.dll
 COMMAND_LIB:=$(MOD_LIB) bin/mods/mcpp_chat.dll bin/mods/mcpp_command.dll
 
 
+#	BAN/UNBAN
+
+
+bin/mods/mcpp_command_ban.dll: \
+$(MOD_OBJ) \
+obj/ban/command.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_permissions.dll \
+bin/mods/mcpp_ban.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll bin/mods/mcpp_ban.dll
+
+
 #	BLACKLIST
 
 
