@@ -288,31 +288,17 @@ namespace MCPP {
 		std::unordered_set<SmartPointer<Client>> handles;
 		for (const auto & c : message.Recipients) {
 		
-			String lowercase;
+			//	Skip the server and clients
+			//	who aren't in the appropriate
+			//	state for chat messages
+			if (
+				c.IsNull() ||
+				(c->GetState()!=ProtocolState::Play)
+			) continue;
 			
-			//	Special case for the server
-			if (c.IsNull()) {
-			
-				handles.emplace(c);
-				
-				lowercase=server_username;
-			
-			//	Skip clients who are not in the
-			//	appropriate state
-			} else if (c->GetState()==ProtocolState::Play) {
-			
-				handles.emplace(c);
-				
-				lowercase=c->GetUsername().ToLower();
-			
-			} else {
-			
-				continue;
-			
-			}
-			
+			handles.emplace(c);
 			names.emplace(
-				std::move(lowercase),
+				c->GetUsername().ToLower(),
 				c
 			);
 		
@@ -330,15 +316,15 @@ namespace MCPP {
 		std::unordered_map<String,const String *> to;
 		for (const auto & s : message.To) {
 		
-			String lowercase(s);
-			//	There's a special case for
-			//	the server -- that username
-			//	is always uppercase
-			if (s!=server_username) lowercase.ToLower();
+			//	Skip the server
+			if (s==server_username) continue;
 			
-			//	If this user is also being delivered
-			//	to by handle, ignore
-			if (names.count(s)!=0) continue;
+			//	Normalize username
+			String lowercase(s.ToLower());
+			
+			//	Check if this user is already being
+			//	delivered to by handle, if so, skip
+			if (names.count(lowercase)!=0) continue;
 			
 			to.emplace(
 				std::move(lowercase),
