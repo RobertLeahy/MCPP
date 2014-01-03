@@ -236,6 +236,11 @@ namespace MCPP {
 		//	down
 		for (auto & t : workers) t.Join();
 		
+		//	Shutdown all connections to prevent
+		//	further send operations which may
+		//	cause access violations
+		for (auto & pair : connections) pair.second->Shutdown();
+		
 		//	Wait for all asynchronous callbacks
 		//	which may depend on this object or
 		//	its connections, or create/insert

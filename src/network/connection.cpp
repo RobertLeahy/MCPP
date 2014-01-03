@@ -51,7 +51,7 @@ namespace MCPP {
 		
 		//	Shutdown the socket so that it's
 		//	removed from the handler
-		shutdown();
+		Shutdown();
 	
 	}
 	
@@ -74,7 +74,7 @@ namespace MCPP {
 		
 		//	Shutdown the socket so that it's removed
 		//	from the handler
-		shutdown();
+		Shutdown();
 	
 	}
 

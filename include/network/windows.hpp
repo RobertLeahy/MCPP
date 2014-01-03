@@ -701,7 +701,7 @@ namespace MCPP {
 			
 			
 			//	Shuts the socket down
-			void shutdown () noexcept;
+			void Shutdown () noexcept;
 			
 			
 			//	Completes an event by cleaning
@@ -873,9 +873,6 @@ namespace MCPP {
 			
 			//	SECOND WE CREATE AN I/O COMPLETION PORT
 			NetworkImpl::CompletionPort Port;
-			
-			
-			//	THEN WE CREATE COLLECTIONS
 		
 		
 			//	Connections

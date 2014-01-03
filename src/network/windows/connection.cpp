@@ -7,7 +7,7 @@ using namespace MCPP::NetworkImpl;
 namespace MCPP {
 
 
-	void Connection::shutdown () noexcept {
+	void Connection::Shutdown () noexcept {
 	
 		//	Shutdown, but only if the socket
 		//	has not already been shutdown
@@ -22,7 +22,7 @@ namespace MCPP {
 			
 			return true;
 		
-		})) ::shutdown(socket,SD_BOTH);
+		})) shutdown(socket,SD_BOTH);
 	
 	}
 	
@@ -52,7 +52,7 @@ namespace MCPP {
 			});
 			
 			//	Shutdown
-			shutdown();
+			Shutdown();
 			
 		}
 		
@@ -62,7 +62,7 @@ namespace MCPP {
 		if ((--pending)==0) {
 		
 			//	Make sure the socket is shutdown
-			shutdown();
+			Shutdown();
 			
 			//	Maintain statistics within
 			//	the handler
@@ -359,7 +359,7 @@ namespace MCPP {
 	
 		//	Make sure the socket is
 		//	shutdown
-		shutdown();
+		Shutdown();
 	
 		//	Close the socket
 		closesocket(socket);
