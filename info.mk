@@ -8,7 +8,6 @@ bin/mods/mcpp_info_data_provider.dll \
 bin/mods/mcpp_info_handler.dll \
 bin/mods/mcpp_info_mcpp.dll \
 bin/mods/mcpp_info_mods.dll \
-bin/mods/mcpp_info_op.dll \
 bin/mods/mcpp_info_os.dll \
 bin/mods/mcpp_info_permissions.dll \
 bin/mods/mcpp_info_pool.dll \
@@ -114,17 +113,6 @@ $(MOD_OBJ) \
 obj/info/mods.o | \
 $(INFO_LIB)
 	$(GPP) -shared -o $@ $^ $(INFO_LIB)
-	
-	
-#	SERVER OPERATORS
-
-
-bin/mods/mcpp_info_op.dll: \
-$(MOD_OBJ) \
-obj/op/info.o | \
-$(INFO_LIB) \
-bin/mods/mcpp_op.dll
-	$(GPP) -shared -o $@ $^ $(INFO_LIB) bin/mods/mcpp_op.dll
 	
 	
 #	OPERATING SYSTEM
