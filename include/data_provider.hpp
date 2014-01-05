@@ -404,7 +404,7 @@ namespace MCPP {
 		public:
 		
 		
-			static bool Get (String value) {
+			static Nullable<bool> Get (String value) {
 				
 				Nullable<bool> retr;
 				
