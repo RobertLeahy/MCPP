@@ -31,7 +31,8 @@ bin/mods/mcpp_permissions.dll \
 bin/mods/mcpp_ping.dll \
 bin/mods/mcpp_player_list.dll \
 bin/mods/mcpp_plugin_message.dll \
-bin/mods/mcpp_time.dll
+bin/mods/mcpp_time.dll \
+bin/mods/mcpp_whitelist.dll
 
 
 #	AUTHENTICATION
@@ -186,3 +187,14 @@ $(MOD_OBJ) \
 obj/time/main.o | \
 $(MOD_LIB)
 	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+	
+	
+#	WHITELIST
+
+
+bin/mods/mcpp_whitelist.dll: \
+$(MOD_OBJ) \
+obj/whitelist/main.o | \
+$(MOD_LIB) \
+bin/mods/mcpp_save.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_save.dll

@@ -13,6 +13,7 @@ bin/mods/mcpp_info_os.dll \
 bin/mods/mcpp_info_permissions.dll \
 bin/mods/mcpp_info_pool.dll \
 bin/mods/mcpp_info_save.dll \
+bin/mods/mcpp_info_whitelist.dll \
 bin/mods/mcpp_info_world.dll
 
 
@@ -166,6 +167,17 @@ obj/save/info.o | \
 $(INFO_LIB) \
 bin/mods/mcpp_save.dll
 	$(GPP) -shared -o $@ $^ $(INFO_LIB) bin/mods/mcpp_save.dll
+	
+	
+#	WHITELIST
+
+
+bin/mods/mcpp_info_whitelist.dll: \
+$(MOD_OBJ) \
+obj/whitelist/info.o | \
+$(INFO_LIB) \
+bin/mods/mcpp_whitelist.dll
+	$(GPP) -shared -o $@ $^ $(INFO_LIB) bin/mods/mcpp_whitelist.dll
 	
 	
 #	WORLD

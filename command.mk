@@ -9,6 +9,7 @@ bin/mods/mcpp_command_shutdown.dll \
 bin/mods/mcpp_command_time.dll \
 bin/mods/mcpp_command_verbose.dll \
 bin/mods/mcpp_command_whisper.dll \
+bin/mods/mcpp_command_whitelist.dll
 
 
 #	COMMAND
@@ -138,3 +139,13 @@ $(COMMAND_LIB)
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB)
 	
 	
+#	WHITELIST
+
+
+bin/mods/mcpp_command_whitelist.dll: \
+$(MOD_OBJ) \
+obj/whitelist/command.o | \
+$(COMMAND_LIB) \
+bin/mods/mcpp_whitelist.dll \
+bin/mods/mcpp_permissions.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_whitelist.dll bin/mods/mcpp_permissions.dll
