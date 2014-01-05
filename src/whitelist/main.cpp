@@ -75,7 +75,10 @@ namespace MCPP {
 		
 		//	Load the whitelist
 		auto buffer=ByteBuffer::Load(settings_key);
-		try {
+		
+		//	If nothing was loaded from the backing store,
+		//	don't even try and parse
+		if (buffer.Count()!=0) try {
 		
 			whitelist=buffer.FromBytes<decltype(whitelist)>();
 		
