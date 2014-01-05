@@ -12,6 +12,7 @@ bin/mods/mcpp_info_op.dll \
 bin/mods/mcpp_info_os.dll \
 bin/mods/mcpp_info_permissions.dll \
 bin/mods/mcpp_info_pool.dll \
+bin/mods/mcpp_info_save.dll \
 bin/mods/mcpp_info_world.dll
 
 
@@ -154,6 +155,17 @@ $(MOD_OBJ) \
 obj/info/pool.o | \
 $(INFO_LIB)
 	$(GPP) -shared -o $@ $^ $(INFO_LIB)
+	
+	
+#	SAVE SYSTEM
+
+
+bin/mods/mcpp_info_save.dll: \
+$(MOD_OBJ) \
+obj/save/info.o | \
+$(INFO_LIB) \
+bin/mods/mcpp_save.dll
+	$(GPP) -shared -o $@ $^ $(INFO_LIB) bin/mods/mcpp_save.dll
 	
 	
 #	WORLD
