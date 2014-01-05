@@ -19,7 +19,7 @@ namespace MCPP {
 	static const String verbose_key("blacklist");
 	static const String blacklist("Blacklisting {0}");
 	static const String unblacklist("Removing {0} from the blacklist");
-	static const String error_parsing("Error parsing blacklists: \"{0}\" at byte {1}");
+	static const String error_parsing("Error parsing blacklist: \"{0}\" at byte {1}");
 	
 	
 	bool Blacklist::is_verbose () {
