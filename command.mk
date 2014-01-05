@@ -125,8 +125,8 @@ bin/mods/mcpp_command_verbose.dll: \
 $(MOD_OBJ) \
 obj/verbose/main.o | \
 $(COMMAND_LIB) \
-bin/mods/mcpp_op.dll
-	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_op.dll
+bin/mods/mcpp_permissions.dll
+	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll
 	
 	
 #	WHISPERS
