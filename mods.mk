@@ -185,8 +185,9 @@ $(MOD_LIB)
 bin/mods/mcpp_time.dll: \
 $(MOD_OBJ) \
 obj/time/main.o | \
-$(MOD_LIB)
-	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+$(MOD_LIB) \
+bin/mods/mcpp_save.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_save.dll
 	
 	
 #	WHITELIST

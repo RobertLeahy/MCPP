@@ -1,12 +1,16 @@
+/**
+ *	\file
+ */
+
+
+#pragma once
+
+
 #include <rleahylib/rleahylib.hpp>
 #include <mod.hpp>
-#include <server.hpp>
 #include <multi_scope_guard.hpp>
 #include <atomic>
 #include <functional>
-#include <limits>
-#include <utility>
-#include <type_traits>
 
 
 namespace MCPP {
@@ -42,6 +46,69 @@ namespace MCPP {
 		Dawn
 	
 	};
+	
+	
+	/**
+	 *	Information about the time module.
+	 */
+	class TimeInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The current number of ticks that
+			 *	the game time is displaced from
+			 *	the start of the world.
+			 */
+			UInt64 Current;
+			/**
+			 *	The current number of ticks that
+			 *	the game time is displaced from
+			 *	midnight.
+			 */
+			UInt64 SinceMidnight;
+			/**
+			 *	The current age of the world, in
+			 *	ticks.
+			 *
+			 *	This is identical to \em Current,
+			 *	except that this value is not
+			 *	modified when the time is set.
+			 */
+			UInt64 Age;
+			/**
+			 *	The current phase of the moon.
+			 */
+			LunarPhase Phase;
+			/**
+			 *	The current time of day.
+			 */
+			TimeOfDay DayPart;
+			/**
+			 *	The number of ticks that the time
+			 *	module has simulated since the
+			 *	server was last restarted.
+			 */
+			Word Elapsed;
+			/**
+			 *	The total number of nanoseconds the
+			 *	server has spent in a tick.
+			 */
+			UInt64 Total;
+			/**
+			 *	The total number of nanoseconds the
+			 *	server has spent simulating ticks.
+			 */
+			UInt64 Executing;
+			/**
+			 *	The current tick length in milliseconds.
+			 */
+			Word Length;
+	
+	
+	};
 
 
 	/**
@@ -50,30 +117,39 @@ namespace MCPP {
 	class Time : public Module {
 	
 	
-		template <typename T>
-		class bind_wrapper {
-		
-		
-			public:
-			
-			
-				T callback;
-				
-				
-				inline void operator () () noexcept(noexcept(callback())) {
-				
-					callback();
-				
-				}
-		
-		
-		};
-	
-	
 		private:
 		
 		
+			class Callback {
+			
+			
+				private:
+				
+				
+					std::function<void (MultiScopeGuard)> callback;
+					bool wait;
+			
+				
+				public:
+				
+				
+					Callback () = delete;
+					Callback (
+						std::function<void (MultiScopeGuard)>,
+						bool
+					) noexcept;
+					
+					
+					void operator () (const MultiScopeGuard &) const;
+				
+			
+			};
+		
+		
+			//	Lock for age/time
 			mutable Mutex lock;
+			//	Lock for callbacks
+			mutable Mutex callbacks_lock;
 			
 			
 			//	Time since last tick
@@ -90,130 +166,31 @@ namespace MCPP {
 			UInt64 age;
 			//	Time of day
 			UInt64 time;
-			//	Time since last save
-			UInt64 since;
 			//	If true time stops when
 			//	no one is logged in
 			bool offline_freeze;
-			//	Ticks between saves
-			UInt64 between_saves;
-			//	Number if milliseconds per
+			//	Number of milliseconds per
 			//	tick
 			Word tick_length;
 			//	Threshold above which a tick
 			//	is considered "too long"
 			Word threshold;
-			//	The percentage which is used
-			//	to derive the threshold
-			Word threshold_percentage;
 			
 			
 			//	Tasks to be executed every
 			//	tick
-			Vector<
-				Tuple<
-					//	Callback
-					std::function<void (MultiScopeGuard)>,
-					//	Whether the next tick should
-					//	wait for this task to finish
-					bool
-				>
-			> callbacks;
+			Vector<Callback> callbacks;
 			//	Tasks to be executed at a certain
 			//	point in time
-			Vector<
-				Tuple<
-					//	Tick on which this task should
-					//	be executed
-					Word,
-					//	Callback
-					std::function<void (MultiScopeGuard)>,
-					//	Whether the next tick should
-					//	wait for this task to finish
-					bool
-				>
-			> scheduled_callbacks;
+			Vector<Tuple<Word,Callback>> scheduled_callbacks;
 			
 			
+			void too_long (UInt64);
+			bool do_tick () const noexcept;
 			void tick ();
-			void save (UInt64, UInt64) const;
 			LunarPhase get_lunar_phase () const noexcept;
 			UInt64 get_time (bool) const noexcept;
 			TimeOfDay get_time_of_day () const noexcept;
-			
-			
-			template <typename T, typename... Args>
-			auto binder (T && callback, Args &&... args) -> decltype(
-				std::bind(
-					std::forward<T>(callback),
-					std::forward<Args>(args)...
-				)
-			) {
-			
-				return std::bind(
-					std::forward<T>(callback),
-					std::forward<Args>(args)...
-				);
-			
-			}
-			
-			
-			template <typename T>
-			bind_wrapper<T> inner_wrapper (T && bound) {
-			
-				return bind_wrapper<T>{std::forward<T>(bound)};
-			
-			}
-			
-			
-			template <typename T>
-			static void callback (MultiScopeGuard, T callback) {
-			
-				callback();
-			
-			}
-			
-			
-			template <typename T>
-			auto outer_wrapper (T && wrapped) -> decltype(
-				std::bind(
-					callback<typename std::decay<T>::type>,
-					std::placeholders::_1,
-					std::move(wrapped)
-				)
-			) {
-			
-				return std::bind(
-					callback<typename std::decay<T>::type>,
-					std::placeholders::_1,
-					std::move(wrapped)
-				);
-			
-			}
-			
-			
-			template <typename T, typename... Args>
-			auto wrap (T && callback, Args &&... args) -> decltype(
-				outer_wrapper(
-					inner_wrapper(
-						binder(
-							std::forward<T>(callback),
-							std::forward<Args>(args)...
-						)
-					)
-				)
-			) {
-			
-				return outer_wrapper(
-					inner_wrapper(
-						binder(
-							std::forward<T>(callback),
-							std::forward<Args>(args)...
-						)
-					)
-				);
-			
-			}
 			
 			
 		public:
@@ -252,6 +229,11 @@ namespace MCPP {
 			 *		A string which describes \em time_of_day.
 			 */
 			static const String & GetTimeOfDay (TimeOfDay time_of_day) noexcept;
+			
+			
+			/**
+			 *	\cond
+			 */
 		
 		
 			Time () noexcept;
@@ -260,6 +242,11 @@ namespace MCPP {
 			virtual const String & Name () const noexcept override;
 			virtual Word Priority () const noexcept override;
 			virtual void Install () override;
+			
+			
+			/**
+			 *	\endcond
+			 */
 			
 			
 			/**
@@ -311,7 +298,7 @@ namespace MCPP {
 			 *		the current time of day, and the current
 			 *		world's age, respectively.
 			 */
-			Tuple<UInt64,UInt64,LunarPhase,TimeOfDay,UInt64> GetInfo () const noexcept;
+			TimeInfo GetInfo () const noexcept;
 			
 			
 			/**
@@ -361,14 +348,6 @@ namespace MCPP {
 			
 			
 			/**
-			 *	Causes the age of the world and
-			 *	time of day to immediately be
-			 *	saved to the backing store.
-			 */
-			void Save () const;
-			
-			
-			/**
 			 *	Enqueues a task to be asynchronously
 			 *	invoked each tick.
 			 *
@@ -393,19 +372,36 @@ namespace MCPP {
 			template <typename T, typename... Args>
 			void Enqueue (bool wait, T && callback, Args &&... args) {
 			
-				auto wrapped=wrap(
-					std::forward<T>(callback),
-					std::forward<Args>(args)...
-				);
+				//	Manually locking etc. because GCC
+				//	has problems capturing parameter packs
+				callbacks_lock.Acquire();
 				
-				lock.Execute([&] () {
+				try {
 				
+					#pragma GCC diagnostic push
+					#pragma GCC diagnostic ignored "-Wpedantic"
 					callbacks.EmplaceBack(
-						std::move(wrapped),
+						[wrapped=std::bind(
+							std::forward<T>(callback),
+							std::forward<Args>(args)...
+						)] (MultiScopeGuard) {
+						
+							wrapped();
+						
+						},
 						wait
 					);
+					#pragma GCC diagnostic pop
 				
-				});
+				} catch (...) {
+				
+					callbacks_lock.Release();
+					
+					throw;
+				
+				}
+				
+				callbacks_lock.Release();
 			
 			}
 			
@@ -438,28 +434,52 @@ namespace MCPP {
 			template <typename T, typename... Args>
 			void Enqueue (Word ticks, bool wait, T && callback, Args &&... args) {
 			
-				auto wrapped=wrap(
-					std::forward<T>(callback),
-					std::forward<Args>(args)...
-				);
+				//	Deduce execution time
+				Word when=lock.Execute([&] () {	return age;	})+ticks;
 				
-				lock.Execute([&] () {
+				//	Manual locking because GCC has problems
+				//	capturing parameter packs
+				callbacks_lock.Acquire();
 				
-					//	Deduce execution time
-					Word when=ticks+this->ticks;
+				try {
 				
 					//	Find insertion point
-					Word i=0;
-					for (;i<scheduled_callbacks.Count();++i) if (when<scheduled_callbacks[i].Item<0>()) break;
-					
-					//	Insert
-					scheduled_callbacks.Emplace(
-						when,
-						std::move(wrapped),
-						wait
+					Word loc=0;
+					for (
+						;
+						(loc<scheduled_callbacks.Count()) &&
+						(scheduled_callbacks[loc].Item<0>()<when);
+						++loc
 					);
+					
+					#pragma GCC diagnostic push
+					#pragma GCC diagnostic ignored "-Wpedantic"
+					scheduled_callbacks.Emplace(
+						loc,
+						when,
+						Callback(
+							[wrapped=std::bind(
+								std::forward<T>(callback),
+								std::forward<Args>(args)...
+							)] (MultiScopeGuard) {
+							
+								wrapped();
+							
+							},
+							wait
+						)
+					);
+					#pragma GCC diagnostic pop
 				
-				});
+				} catch (...) {
+				
+					callbacks_lock.Release();
+					
+					throw;
+				
+				}
+				
+				callbacks_lock.Release();
 			
 			}
 			

@@ -6,7 +6,6 @@ bin/mods/mcpp_command_permissions.dll \
 bin/mods/mcpp_command_save.dll \
 bin/mods/mcpp_command_settings.dll \
 bin/mods/mcpp_command_shutdown.dll \
-bin/mods/mcpp_command_time.dll \
 bin/mods/mcpp_command_verbose.dll \
 bin/mods/mcpp_command_whisper.dll \
 bin/mods/mcpp_command_whitelist.dll
@@ -105,17 +104,6 @@ obj/shutdown/main.o | \
 $(COMMAND_LIB) \
 bin/mods/mcpp_permissions.dll
 	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_permissions.dll
-	
-	
-#	DISPLAY TIME
-
-
-bin/mods/mcpp_command_time.dll: \
-$(MOD_OBJ) \
-obj/time/display.o | \
-$(COMMAND_LIB) \
-bin/mods/mcpp_time.dll
-	$(GPP) -shared -o $@ $^ $(COMMAND_LIB) bin/mods/mcpp_time.dll
 	
 	
 #	VERBOSE
