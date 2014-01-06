@@ -7,9 +7,11 @@
 
 
 #include <rleahylib/rleahylib.hpp>
+#include <world/world.hpp>
 #include <client.hpp>
 #include <concurrency_manager.hpp>
-#include <world/world.hpp>
+#include <packet.hpp>
+#include <packet_router.hpp>
 #include <functional>
 #include <unordered_set>
 #include <unordered_map>
@@ -102,13 +104,11 @@ namespace MCPP {
 			 *	Gets a packet representing the information
 			 *	in this object.
 			 *
-			 *	\param [in] type
-			 *		The type of packet to retrieve.  May
-			 *		be 0x0A, 0x0B, 0x0C, or 0x0D.  If
-			 *		none of these values 0x0D is assumed.
-			 *		Defaults to 0x0D.
+			 *	\return
+			 *		A packet representing the player's current
+			 *		position and facing.
 			 */
-			Packet ToPacket (Byte type=0x0D) const;
+			Packets::Play::Clientbound::PlayerPositionAndLook ToPacket () const noexcept;
 			/**
 			 *	Updates this object with the values from
 			 *	a packet.
@@ -239,7 +239,7 @@ namespace MCPP {
 			void on_connect (SmartPointer<Client>);
 			void on_disconnect (SmartPointer<Client>, const String &);
 			void on_login (SmartPointer<Client>);
-			void position_handler (SmartPointer<Client> client, Packet packet);
+			void position_handler (PacketEvent);
 			void set_spawn (std::function<void ()>);
 			void set_spawn (Int32, Int32, Int32, bool);
 			void get_spawn (std::function<void ()> then=std::function<void ()>());

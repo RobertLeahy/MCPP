@@ -261,7 +261,7 @@ namespace MCPP {
 				bool
 			);
 			void prepare_stmt (MYSQL_STMT * &, const char *);
-			__attribute__((noreturn))
+			[[noreturn]]
 			static void raise (MYSQL_STMT *);
 	
 	
@@ -301,6 +301,7 @@ namespace MCPP {
 			void WriteChatLog (const String &, const Vector<String> &, const String &, const Nullable<String> &);
 			
 			
+			Nullable<Vector<Byte>> GetBinary (const String &);
 			bool GetBinary (const String &, void *, Word *);
 			void SaveBinary (const String &, const void *, Word);
 			void DeleteBinary (const String &);
@@ -347,6 +348,10 @@ namespace MCPP {
 			void done () noexcept;
 			//	Enqueues a logging task
 			void enqueue (std::function<void (std::unique_ptr<MySQLConnection> &)>);
+			//	Checks to see if the connection is
+			//	still open, and, if it's not,
+			//	attempts to reconnect
+			void keep_alive (std::unique_ptr<MySQLConnection> &);
 			template <typename T, typename... Args>
 			auto execute (T && callback, Args &&... args) -> typename std::enable_if<
 				std::is_same<
@@ -367,6 +372,8 @@ namespace MCPP {
 				Timer timer;
 				
 				try {
+				
+					keep_alive(conn);
 				
 					timer=Timer::CreateAndStart();
 					
@@ -438,6 +445,8 @@ namespace MCPP {
 				Timer timer;
 				
 				try {
+				
+					keep_alive(conn);
 				
 					timer=Timer::CreateAndStart();
 					
@@ -545,12 +554,13 @@ namespace MCPP {
 			virtual void WriteChatLog (const String &, const Vector<String> &, const String &, const Nullable<String> &) override;
 			
 			
+			virtual Nullable<Vector<Byte>> GetBinary (const String &) override;
 			virtual bool GetBinary (const String &, void *, Word *) override;
 			virtual void SaveBinary (const String &, const void *, Word) override;
 			virtual void DeleteBinary (const String &) override;
 			
 			
-			virtual Nullable<String> GetSetting (const String &) override;
+			virtual Nullable<String> RetrieveSetting (const String &) override;
 			virtual void SetSetting (const String &, const Nullable<String> &) override;
 			virtual void DeleteSetting (const String &) override;
 			

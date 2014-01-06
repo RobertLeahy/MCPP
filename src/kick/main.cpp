@@ -1,6 +1,12 @@
+#include <rleahylib/rleahylib.hpp>
 #include <command/command.hpp>
-#include <op/op.hpp>
 #include <chat/chat.hpp>
+#include <permissions/permissions.hpp>
+#include <mod.hpp>
+#include <server.hpp>
+
+
+using namespace MCPP;
 
 
 static const String name("Kick Command");
@@ -9,13 +15,18 @@ static const String identifier("kick");
 static const String summary("Kicks a player.");
 static const String help(
 	"Syntax: /kick <player name>\n"
-	"Kicks <player name>, disconnecting them from the server."
+	"Kicks the player whose name is given, disconnecting them from the server."
 );
+static const String reason("Kicked");
+static const String by(" by {0}");
 
 
 class Kick : public Module, public Command {
 
 
+	public:
+	
+	
 		virtual const String & Name () const noexcept override {
 		
 			return name;
@@ -32,141 +43,84 @@ class Kick : public Module, public Command {
 		
 		virtual void Install () override {
 		
-			Commands::Get().Add(this);
+			Commands::Get().Add(
+				identifier,
+				this
+			);
 		
 		}
 		
 		
-		virtual const String & Summary () const noexcept override {
-		
-			return summary;
-		
-		}
-		
-		
-		virtual const String & Help () const noexcept override {
-		
-			return help;
+		virtual void Summary (const String &, ChatMessage & message) override {
+
+			message << summary;
 		
 		}
 		
 		
-		virtual const String & Identifier () const noexcept override {
+		virtual void Help (const String &, ChatMessage & message) override {
 		
-			return identifier;
-		
-		}
-		
-		
-		virtual bool Check (SmartPointer<Client> client) const override {
-		
-			//	Only ops can kick
-			return Ops::Get().IsOp(client->GetUsername());
+			message << help;
 		
 		}
 		
 		
-		virtual Vector<String> AutoComplete (const String & args) const override {
-		
-			Vector<String> retr;
+		virtual Vector<String> AutoComplete (const CommandEvent & event) override {
 			
-			//	Create a regex to filter users
-			//	so we only select users that have
-			//	a username which begins with the
-			//	passed string
-			Regex regex(
-				String::Format(
-					"^{0}",
-					Regex::Escape(
-						args
-					)
-				),
-				//	Usernames are not case sensitive
-				RegexOptions().SetIgnoreCase()
+			if (event.Arguments.Count()!=1) return Vector<String>();
+			
+			auto clients=Server::Get().Clients.Get(
+				event.Arguments[0],
+				ClientSearch::Begin
 			);
 			
-			for (auto & client : Server::Get().Clients) {
-			
-				//	Only authenticated users are
-				//	valid chat targets
-				if (client->GetState()==ClientState::Authenticated) {
-				
-					//	Get client's username
-					String username(client->GetUsername());
-					
-					//	Only autocomplete if the username
-					//	matches the regex
-					if (regex.IsMatch(username)) {
-					
-						//	Normalize to lower case
-						username.ToLower();
-						
-						//	Add
-						retr.Add(std::move(username));
-					
-					}
-				
-				}
-			
-			}
+			auto retr=Vector<String>(clients.Count());
+			for (auto & client : clients) retr.Add(
+				client->GetUsername()
+			);
 			
 			return retr;
 		
 		}
 		
 		
-		virtual bool Execute (SmartPointer<Client> client, const String & args, ChatMessage & message) override {
+		virtual bool Check (const CommandEvent & event) override {
 		
-			//	No player name, syntax error
-			if (args.Size()==0) return false;
+			return event.Issuer.IsNull() ? true : Permissions::Get().GetUser(event.Issuer).Check(event.Identifier);
 		
-			//	Normalize usernames to lowercase
-			String target(args.ToLower());
-			Nullable<String> caller;
-			if (!client.IsNull()) caller.Construct(client->GetUsername().ToLower());
+		}
+		
+		
+		virtual CommandResult Execute (CommandEvent event) override {
+		
+			CommandResult retr;
 			
-			//	Generate kick message
-			String reason("Kicked");
-			if (!caller.IsNull()) reason << " by " << *caller;
-			//	Generate kick packet
-			typedef PacketTypeMap<0xFF> pt;
-			Packet packet;
-			packet.SetType<pt>();
-			packet.Retrieve<pt,0>()=reason;
+			//	There needs to be an argument
+			if (event.Arguments.Count()==0) {
 			
-			bool found=false;
-			
-			//	Scan
-			for (auto & client : Server::Get().Clients) {
-			
-				if (
-					(client->GetState()==ClientState::Authenticated) &&
-					(client->GetUsername().ToLower()==target)
-				) {
+				retr.Status=CommandStatus::SyntaxError;
 				
-					found=true;
-					
-					client->Send(packet)->AddCallback([=] (SendState) mutable {
-					
-						client->Disconnect(std::move(reason));
-					
-					});
-				
-				}
+				return retr;
 			
 			}
 			
-			if (!(found || client.IsNull())) {
-
-				message	<< ChatStyle::Red
-						<< ChatStyle::Bold
-						<< "Player \""
-						<< target
-						<< "\" could not be found";
+			//	Create the reason
+			String reason(::reason);
+			//	If this command was issued by
+			//	a connected user, we report who
+			//	it is
+			if (!event.Issuer.IsNull()) reason << String::Format(
+				by,
+				event.Issuer->GetUsername()
+			);
 			
-			}
+			//	Get all clients with the given
+			//	username.  We use the raw arguments
+			//	so that we get the exact name that
+			//	the issuer specified
+			for (auto & client : Server::Get().Clients.Get(event.RawArguments)) client->Disconnect(reason);
 			
-			return true;
+			return retr;
 		
 		}
 
@@ -174,26 +128,4 @@ class Kick : public Module, public Command {
 };
 
 
-static Nullable<Kick> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(Kick)

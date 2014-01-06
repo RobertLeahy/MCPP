@@ -4,17 +4,40 @@
 namespace MCPP {
 
 
-	ClientListIterator::ClientListIterator (ClientList & list, iter_type iter) noexcept
+	ClientListIterator::ClientListIterator (ClientList * list, iter_type iter) noexcept
 		:	iter(std::move(iter)),
 			list(list)
-	{	}
+	{
+	
+		list->map_lock.Read();
+	
+	}
+	
+	
+	ClientListIterator::ClientListIterator (const ClientListIterator & other) noexcept : iter(other.iter), list(other.list) {
+	
+		list->map_lock.Read();
+	
+	}
+	
+	
+	ClientListIterator & ClientListIterator::operator = (const ClientListIterator & other) noexcept {
+	
+		list->map_lock.CompleteRead();
+		
+		iter=other.iter;
+		list=other.list;
+		
+		list->map_lock.Read();
+	
+		return *this;
+	
+	}
 	
 	
 	ClientListIterator::~ClientListIterator () noexcept {
 	
-		list.iters_lock.Acquire();
-		if ((--list.iters)==0) list.map_lock.CompleteRead();
-		list.iters_lock.Release();
+		list->map_lock.CompleteRead();
 	
 	}
 	

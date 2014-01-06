@@ -7,14 +7,8 @@
 
 
 #include <rleahylib/rleahylib.hpp>
-#include <thread_pool.hpp>
-#include <atomic>
-#include <unordered_map>
-
-
-#ifdef ENVIRONMENT_WINDOWS
-#include <winsock2.h>
-#endif
+#include <exception>
+#include <functional>
 
 
 namespace MCPP {
@@ -23,9 +17,10 @@ namespace MCPP {
 	/**
 	 *	\cond
 	 */
-	
-	
-	//	Forward declarations
+	 
+	 
+	class ListeningSocket;
+	class SendHandle;
 	class Connection;
 	class ConnectionHandler;
 	
@@ -33,707 +28,341 @@ namespace MCPP {
 	/**
 	 *	\endcond
 	 */
-
-
-	//	Callback types
 	
 	
 	/**
-	 *	The type of function invoked
-	 *	when a connection is terminated.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	1.	The connection that was disconnected.
-	 *	2.	The reason it was disconnected.
+	 *	The type of callback invoked when a critical,
+	 *	irrecoverable error occurs.
 	 */
-	typedef std::function<void (SmartPointer<Connection>, const String &)> DisconnectCallback;
+	typedef std::function<void (std::exception_ptr)> PanicType;
+	
+	
 	/**
-	 *	The type of function invoked when data
-	 *	is received on a connection.
-	 *
-	 *	This function is guaranteed not to be
-	 *	invoked for the same connection until
-	 *	this function returns.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	1.	The connection on which the data
-	 *		was received.
-	 *	2.	All data received on this connection.
-	 *		This buffer will not be automatically
-	 *		cleared, and will be available with more
-	 *		data the next time this function is invoked
-	 *		if none is removed.
+	 *	Describes a disconnect.
 	 */
-	typedef std::function<void (SmartPointer<Connection>, Vector<Byte> &)> ReceiveCallback;
+	class DisconnectEvent {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The connection that was disconnect.
+			 */
+			SmartPointer<Connection> Conn;
+			/**
+			 *	If a reason for the disconnect was given,
+			 *	it is contained here.
+			 */
+			Nullable<String> Reason;
+			/**
+			 *	If an error of some type caused the disconnect,
+			 *	an exception representing that error is
+			 *	contained here.
+			 */
+			std::exception_ptr Error;
+	
+	
+	};
+	
+	
 	/**
-	 *	The type of function invoked when a connection
-	 *	is formed.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	1.	The IP address of the remote end of this
-	 *		connection.
-	 *	2.	The port of the remote end of this connection.
-	 *
-	 *	<B>Return:</B>
-	 *
-	 *	\em true if the connection should be accepted,
-	 *	\em false otherwise.
+	 *	The type of callback invoked on a disconnect.
 	 */
-	typedef std::function<bool (IPAddress, UInt16)> AcceptCallback;
+	typedef std::function<void (DisconnectEvent)> DisconnectType;
+	
+	
 	/**
-	 *	The type of function invoked when a connection is formed
-	 *	and is ready to process sends and receives.
-	 *
-	 *	Receive events for this connection are guaranteed not
-	 *	to be generated until this function returns.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	1.	The connection.
+	 *	Describes a receive.
 	 */
-	typedef std::function<void (SmartPointer<Connection>)> ConnectCallback;
+	class ReceiveEvent {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The connection on which data was
+			 *	received.
+			 */
+			SmartPointer<Connection> Conn;
+			/**
+			 *	A buffer of received bytes.
+			 *
+			 *	This buffer is not cleared between
+			 *	receives.  The caller is responsible
+			 *	for maintaining this buffer in a
+			 *	suitable state.
+			 */
+			Vector<Byte> & Buffer;
+	
+	
+	};
+	
+	
 	/**
-	 *	The type of function which may be invoked to write
-	 *	to the log.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	1.	The message to log.
-	 *	2.	The type of this log entry.
+	 *	The type of callback invoked on a receive.
 	 */
-	typedef std::function<void (const String &, Service::LogType)> LogCallback;
+	typedef std::function<void (ReceiveEvent)> ReceiveType;
+	
+	
 	/**
-	 *	The type of function invoked when
-	 *	an irrecoverable error occurs.
+	 *	Describes an accept.
+	 *
+	 *	An accept occurs when a client connects to
+	 *	a listening socket, before the connection
+	 *	is fully realized and data is sent/received.
+	 *
+	 *	Refusing an accept causes the client's socket
+	 *	to be closed immediately, with very little
+	 *	overhead.
 	 */
-	typedef std::function<void ()> PanicCallback;
+	class AcceptEvent {
+	
+	
+		public:
+		
+		
+			IPAddress RemoteIP;
+			UInt16 RemotePort;
+			IPAddress LocalIP;
+			UInt16 LocalPort;
+	
+	
+	};
+	
+	
+	/**
+	 *	The type of callback invoked on an accept.
+	 */
+	typedef std::function<bool (AcceptEvent)> AcceptType;
+	
+	
+	/**
+	 *	Describes a connect.
+	 *
+	 *	Connects occur in one of two scenarios:
+	 *
+	 *	1.	A client connects to a listening socket,
+	 *		and either no accept callback was provided,
+	 *		or the accept callback returned \em true.
+	 *	2.	A requested outbound connection succeeds.
+	 */
+	class ConnectEvent {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The connection.
+			 *
+			 *	If this is null, an error occurred,
+			 *	and the next two fields should be
+			 *	examined to determine the cause of
+			 *	the error.
+			 *
+			 *	Connects to listening sockets are
+			 *	guaranteed to always have this
+			 *	field populated, and the next two
+			 *	fields nulled.
+			 */
+			SmartPointer<Connection> Conn;
+			/**
+			 *	A string describing the error which
+			 *	occurred, if any.
+			 */
+			Nullable<String> Reason;
+			/**
+			 *	The exception which caused the error
+			 *	to occur, if any.
+			 */
+			std::exception_ptr Error;
+	
+	
+	};
+	
+	
+	/**
+	 *	The type of callback invoked on a connect.
+	 */
+	typedef std::function<void (ConnectEvent)> ConnectType;
 
 
 	/**
-	 *	Represents a network endpoint.
+	 *	An IP/Port pair.
+	 *
+	 *	This class is not used directly, but is
+	 *	the base for RemoteEndpoint and LocalEndpoint,
+	 *	which are used in describing the endpoint
+	 *	of a listening socket or connection.
 	 */
 	class Endpoint {
 	
 	
-		private:
-		
-		
-			IPAddress ip;
-			UInt16 port;
-			
-			
 		public:
 		
 		
-			Endpoint () = delete;
 			/**
-			 *	Creates a new endpoint which
-			 *	encapsulated a given IP and
-			 *	port.
-			 *
-			 *	\param [in] ip
-			 *		The IP to encapsulate.
-			 *	\param [in] port
-			 *		The port to encapsulate.
+			 *	The IP address associated with this
+			 *	endpoint.
 			 */
-			Endpoint (IPAddress ip, UInt16 port) noexcept;
-			
-			
+			IPAddress IP;
 			/**
-			 *	Retrieves the IP associated with
-			 *	this endpoint.
-			 *
-			 *	\return
-			 *		The IP address associated with
-			 *		this endpoint.
+			 *	The port associated with this endpoint.
 			 */
-			IPAddress IP () const noexcept;
-			/**
-			 *	Retrieves the port associated with
-			 *	this endpoint.
-			 *
-			 *	\return
-			 *		The port associated with this
-			 *		endpoint.
-			 */
-			UInt16 Port () const noexcept;
+			UInt16 Port;
 	
 	
 	};
 	
 	
 	/**
-	 *	The states that a SendHandle
-	 *	may be in.
+	 *	Contains data required to manage an outbound
+	 *	connection.
+	 *
+	 *	LocalEndpoint is derived from this class.
+	 */
+	class RemoteEndpoint : public Endpoint {
+	
+	
+		public:
+		
+		
+			/**
+			 *	A callback to be invoked when the
+			 *	connection attempt succeeds or
+			 *	fails.
+			 *
+			 *	If this object is a LocalEndpoint,
+			 *	this is the connection that will be
+			 *	invoked when incoming connections
+			 *	have been accepted.
+			 */
+			ConnectType Connect;
+			/**
+			 *	A callback to be invoked when the
+			 *	connection disconnects.
+			 */
+			DisconnectType Disconnect;
+			/**
+			 *	A callback to be invoked when data
+			 *	is received on the connection.
+			 */
+			ReceiveType Receive;
+	
+	
+	};
+	
+	
+	/**
+	 *	Contains data required to manage a listening
+	 *	socket.
+	 */
+	class LocalEndpoint : public RemoteEndpoint {
+	
+	
+		public:
+		
+		
+			/**
+			 *	A callback to be invoked immediately
+			 *	upon receiving an incoming connection
+			 *	attempt.
+			 *
+			 *	If this callback returns \em true, or
+			 *	is not specified, the connection will
+			 *	be accepted, otherwise the connection
+			 *	will immediately be terminated.
+			 */
+			AcceptType Accept;
+	
+	
+	};
+	
+	
+	/**
+	 *	Contains information about a ConnectionHandler.
+	 */
+	class ConnectionHandlerInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	Number of bytes that have been sent by
+			 *	connections associated with the connection
+			 *	handler.
+			 */
+			Word Sent;
+			/**
+			 *	Number of bytes that have been received
+			 *	by connections associated with the connection
+			 *	handler.
+			 */
+			Word Received;
+			/**
+			 *	Number of outgoing connections that have
+			 *	been successfully established by the
+			 *	connection handler.
+			 */
+			Word Outgoing;
+			/**
+			 *	Number of incoming connections that have
+			 *	been formed on sockets the connection
+			 *	handler is listening on.
+			 */
+			Word Incoming;
+			/**
+			 *	Number of incoming connections which have
+			 *	been accepted and realized as Connection
+			 *	objects.
+			 */
+			Word Accepted;
+			/**
+			 *	Number of connections which have been
+			 *	terminated for any reason.
+			 */
+			Word Disconnected;
+			/**
+			 *	Number of sockets the connection handler
+			 *	is listening on.
+			 */
+			Word Listening;
+			/**
+			 *	Number of connected sockets the connection
+			 *	handler is currently managing.
+			 */
+			Word Connected;
+			/**
+			 *	Number of worker threads the connection
+			 *	handler is currently managing.
+			 */
+			Word Workers;
+	
+	
+	};
+	
+	
+	/**
+	 *	The different states through which
+	 *	a send transitions.
 	 */
 	enum class SendState {
 	
-		Pending,	/**<	The data is being sent or waiting to be sent.	*/
-		Sent,		/**<	The data has been sent completely.	*/
-		Failed		/**<	The data has not been sent and never will be.	*/
+		Sending,	/**<	The send is either waiting or currently being sent.	*/
+		Sent,		/**<	The send completed successfully.	*/
+		Failed		/**<	The send failed.	*/
 	
 	};
-	
-	
-	/**
-	 *	The type of callback that may be invoked when
-	 *	a send operation completes.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	1.	The state the send operation ended in.
-	 */
-	typedef std::function<void (SendState)> SendCallback;
-	
-	
-	/**
-	 *	\cond
-	 */
-	 
-	 
-	#ifdef ENVIRONMENT_WINDOWS
-	 
-	 
-	enum class NetworkCommand {
-	
-		//	Set by the worker thread when
-		//	it begins the send, so it can
-		//	differentiate the I/O completion
-		//	packet it receives at the end
-		//	of the send
-		CompleteSend,
-		//	Tells the worker that it may begin
-		//	a receive operation.
-		BeginReceive,
-		//	Set in a worker-initiated receive,
-		//	tells the worker that this is data
-		//	received on the associated socket.
-		CompleteReceive
-	
-	};
-	 
-	 
-	class OverlappedData : public WSAOVERLAPPED {
-	
-	
-		public:
-		
-		
-			OverlappedData () = delete;
-			OverlappedData (NetworkCommand command) noexcept;
-		
-		
-			//	The command that this overlapped
-			//	structure corresponds to for the
-			//	given connection.
-			NetworkCommand Command;
-	
-	
-	};
-	
-	
-	#endif
-	 
-	 
-	/**
-	 *	\endcond
-	 */
-	
-	
-	/**
-	 *	Allows an asynchronous send to be waited
-	 *	on.
-	 */
-	class SendHandle {
-	
-	
-		friend class Connection;
-		friend class ConnectionHandler;
-	
-	
-		private:
-		
-		
-			#ifdef ENVIRONMENT_WINDOWS
-			//	Overlapped structure
-			OverlappedData overlapped;
-			#endif
-			//	The bytes this send handle
-			//	represents
-			Vector<Byte> send;
-			#ifdef ENVIRONMENT_WINDOWS
-			//	WSABUF structure for I/O
-			WSABUF buf;
-			#else
-			//	The number of bytes that we've
-			//	progressed into the buffer
-			Word sent;
-			#endif
-			//	The result of this send
-			//	operation
-			SendState state;
-			//	Callbacks to be invoked when
-			//	this send operation completes
-			Vector<SendCallback> callbacks;
-			
-			
-			//	Wait structures
-			mutable Mutex lock;
-			mutable CondVar wait;
-			
-			
-		public:
-		
-		
-			/**
-			 *	\cond
-			 */
-			
-			
-			SendHandle (Vector<Byte> send) noexcept;
-			
-			
-			/**
-			 *	\endcond
-			 */
-			 
-			 
-			SendHandle () = delete;
-			SendHandle (const SendHandle &) = delete;
-			SendHandle (SendHandle &&) = delete;
-			SendHandle & operator = (const SendHandle &) = delete;
-			SendHandle & operator = (SendHandle &&) = delete;
 
-
-			/**
-			 *	Retrieves the current state of the
-			 *	send operation.
-			 *
-			 *	\return
-			 *		The send operation's state as of
-			 *		this function invocation.
-			 */
-			SendState State () const noexcept;
-			/**
-			 *	Waits for this send operation to complete.
-			 *
-			 *	When this function returns the send operation
-			 *	is guaranteed to have succeeded or failed.
-			 *
-			 *	\return
-			 *		The status the send operation ended with.
-			 */
-			SendState Wait () const noexcept;
-			/**
-			 *	Adds a callback which shall be invoked when
-			 *	the send operation completes, and which
-			 *	shall be passed the final state of the
-			 *	send operation.
-			 *
-			 *	\param [in] callback
-			 *		A callback to enqueue.
-			 */
-			void AddCallback (SendCallback callback);
-	
-	
-	};
-	
-	
-	class Connection {
-	
-	
-		friend class ConnectionHandler;
-	
-	
-		private:
-			
-			
-			//	Synchronization for all connection
-			//	methods
-			mutable Mutex lock;
-			
-			
-			//	The connection
-			#ifdef ENVIRONMENT_WINDOWS
-			SOCKET
-			#else
-			int
-			#endif
-			socket;
-			Endpoint endpoint;
-			
-			
-			#ifdef ENVIRONMENT_POSIX
-			int fd;
-			#endif
-			
-			
-			//	Sent and received
-			std::atomic<UInt64> sent;
-			std::atomic<UInt64> received;
-			
-			
-			#ifdef ENVIRONMENT_WINDOWS
-			//	Pending send operations
-			std::unordered_map<
-				const SendHandle *,
-				SmartPointer<SendHandle>
-			> sends;
-			#else
-			Vector<SmartPointer<SendHandle>> sends;
-			#endif
-			
-			
-			//	Whether this connection has an
-			//	outstanding receive event
-			bool pending_recv;
-			
-			
-			//	Receive buffer
-			Vector<Byte> recv;
-			#ifdef ENVIRONMENT_WINDOWS
-			WSABUF recv_buf;
-			OverlappedData overlapped;
-			DWORD recv_flags;
-			#else
-			Vector<Byte> recv_alt;
-			#endif
-			
-			
-			//	Whether this connection has been
-			//	shutdown
-			bool is_shutdown;
-			
-			
-			#ifdef ENVIRONMENT_POSIX
-			//	Whether this socket has
-			//	been registered with the
-			//	epoll fd
-			bool is_registered;
-			#endif
-			
-			
-			//	Disconnect reason
-			String reason;
-			
-			
-			//
-			//	PRIVATE METHODS
-			//
-			
-			
-			//	Drives the disconnect process
-			bool disconnect () noexcept;
-			
-			
-		public:
-		
-		
-			/**
-			 *	\cond
-			 */
-		
-		
-			Connection (
-				#ifdef ENVIRONMENT_WINDOWS
-				SOCKET
-				#else
-				int
-				#endif
-				socket,
-				Endpoint endpoint,
-				#ifdef ENVIRONMENT_WINDOWS
-				HANDLE iocp
-				#else
-				int fd
-				#endif
-			);
-			
-			
-			/**
-			 *	\endcond
-			 */
-			 
-			 
-			/**
-			 *	Releases all resources held by this
-			 *	connection and fails all pending
-			 *	send operations.
-			 */
-			~Connection () noexcept;
-		
-		
-			/**
-			 *	Disconnects this connection.
-			 */
-			void Disconnect () noexcept;
-			/**
-			 *	Disconnects this connection for a specified
-			 *	reason.
-			 *
-			 *	\param [in] reason
-			 *		The reason this client is being
-			 *		disconnected.
-			 */
-			void Disconnect (const String & reason) noexcept;
-			/**
-			 *	Disconnects this connection for a specified
-			 *	reason.
-			 *
-			 *	\param [in] reason
-			 *		The reason this client is being
-			 *		disconnected.
-			 */
-			void Disconnect (String && reason) noexcept;
-			/**
-			 *	Sends a buffer of bytes over the connection.
-			 *
-			 *	\param [in] buffer
-			 *		A buffer of bytes which shall be sent.
-			 *
-			 *	\return
-			 *		A handle which represents this send,
-			 *		and which may be used to wait for it to
-			 *		complete and monitor its status.
-			 */
-			SmartPointer<SendHandle> Send (Vector<Byte> buffer);
-			/**
-			 *	Retrieves the remote IP address to which this
-			 *	connection is connected.
-			 *
-			 *	\return
-			 *		The remote IP address.
-			 */
-			IPAddress IP () const noexcept;
-			/**
-			 *	Retrieves the remote port to which this
-			 *	connection is connected.
-			 *
-			 *	\return
-			 *		The remote port number.
-			 */
-			UInt16 Port () const noexcept;
-			/**
-			 *	Retrieves the number of bytes sent
-			 *	over this connection.
-			 *
-			 *	\return
-			 *		The number of bytes sent.
-			 */
-			UInt64 Sent () const noexcept;
-			/**
-			 *	Retrieves the number of bytes received
-			 *	on this connection.
-			 *
-			 *	\return
-			 *		The number of bytes received.
-			 */
-			UInt64 Received () const noexcept;
-			/**
-			 *	Retrieves the number of send operations
-			 *	pending on this connection.
-			 *
-			 *	\return
-			 *		The number of pending sends.
-			 */
-			Word Pending () const noexcept;
-	
-	
-	};
-	
-	
-	class ConnectionHandler {
-	
-	
-		friend class Connection;
-	
-	
-		private:
-		
-		
-			//	CALLBACKS
-			
-			//	Disconnect callback
-			DisconnectCallback disconnect_callback;
-			//	Receive callback
-			ReceiveCallback recv;
-			//	Connect callback
-			ConnectCallback connect_callback;
-			//	Connection filtering callback
-			AcceptCallback accept_callback;
-			//	Logging callback
-			LogCallback log_callback;
-			//	Panic callback
-			PanicCallback panic_callback;
-			
-			
-			//	Thread pool
-			ThreadPool & pool;
-		
-		
-			//	List of connections this
-			//	handler is responsible for
-			//
-			//	As connections are accepted,
-			//	they are added.  As connections
-			//	error or are disconnected, they
-			//	are removed.
-			std::unordered_map<
-				const Connection *,
-				SmartPointer<Connection>
-			> connections;
-			Mutex connections_lock;
-			
-			
-			#ifdef ENVIRONMENT_WINDOWS
-			//	Completion port
-			HANDLE iocp;
-			#else
-			//	epoll fd
-			int fd;
-			#endif
-			
-			
-			//	Used during shutdown to
-			//	keep object valid until
-			//	receive callbacks end
-			std::atomic<Word> running_async;
-			Mutex async_lock;
-			CondVar async_wait;
-			
-			
-			//	Bound sockets
-			Vector<
-				#ifdef ENVIRONMENT_WINDOWS
-				SOCKET
-				#else
-				int
-				#endif
-			> bound;
-			
-			
-			#ifdef ENVIRONMENT_WINDOWS
-			//	Barrier to synchronize
-			//	startup
-			Barrier barrier;
-			#endif
-			
-			
-			//	Threads
-			
-			//	Worker thread
-			Thread worker;
-			
-			
-			#ifdef ENVIRONMENT_WINDOWS
-			
-			
-			//	Accept/listen thread
-			Thread accept;
-			
-			
-			//	This variable is used to relay
-			//	startup information
-			bool handshake;
-			
-			
-			//	Shutdown event for accept
-			//	thread
-			WSAEVENT stop;
-			
-			
-			#else
-			
-			
-			//	Socket pair to use to stop
-			//	epoll worker
-			int pair [2];
-			
-			
-			#endif
-			
-			
-			//
-			//	PRIVATE METHODS
-			//
-			
-			
-			inline void kill (Connection *) noexcept;
-			inline void end_async () noexcept;
-			void worker_func () noexcept;
-			inline void disconnect (SmartPointer<Connection>);
-			#ifdef ENVIRONMENT_WINDOWS
-			inline void remove (SmartPointer<Connection>);
-			void accept_func () noexcept;
-			static int accept_filter (LPWSABUF,LPWSABUF,LPQOS,LPQOS,LPWSABUF,LPWSABUF,GROUP FAR *,DWORD_PTR) noexcept;
-			#else
-			inline void remove (Connection *);
-			#endif
-			
-			
-		public:
-		
-		
-			ConnectionHandler () = delete;
-			ConnectionHandler (const ConnectionHandler &) = delete;
-			ConnectionHandler (ConnectionHandler &&) = delete;
-			ConnectionHandler & operator = (const ConnectionHandler &) = delete;
-			ConnectionHandler & operator = (ConnectionHandler &&) = delete;
-		
-		
-			/**
-			 *	Creates and starts a new ConnectionHandler.
-			 *
-			 *	\param [in] binds
-			 *		The local endpoints that the ConnectionHandler
-			 *		should bind to.
-			 *	\param [in] accept_callback
-			 *		The callback that should be invoked to filter
-			 *		incoming connections before they are permitted.
-			 *	\param [in] connect_callback
-			 *		The callback that should be invoked when a
-			 *		connection is permitted.
-			 *	\param [in] disconnect_callback
-			 *		The callback that should be invoked when a
-			 *		connection ends.
-			 *	\param [in] recv
-			 *		The callback that should be invoked when
-			 *		data is received.
-			 *	\param [in] log_callback
-			 *		The callback that should be invoked when the
-			 *		ConnectionHandler has to write to a log.
-			 *	\param [in] panic_callback
-			 *		The callback that should be invoked when
-			 *		something goes wrong from which the
-			 *		ConnectionHandler cannot recover.
-			 *	\param [in] pool
-			 *		A ThreadPool the ConnectionHandler can
-			 *		use to dispatch asynchronous events.
-			 */
-			ConnectionHandler (
-				const Vector<Endpoint> & binds,
-				AcceptCallback accept_callback,
-				ConnectCallback connect_callback,
-				DisconnectCallback disconnect_callback,
-				ReceiveCallback recv,
-				LogCallback log_callback,
-				PanicCallback panic_callback,
-				ThreadPool & pool
-			);
-			
-			
-			/**
-			 *	Ends all threads, closes all connections,
-			 *	and releases all resources associated
-			 *	with this connection handler.
-			 */
-			~ConnectionHandler () noexcept;
-	
-	
-	};
-	
 
 }
+
+
+#ifdef ENVIRONMENT_WINDOWS
+#include <network/windows.hpp>
+#else
+#include <network/posix.hpp>
+#endif

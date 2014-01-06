@@ -1,4 +1,11 @@
+#include <rleahylib/rleahylib.hpp>
 #include <info/info.hpp>
+#include <client.hpp>
+#include <mod.hpp>
+#include <server.hpp>
+
+
+using namespace MCPP;
 
 
 static const String identifier("clients");
@@ -87,7 +94,7 @@ class ClientsInfo : public Module, public InformationProvider {
 			for (auto & client : Server::Get().Clients) {
 			
 				String username;
-				if (client->GetState()==ClientState::Authenticated) username=String::Format(
+				if (client->GetState()==ProtocolState::Play) username=String::Format(
 					username_template,
 					client->GetUsername()
 				);
@@ -105,7 +112,7 @@ class ClientsInfo : public Module, public InformationProvider {
 						//	Authenticated?
 						<<	client_authenticated
 						<<	": "
-						<<	((client->GetState()==ClientState::Authenticated) ? yes : no)
+						<<	((client->GetState()==ProtocolState::Play) ? yes : no)
 						<<	info_separator
 						//	Time connected
 						<<	client_connected
@@ -159,26 +166,4 @@ class ClientsInfo : public Module, public InformationProvider {
 };
 
 
-static Nullable<ClientsInfo> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(ClientsInfo)

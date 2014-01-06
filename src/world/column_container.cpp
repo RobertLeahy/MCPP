@@ -1,6 +1,6 @@
 #include <world/world.hpp>
-#include <limits>
 #include <cstring>
+#include <limits>
 
 
 namespace MCPP {
@@ -340,47 +340,10 @@ namespace MCPP {
 		
 		try {
 		
-			//	Prepare a buffer
-			Vector<Byte> buffer(ToChunkData());
+			//	Get a packet
+			auto packet=ToChunkData();
 			
-			//	Number of clients sent to
-			Word count=0;
-			for (auto & c : clients) {
-			
-				//	Unordered set only allows const
-				//	iteration so that the keys of elements
-				//	are preserved, but a smart pointer's
-				//	hash is dependent only on the memory
-				//	address it points to, so it's fine
-				//	to make it modifiable and send through
-				//	it
-				auto & client=const_cast<SmartPointer<Client> &>(c);
-			
-				//	If this is the last client
-				//	we can just send the master
-				//	buffer
-				if ((++count)==clients.size()) {
-				
-					client->Send(std::move(buffer));
-				
-				//	Otherwise we need to create
-				//	a temporary buffer
-				} else {
-				
-					Vector<Byte> temp(buffer.Count());
-					temp.SetCount(buffer.Count());
-					
-					memcpy(
-						temp.begin(),
-						buffer.begin(),
-						buffer.Count()
-					);
-					
-					client->Send(std::move(temp));
-				
-				}
-			
-			}
+			for (auto & c : clients) const_cast<SmartPointer<Client> &>(c)->Send(packet);
 		
 		} catch (...) {
 		
@@ -471,273 +434,209 @@ namespace MCPP {
 	}
 	
 	
-	Vector<Byte> ColumnContainer::GetUnload () const {
+	ColumnContainer::PacketType ColumnContainer::GetUnload () const {
 	
-		//	Prepare a buffer
-		Word size=(
-			sizeof(Byte)+
-			sizeof(Int32)+
-			sizeof(Int32)+
-			sizeof(bool)+
-			sizeof(UInt16)+
-			sizeof(UInt16)+
-			sizeof(Int32)
-		);
+		PacketType retr;
+		retr.X=id.X;
+		retr.Z=id.Z;
+		retr.Continuous=true;
+		retr.Primary=0;
+		retr.Add=0;
 		
-		Vector<Byte> buffer(size);
+		return retr;
+	
+	}
+	
+	
+	static Byte get_add (const Block & b) noexcept {
+	
+		auto type=b.GetType();
 		
-		//	Populate the buffer with
-		//	the appropriate data
-		buffer.Add(0x33);
-		
-		PacketHelper<Int32>::ToBytes(
-			id.X,
-			buffer
-		);
-		PacketHelper<Int32>::ToBytes(
-			id.Z,
-			buffer
-		);
-		PacketHelper<bool>::ToBytes(
-			true,
-			buffer
-		);
-		PacketHelper<UInt16>::ToBytes(
-			0,
-			buffer
-		);
-		PacketHelper<UInt16>::ToBytes(
-			0,
-			buffer
-		);
-		PacketHelper<Int32>::ToBytes(
-			0,
-			buffer
-		);
-		
-		return buffer;
+		return (type>std::numeric_limits<Byte>::max()) ? 0 : static_cast<Byte>(type>>BitsPerByte());
 	
 	}
 
 
-	Vector<Byte> ColumnContainer::ToChunkData () const {
-	
-		//	First we need to convert the sane
-		//	in memory format to the insane
-		//	Mojang format
+	ColumnContainer::PacketType ColumnContainer::ToChunkData () const {
 		
-		Word size=(
-			//	One byte per block
-			//	for block type
-			(16*16*16*16)+
-			//	Half a byte per block
-			//	for metadata
-			((16*16*16*16)/2)+
-			//	Half a byte per block
-			//	for light
-			((16*16*16*16)/2)+
-			//	One byte per column for
-			//	biome information
-			(16*16)
-		);
+		//	This gives all chunks from
+		//	bottom-to-top which are not
+		//	all air
+		bool chunks [16];
+		std::memset(chunks,0,sizeof(chunks));
+		//	This gives all chunks from
+		//	bottom-to-top which require the
+		//	"add" array
+		bool add [16];
+		std::memset(add,0,sizeof(add));
 		
-		//	Do we have to send "add"?
-		bool add=false;
+		//	Scan all blocks to determine
+		//
+		//	A.	Which chunks we need to send.
+		//	B.	Which of A need the add array.
+		Word chunk=0;
+		Word next_chunk=16*16*16;
 		for (Word i=0;i<(16*16*16*16);++i) {
 		
-			if (Blocks[i].GetType()>std::numeric_limits<Byte>::max()) {
+			//	Maintain record of which
+			//	chunk we're in
+			if (i==next_chunk) {
 			
-				add=true;
+				next_chunk+=16*16*16;
+				++chunk;
+			
+			}
+			
+			//	Type of this block
+			auto type=Blocks[i].GetType();
+			
+			//	Are we sending this chunk?
+			if (type!=0) {
+			
+				//	YES
 				
-				break;
+				chunks[chunk]=true;
+				
+				//	Is the block type too large
+				//	for one byte?  I.e. do we have
+				//	to send the add array for this
+				//	chunk?
+				if (type>std::numeric_limits<Byte>::max()) add[chunk]=true;
 			
 			}
 		
 		}
 		
-		//	If we have to send add it's
-		//	one half byte per block
-		if (add) size+=(16*16*16*16)/2;
-		
-		//	If we have to send skylight it's
-		//	one half byte per block
+		//	Do we have to send skylight?
 		bool skylight=HasSkylight(id.Dimension);
-		if (skylight) size+=(16*16*16*16)/2;
 		
-		//	A buffer to hold the Mojang
-		//	format data
+		//	Determine the masks that we'll be
+		//	sending, the start offset of the
+		//	"add" array, as well as the distance
+		//	between arrays
+		Word add_offset=0;
+		UInt16 primary_mask=0;
+		UInt16 add_mask=0;
+		Word spacing=0;
+		for (Word i=0;i<16;++i) if (chunks[i]) {
+		
+			//	The "spacing" of arrays, i.e.
+			//	if the block type array starts
+			//	at index 0, at what index does the
+			//	metadata array begin?
+			spacing+=16*16*16;
+		
+			UInt16 mask=1<<i;
+		
+			//	Add bit in appropriate
+			//	position to mask
+			primary_mask|=mask;
+			
+			//	Offset the start of the
+			//	"add" array appropriately
+			add_offset+=16*16*16*2;
+			if (skylight) add_offset+=(16*16*16)/2;
+			
+			//	If the "add" array will be
+			//	sent for this chunk, update
+			//	the mask
+			if (add[i]) add_mask|=mask;
+		
+		}
+		
+		//	Create a buffer on the stack big
+		//	enough to hold the largest possible
+		//	packet in Mojang format
 		Byte column [(16*16*16*16*3)+(16*16)];
 		
+		//	Loop and convert
 		Word offset=0;
-		
-		//	Loop for block types
-		for (const auto & b : Blocks) column[offset++]=static_cast<Byte>(b.GetType());
-		
-		//	Loop for block metadata
+		Word nibble_offset=spacing;
+		spacing/=2;
+		chunk=0;
+		next_chunk=16*16*16;
 		bool even=true;
-		for (const auto & b : Blocks) {
+		for (Word i=0;i<(16*16*16*16);++i) {
 		
+			//	Advance to next chunk if
+			//	necessary
+			if (i==next_chunk) {
+			
+				next_chunk+=16*16*16;
+				++chunk;
+			
+			}
+			
+			//	Skip null chunks
+			if (!chunks[chunk]) {
+			
+				i+=(16*16*16)-1;
+				
+				continue;
+			
+			}
+			
+			//	Current block
+			const auto & b=Blocks[i];
+			
+			//	Write non-"add" byte of block
+			//	type
+			column[offset++]=static_cast<Byte>(b.GetType());
+			Word curr=nibble_offset;
+			//	Write nibbles
 			if (even) {
 			
-				column[offset]=b.GetMetadata()<<4;
-				even=false;
-				
-			} else {
-			
-				column[offset++]|=b.GetMetadata();
-				even=true;
-			
-			}
-			
-		}
-		
-		//	Loop for light
-		even=true;
-		for (const auto & b : Blocks) {
-		
-			if (even) {
-			
-				column[offset]=b.GetLight()<<4;
-				even=false;
+				//	Metadata
+				column[curr]=b.GetMetadata()<<4;
+				//	Light
+				column[curr+=spacing]=b.GetLight()<<4;
+				//	Skylight (if applicable)
+				if (skylight) column[curr+spacing]=b.GetSkylight()<<4;
+				//	"Add" (if applicable)
+				if (add[chunk]) column[add_offset]=get_add(b)<<4;
 			
 			} else {
 			
-				column[offset++]|=b.GetLight();
-				even=true;
-			
-			}
-		
-		}
-		
-		//	Loop for skylight if applicable
-		if (skylight) {
-		
-			even=true;
-			
-			for (const auto & b : Blocks) {
-			
-				if (even) {
+				//	Metadata
+				column[curr]|=b.GetMetadata();
+				//	Light
+				column[curr+=spacing]|=b.GetLight();
+				//	Skylight (if applicable)
+				if (skylight) column[curr+spacing]|=b.GetSkylight();
+				//	"Add" (if applicable)
+				if (add[chunk]) column[add_offset++]|=get_add(b);
 				
-					column[offset]=b.GetSkylight()<<4;
-					even=false;
-				
-				} else {
-				
-					column[offset++]|=b.GetSkylight();
-					even=true;
-				
-				}
+				//	After every odd/even pair,
+				//	we move onto the next full
+				//	byte
+				++nibble_offset;
 			
 			}
 			
-		}
-		
-		//	Loop for "add" if applicable
-		if (add) {
-		
-			even=true;
-			
-			for (const auto & b : Blocks) {
-			
-				auto type=b.GetType();
-				Byte val=(type>std::numeric_limits<Byte>::max()) ? static_cast<Byte>(type>>8) : 0;
-			
-				if (even) {
-				
-					column[offset]=val<<4;
-					even=false;
-				
-				} else {
-				
-					column[offset++]|=val;
-					even=true;
-				
-				}
-			
-			}
+			even=!even;
 		
 		}
 		
 		//	Copy biomes
-		memcpy(
-			&column[offset],
+		std::memcpy(
+			column+add_offset,
 			Biomes,
 			sizeof(Biomes)
 		);
 		
-		//	Allocate sufficient memory to hold
-		//	the 0x33 packet
-		Vector<Byte> buffer(
-			//	Packet type
-			sizeof(Byte)+
-			//	X-coordinate of this chunk
-			sizeof(Int32)+
-			//	Z-coordinate of this chunk
-			sizeof(Int32)+
-			//	Group-up continuous
-			sizeof(bool)+
-			//	Primary bit mask
-			sizeof(UInt16)+
-			//	"Add" bit mask
-			sizeof(UInt16)+
-			//	Size of compressed data
-			sizeof(Int32)+
-			//	Largest possible size for
-			//	compressed column data
-			DeflateBound(size)
-		);
-		
-		buffer.Add(0x33);
-		
-		PacketHelper<Int32>::ToBytes(
-			id.X,
-			buffer
-		);
-		PacketHelper<Int32>::ToBytes(
-			id.Z,
-			buffer
-		);
-		PacketHelper<bool>::ToBytes(
-			true,
-			buffer
-		);
-		PacketHelper<UInt16>::ToBytes(
-			std::numeric_limits<UInt16>::max(),
-			buffer
-		);
-		PacketHelper<UInt16>::ToBytes(
-			std::numeric_limits<UInt16>::max(),
-			buffer
-		);
-		
-		//	Push end point of buffer past
-		//	where the size will go
-		//	(as we do not yet know the size)
-		Word size_loc=buffer.Count();
-		buffer.SetCount(size_loc+sizeof(Int32));
-		
-		//	Compress
-		Deflate(
+		//	Prepare a packet
+		PacketType retr;
+		retr.X=id.X;
+		retr.Z=id.Z;
+		retr.Continuous=true;
+		retr.Primary=primary_mask;
+		retr.Add=add_mask;
+		retr.Data=Deflate(
 			column,
-			&column[0]+size,
-			&buffer
+			column+add_offset+sizeof(Biomes)
 		);
 		
-		//	Get compressed size
-		SafeWord compressed_size(buffer.Count()-size_loc-sizeof(Int32));
-		
-		Word final_size=buffer.Count();
-		
-		//	Insert compressed size
-		buffer.SetCount(size_loc);
-		PacketHelper<Int32>::ToBytes(
-			Int32(compressed_size),
-			buffer
-		);
-		
-		buffer.SetCount(final_size);
-		
-		return buffer;
+		return retr;
 	
 	}
 	
@@ -748,14 +647,12 @@ namespace MCPP {
 		auto offset=id.GetOffset();
 		
 		//	Prepare a packet
-		typedef PacketTypeMap<0x35> pt;
-		Packet packet;
-		packet.SetType<pt>();
-		packet.Retrieve<pt,0>()=id.X;
-		packet.Retrieve<pt,1>()=id.Y;
-		packet.Retrieve<pt,2>()=id.Z;
-		packet.Retrieve<pt,3>()=block.GetType();
-		packet.Retrieve<pt,4>()=block.GetMetadata();
+		Packets::Play::Clientbound::BlockChange packet;
+		packet.X=id.X;
+		packet.Y=id.Y;
+		packet.Z=id.Z;
+		packet.Type=block.GetType();
+		packet.Metadata=block.GetMetadata();
 		
 		lock.Execute([&] () {
 		

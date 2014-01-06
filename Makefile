@@ -7,8 +7,9 @@ INC_ZLIB:=-I deps/zlib128
 INC_MYSQL:=-I "C:/Program Files/MySQL/MySQL Server 5.6/include/"
 OPTIMIZATION:=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG -fno-omit-frame-pointer
 #OPTIMIZATION=-O3
-OPTS_SHARED:=-D_WIN32_WINNT=0x0600 -static-libgcc -static-libstdc++ -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
-GPP:=gcc48\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
+#-static-libgcc -static-libstdc++
+OPTS_SHARED:=-D_WIN32_WINNT=0x0600 -Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include $(INC_CURL) $(INC_OPENSSL) $(INC_ZLIB) $(INC_MYSQL)
+GPP:=gcc481\bin\g++.exe $(OPTS_SHARED) $(OPTIMIZATION)
 MKDIR=@mkdir_nofail.bat $(subst /,\,$(dir $(1)))
 
 
@@ -78,12 +79,9 @@ LIB:=bin/rleahy_lib.dll
 OBJ:=obj/new_delete.o
 	
 	
-makefiles/%.mk:
-	$(call MKDIR,$@)
-	$(GPP) -MM -MT "$(patsubst makefiles/%.mk,obj/%.o,$@) $@" $(patsubst makefiles/%.mk,src/%.cpp,$@) -MF $@
-	
-	
 obj/%.o:
+	$(call MKDIR,$(patsubst obj/%.o,makefiles/%.mk,$@))
+	$(GPP) -MM -MT "$@" $(patsubst obj/%.o,src/%.cpp,$@) -MF $(patsubst obj/%.o,makefiles/%.mk,$@)
 	$(call MKDIR,$@)
 	$(GPP) -c -o $@ $(patsubst obj/%.o,src/%.cpp,$@)
 	

@@ -1,5 +1,8 @@
 #include <chat/chat.hpp>
-#include <limits>
+#include <hash.hpp>
+#include <server.hpp>
+#include <algorithm>
+#include <unordered_map>
 #include <utility>
 
 
@@ -7,100 +10,534 @@ namespace MCPP {
 
 
 	static const String from_server("SERVER");
-	static const GraphemeCluster escape(static_cast<CodePoint>(0x00A7));
-	static const String whispers("whispers");
-	static const String whisper("whisper");
 	static const String label_separator(": ");
-	static const String you("You");
 	static const String recipient_separator(", ");
+	static const String you("You");
+	static const String whisper_to("whisper");
+	static const String whisper_from("whispers");
 	static const String could_not_be_delivered("Delivery failed to the following: ");
 	
 	
-	static inline void insert_sorted (Vector<String> & list, String insert) {
+	class RecipientList {
 	
-		String insert_to_lower(insert.ToLower());
 	
-		for (Word i=0;i<list.Count();++i) {
+		private:
 		
-			String curr_to_lower(list[i].ToLower());
+		
+			std::unordered_map<String,String> recipients;
 			
-			if (insert_to_lower==curr_to_lower) return;
 			
-			if (curr_to_lower>insert_to_lower) {
+		public:
+		
+		
+			void Add (String add) {
 			
-				list.Insert(
-					std::move(insert),
-					i
-				);
+				String lowercase(add);
+				//	Special case for message from
+				//	the server
+				if (add!=from_server) lowercase.ToLower();
 				
-				return;
+				if (recipients.count(lowercase)==0) recipients.emplace(
+					std::move(lowercase),
+					std::move(add)
+				);
 			
 			}
+			
+			
+			Vector<String> Get () {
+			
+				Vector<String> retr(recipients.size());
+				
+				for (auto & pair : recipients) retr.Add(std::move(pair.second));
+				
+				std::sort(retr.begin(),retr.end());
+				
+				return retr;
+			
+			}
+	
+	
+	};
+	
+	
+	static Vector<String> get_recipient_list (const ChatMessage & message) {
+	
+		RecipientList list;
 		
-		}
-		
-		list.Add(std::move(insert));
-	
-	}
-	
-	
-	static inline Vector<String> sorted_list (const Vector<String> & to, const Vector<SmartPointer<Client>> & recipients) {
-	
-		Vector<String> sorted;
-	
-		for (auto & s : to) insert_sorted(
-			sorted,
-			s
-		);
-		
-		for (auto & c : recipients) insert_sorted(
-			sorted,
+		for (const auto & s : message.To) list.Add(s);
+		for (const auto & c : message.Recipients) list.Add(
 			c.IsNull() ? from_server : c->GetUsername()
 		);
 		
-		return sorted;
+		return list.Get();
+	
+	}
+
+
+	class ChatParser {
+	
+	
+		private:
+		
+		
+			//	The message being formatted
+			const ChatMessage & message;
+			//	JSON Values which are to be
+			//	in the "extra" property of the
+			//	root JSON object
+			Vector<JSON::Value> root;
+			//	A stack of JSON objects which
+			//	gives our current position in
+			//	the stack-based formatting
+			Vector<JSON::Object> stack;
+		
+		
+			//	Determines whether an object is "empty",
+			//	i.e. has no text elements
+			static bool is_empty (const JSON::Object & obj) {
+			
+				//	If there are no key/value pairs
+				//	in the object, it's empty
+				if (!obj.Pairs) return true;
+				
+				//	Try and find the "extra" property
+				auto iter=obj.Pairs->find("extra");
+				
+				//	If there's no text property, it's
+				//	empty, otherwise it has elements
+				return iter==obj.Pairs->end();
+			
+			}
+			
+			
+			//	Gets the property name associated with
+			//	a given style
+			static String get_style (ChatStyle style) {
+			
+				switch (style) {
+			
+					case ChatStyle::Random:return "random";
+					case ChatStyle::Bold:return "bold";
+					case ChatStyle::Strikethrough:return "strikethrough";
+					case ChatStyle::Underline:return "underline";
+					case ChatStyle::Italic:
+					default:return "italic";
+					
+				}
+			
+			}
+			
+			
+			//	Gets the colour code associated with a
+			//	given colour
+			static String get_colour (ChatStyle style) {
+			
+				switch (style) {
+				
+					case ChatStyle::Black:return "black";
+					case ChatStyle::DarkBlue:return "dark_blue";
+					case ChatStyle::DarkGreen:return "dark_green";
+					case ChatStyle::DarkCyan:return "dark_aqua";
+					case ChatStyle::DarkRed:return "dark_red";
+					case ChatStyle::Purple:return "dark_purple";
+					case ChatStyle::Gold:return "gold";
+					case ChatStyle::Grey:return "gray";
+					case ChatStyle::DarkGrey:return "dark_gray";
+					case ChatStyle::Blue:return "blue";
+					case ChatStyle::BrightGreen:return "green";
+					case ChatStyle::Cyan:return "aqua";
+					case ChatStyle::Red:return "red";
+					case ChatStyle::Pink:return "light_purple";
+					case ChatStyle::Yellow:return "yellow";
+					case ChatStyle::White:
+					default:return "white";
+				
+				}
+			
+			}
+			
+			
+			//	Adds a value to the deepest object in the
+			//	stack
+			void add (JSON::Value add) {
+			
+				//	If there's nothing on the stack, we add
+				//	to the root
+				if (stack.Count()==0) {
+				
+					root.Add(std::move(add));
+				
+				} else {
+				
+					//	Get the deepest object on
+					//	the stack
+					
+					auto & obj=stack[stack.Count()-1];
+					
+					decltype(obj.Pairs->find("extra")) iter;
+					if (
+						obj.Pairs &&
+						((iter=obj.Pairs->find("extra"))!=obj.Pairs->end())
+					) {
+					
+						//	There's already text elements, so
+						//	we append
+						
+						iter->second.Get<JSON::Array>().Values.Add(std::move(add));
+					
+					} else {
+					
+						//	This is the first text element in
+						//	this object, we have to create an
+						//	array and add that to the "extra"
+						//	key
+						
+						JSON::Array arr;
+						arr.Values.Add(std::move(add));
+						
+						obj.Add("extra",std::move(arr));
+					
+					}
+				
+				}
+			
+			}
+			
+			
+			//	Merges the topmost element of the
+			//	stack down
+			void merge () {
+			
+				//	Nothing to merge, bail out
+				if (stack.Count()==0) return;
+				
+				//	Fetch deepest element on the
+				//	stack
+				Word loc=stack.Count()-1;
+				
+				auto obj=std::move(stack[loc]);
+				stack.Delete(loc);
+				
+				//	If this element is empty,
+				//	discard it
+				if (is_empty(obj)) return;
+				
+				//	Merge
+				add(std::move(obj));
+			
+			}
+			
+			
+			//	Generates a style and pushes it
+			//	onto the stack
+			void push_style (ChatStyle style) {
+			
+				JSON::Object obj;
+				obj.Add("text",String());
+			
+				switch (style) {
+				
+					//	Style
+					case ChatStyle::Random:
+					case ChatStyle::Bold:
+					case ChatStyle::Strikethrough:
+					case ChatStyle::Underline:
+					case ChatStyle::Italic:
+						obj.Add(get_style(style),true);
+						break;
+					
+					//	Colour
+					default:
+						obj.Add("color",get_colour(style));
+						break;
+				
+				}
+				
+				//	Push
+				stack.Add(std::move(obj));
+			
+			}
+			
+			
+			String recipients () {
+				
+				String retr;
+				bool first=true;
+				for (const auto & s : get_recipient_list(message)) {
+				
+					if (first) first=false;
+					else retr << recipient_separator;
+					
+					retr << s;
+				
+				}
+				
+				return retr;
+			
+			}
+			
+			
+			void label () {
+			
+				//	Labels are bold
+				push_style(ChatStyle::Bold);
+				
+				String label;
+				
+				String from(
+					message.From.IsNull()
+						//	From server
+						?	from_server
+						//	From a client
+						:	message.From->GetUsername()
+				);
+				
+				//	Is this a whisper?
+				if (
+					(message.To.Count()==0) &&
+					(message.Recipients.Count()==0)
+				) {
+				
+					//	NO -- it's a broadcast
+					
+					label=std::move(from);
+				
+				} else {
+				
+					//	YES
+					
+					//	Is it an echo -- i.e. a whisper
+					//	being sent back to the original
+					//	sender for display?
+					
+					if (message.Echo) label << you << " " << whisper_to << " " << recipients();
+					else label << from << " " << whisper_from;
+				
+				}
+				
+				add(std::move(label));
+				
+				//	Pop the bold style
+				merge();
+			
+			}
+		
+		
+		public:
+		
+		
+			ChatParser (const ChatMessage & message) noexcept : message(message) {	} 
+		
+		
+			JSON::Value operator () () {
+			
+				for (const auto & token : message.Message) {
+				
+					switch (token.Type) {
+					
+						case ChatFormat::Push:
+							push_style(token.Style);
+							break;
+							
+						case ChatFormat::Pop:
+							merge();
+							break;
+							
+						case ChatFormat::Label:
+							label();
+							break;
+							
+						case ChatFormat::Sender:
+							add(
+								message.From.IsNull()
+									?	from_server
+									:	message.From->GetUsername()
+							);
+							break;
+							
+						case ChatFormat::Recipients:
+							add(recipients());
+							break;
+							
+						case ChatFormat::LabelSeparator:
+							push_style(ChatStyle::Bold);
+							add(label_separator);
+							merge();
+							break;
+							
+						case ChatFormat::LabelStyle:
+							push_style(ChatStyle::Bold);
+							break;
+							
+						case ChatFormat::Segment:
+							add(token.Segment);
+							break;
+							
+						default:
+							break;
+					
+					}
+				
+				}
+				
+				//	Complete JSON object by merging
+				//	the stack
+				while (stack.Count()!=0) merge();
+				
+				//	Create the root JSON object
+				JSON::Array arr;
+				arr.Values=std::move(root);
+				JSON::Object obj;
+				obj.Add(
+					"extra",std::move(arr),
+					"text",String()
+				);
+				
+				return std::move(obj);
+			
+			}
+	
+	
+	};
+
+
+	JSON::Value Chat::Format (const ChatMessage & message) {
+	
+		ChatParser parser(message);
+		
+		return parser();
 	
 	}
 	
 	
-	static inline Tuple<String,Vector<String>,String> log_prep (const ChatMessage & message) {
+	class ChatMessageStringifier {
 	
-		String from=message.From.IsNull() ? from_server : message.From->GetUsername().ToLower();
+	
+		private:
 		
-		Vector<String> to(
-			sorted_list(
-				message.To,
-				message.Recipients
-			)
-		);
 		
-		String output;
-		for (const auto & token : message.Message) {
+			Word curr;
+			Word max;
+			String output;
+			
+			
+			bool check () const noexcept {
+			
+				return (max==0) || (curr<=max);
+			
+			}
+			
+			
+			void to_string (const JSON::Value & value) {
+			
+				++curr;
+				
+				//	Do not begin unless
+				//	we're less than the maximum
+				//	depth and this is actually
+				//	a JSON object
+				if (
+					check() &&
+					value.Is<JSON::Object>()
+				) {
+				
+					auto & obj=value.Get<JSON::Object>();
+					
+					//	Make sure this JSON object has
+					//	key/value pairs, and has a "extra"
+					//	key which is an array
+					decltype(obj.Pairs->find("extra")) iter;
+					if (
+						obj.Pairs &&
+						((iter=obj.Pairs->find("extra"))!=obj.Pairs->end()) &&
+						iter->second.Is<JSON::Array>()
+					) for (const auto & v : iter->second.Get<JSON::Array>().Values) {
+					
+						if (v.Is<String>()) output << v.Get<String>();
+						else to_string(v);
+					
+					}
+				
+				}
+				
+				--curr;
+			
+			}
+			
+			
+		public:
 		
-			if (token.Type==ChatFormat::Segment) output << token.Segment;
 		
-		}
+			ChatMessageStringifier (Word max_depth) noexcept : curr(0), max(max_depth) {	}
+			
+			
+			String operator () (const JSON::Value & value) {
+			
+				to_string(value);
+			
+				return std::move(output);
+			
+			}
+	
+	
+	};
+	
+	
+	String Chat::ToString (const JSON::Value & value, Word max_depth) {
+	
+		ChatMessageStringifier to_str(max_depth);
 		
-		return Tuple<String,Vector<String>,String>(
-			std::move(from),
-			std::move(to),
-			std::move(output)
-		);
+		return to_str(value);
 	
 	}
+	
+	
+	String Chat::ToString (const ChatMessage & message) {
+	
+		return ToString(Format(message));
+	
+	}
+	
+	
+	class LogParser {
+	
+	
+		public:
+		
+		
+			String From;
+			String Body;
+			Vector<String> To;
+		
+		
+			LogParser (const ChatMessage & message) {
+			
+				To=get_recipient_list(message);
+				
+				From=message.From.IsNull() ? from_server : message.From->GetUsername();
+				
+				for (const auto & token : message.Message) {
+				
+					if (token.Type==ChatFormat::Segment) Body << token.Segment;
+				
+				}
+			
+			}
+	
+	
+	};
 	
 	
 	void Chat::Log (const ChatMessage & message) {
 	
-		auto t=log_prep(message);
-		
-		Nullable<String> notes;	//	This stays null
+		LogParser l(message);
 		
 		Server::Get().WriteChatLog(
-			t.Item<0>(),
-			t.Item<1>(),
-			t.Item<2>(),
-			notes
+			l.From,
+			l.To,
+			l.Body,
+			Nullable<String>()	//	Notes
 		);
 	
 	}
@@ -108,15 +545,13 @@ namespace MCPP {
 	
 	void Chat::Log (const ChatMessage & message, String notes) {
 	
-		auto t=log_prep(message);
-		
-		Nullable<String> notes_copy(std::move(notes));
+		LogParser l(message);
 		
 		Server::Get().WriteChatLog(
-			t.Item<0>(),
-			t.Item<1>(),
-			t.Item<2>(),
-			notes_copy
+			l.From,
+			l.To,
+			l.Body,
+			std::move(notes)
 		);
 	
 	}
@@ -124,545 +559,35 @@ namespace MCPP {
 	
 	void Chat::Log (const ChatMessage & message, const Vector<String> & dne) {
 	
-		auto t=log_prep(message);
+		LogParser l(message);
 		
-		Nullable<String> dne_str;
+		Nullable<String> str;
 		if (dne.Count()!=0) {
 		
-			dne_str.Construct();
+			str.Construct();
 			
-			*dne_str << could_not_be_delivered;
+			*str << could_not_be_delivered;
 			
-			for (Word i=0;i<dne.Count();++i) {
+			bool first=true;
+			for (const auto & s : dne) {
 			
-				if (i!=0) *dne_str << recipient_separator;
+				if (first) first=false;
+				else *str << recipient_separator;
 				
-				*dne_str << dne[i];
+				*str << s;
 			
 			}
 		
 		}
 		
 		Server::Get().WriteChatLog(
-			t.Item<0>(),
-			t.Item<1>(),
-			t.Item<2>(),
-			dne_str
+			l.From,
+			l.To,
+			l.Body,
+			str
 		);
 	
 	}
-	
-	
-	static inline String recipient_list (const Vector<String> & to, const Vector<SmartPointer<Client>> & recipients) {
-	
-		Vector<String> sorted=sorted_list(
-			to,
-			recipients
-		);
-		
-		String output;
-		
-		for (Word i=0;i<sorted.Count();++i) {
-		
-			if (i!=0) output << recipient_separator;
-			
-			output << sorted[i];
-		
-		}
-		
-		return output;
-	
-	}
-	
-	
-	String Chat::Format (const ChatMessage & message, bool json) {
-	
-		//	Whether we're in the text
-		//	property of a JSON object
-		bool in_text=false;
-		//	Specifies whether any actual
-		//	text was generated
-		bool did_output=false;
-		//	Specifies how deep in the JSON
-		//	object we are in terms of nested
-		//	JSON objects.
-		Word stack_depth=0;
-		
-		//	String into which output
-		//	will be generated
-		String output;
-		if (json) output="{";
-		
-		auto generate_style=[&] (ChatStyle style) {
-		
-			if (!json) return;
-		
-			//	We always generate a nested
-			//	object for styles, which allows
-			//	us to always return to the default
-			//	style
-			
-			//	If we're in the text property, we
-			//	need to output a separator
-			if (in_text) {
-			
-				output << ",";
-			
-			//	Otherwise we need to introduce the
-			//	text property
-			} else {
-			
-				//	WORKAROUND
-				//
-				//	Stack-based formatting does
-				//	not work unless the base level
-				//	has a "color" property (Mojang...)
-				if (stack_depth==0) output << "\"color\":\"white\"";
-				
-				output << ",";
-			
-				/*
-				 *	This code will be needed if the
-				 *	stack-based formatting bug is
-				 *	fixed
-				 *
-				//	If we're in a nested object,
-				//	we need to output a separator
-				if (stack_depth!=0) output << ",";
-				*/
-				
-				//	Output the text property
-				output << "\"text\":[";
-			
-			}
-			
-			//	We're now in a new JSON object,
-			//	therefore the next text element will
-			//	be the first, and we're not in
-			//	thet text property
-			in_text=false;
-			
-			//	We're deeper in the tree now
-			++stack_depth;
-			
-			//	Begin the new object
-			output << "{\"";
-			
-			//	What we do here depends on whether
-			//	the style being applied is a colour
-			//	or a style
-			switch (style) {
-			
-				//	Style
-				case ChatStyle::Random:
-				case ChatStyle::Bold:
-				case ChatStyle::Strikethrough:
-				case ChatStyle::Underline:
-				case ChatStyle::Italic:{
-				
-					//	We have to choose the correct
-					//	property
-					switch (style) {
-					
-						case ChatStyle::Random:
-							output << "random";
-							break;
-						case ChatStyle::Bold:
-							output << "bold";
-							break;
-						case ChatStyle::Strikethrough:
-							output << "strikethrough";
-							break;
-						case ChatStyle::Underline:
-							output << "underline";
-							break;
-						case ChatStyle::Italic:
-						default:
-							output << "italic";
-							break;
-					
-					}
-					
-					//	Set it to true
-					output << "\":true";
-				
-				}break;
-				
-				//	Colour
-				default:{
-				
-					//	We just use the "color" property
-					//	for colours
-					output << "color\":\"";
-					
-					//	Choose the correct value
-					switch (style) {
-					
-						case ChatStyle::Black:
-							output << "black";
-							break;
-						case ChatStyle::DarkBlue:
-							output << "dark_blue";
-							break;
-						case ChatStyle::DarkGreen:
-							output << "dark_green";
-							break;
-						case ChatStyle::DarkCyan:
-							output << "dark_aqua";
-							break;
-						case ChatStyle::DarkRed:
-							output << "dark_red";
-							break;
-						case ChatStyle::Purple:
-							output << "dark_purple";
-							break;
-						case ChatStyle::Gold:
-							output << "gold";
-							break;
-						case ChatStyle::Grey:
-							output << "gray";
-							break;
-						case ChatStyle::DarkGrey:
-							output << "dark_gray";
-							break;
-						case ChatStyle::Blue:
-							output << "blue";
-							break;
-						case ChatStyle::BrightGreen:
-							output << "green";
-							break;
-						case ChatStyle::Cyan:
-							output << "aqua";
-							break;
-						case ChatStyle::Red:
-							output << "red";
-							break;
-						case ChatStyle::Pink:
-							output << "light_purple";
-							break;
-						case ChatStyle::Yellow:
-							output << "yellow";
-							break;
-						case ChatStyle::White:
-						default:
-							output << "white";
-							break;
-					
-					}
-					
-					output << "\"";
-				
-				}break;
-			
-			}
-		
-		};
-		
-		auto generate_string=[&] (const String & str) {
-		
-			if (!json) {
-			
-				output << str;
-				
-				return;
-			
-			}
-		
-			//	If the string is the empty string, do
-			//	nothing
-			if (str.Size()==0) return;
-			
-			//	We output at least some text
-			did_output=true;
-		
-			//	If we're already within a text
-			//	property, we have to output
-			//	a separator
-			if (in_text) {
-			
-				output << ",";
-			
-			//	If we're not in a text property,
-			//	we have to output a separator to
-			//	separate ourselves from the property
-			//	before us, UNLESS this is the bottom
-			//	of the stack, in which case there
-			//	isn't such a property
-			//
-			//	We also have to output the text property
-			//	itself
-			} else {
-			
-				//	WORKAROUND
-				//
-				//	Stack-based formatting does
-				//	not work unless the base level
-				//	has a "color" property (Mojang...)
-				if (stack_depth==0) output << "\"color\":\"white\"";
-				
-				output << ",";
-			
-				/*
-				 *	This code will be needed if the
-				 *	stack-based formatting bug is
-				 *	fixed
-				 *
-				//	If we're in a nested object,
-				//	we need to output a separator
-				if (stack_depth!=0) output << ",";
-				*/
-				
-				//	Output the text property
-				output << "\"text\":[";
-				
-				//	We're now in a text property
-				in_text=true;
-			
-			}
-			
-			//	Begin string
-			output << "\"";
-			
-			//	JSON has a few rules about
-			//	what can appear in a string:
-			//
-			//	1.	Literal control characters
-			//		cannot.
-			//	2.	Quotes cannot unless escaped.
-			//	3.	The reverse solidus cannot
-			//		unless escaped.
-			//
-			//	An escape for the forward solidus
-			//	is provided, so we'll also use that.
-			for (auto cp : str.CodePoints()) {
-			
-				switch (cp) {
-				
-					case '"':
-						output << "\\\"";
-						break;
-					case '\\':
-						output << "\\\\";
-						break;
-					case '/':
-						output << "\\/";
-						break;
-					case '\b':
-						output << "\\b";
-						break;
-					case '\f':
-						output << "\\f";
-						break;
-					case '\n':
-						output << "\\n";
-						break;
-					case '\r':
-						output << "\\r";
-						break;
-					case '\t':
-						output << "\\t";
-						break;
-					default:
-					
-						//	Get information about the code point
-						//	to check whether it's a control
-						//	character or not
-						const CodePointInfo * properties=CodePointInfo::GetInfo(cp);
-						
-						//	If we know nothing about the code point,
-						//	assume it's not a control character and
-						//	output it as a literal.
-						//
-						//	Otherwise if it's not a control character,
-						//	output it as a literal.
-						if (
-							(properties==nullptr) ||
-							(properties->Category!=GeneralCategory::Cc)
-						) {
-						
-							output << cp;
-						
-						//	If it's a control character, use a \uXXXX
-						//	escape to represent it
-						} else {
-						
-							output << "\\u";
-							
-							String num(cp,16);
-							
-							for (Word i=num.Count();i<4;++i) output << "0";
-							
-							output << num;
-						
-						}
-						
-						break;
-				
-				}
-			
-			}
-			
-			//	End string
-			output << "\"";
-		
-		};
-		
-		auto pop=[&] () {
-		
-			if (!json) return;
-		
-			//	Popping while there's nothing
-			//	on the stack doesn't make sense,
-			//	so ignore it.
-			if (stack_depth!=0) {
-			
-				//	If we're in the text property,
-				//	close it.
-				if (in_text) output << "]";
-				
-				//	Close the object
-				output << "}";
-				
-				//	The only place nested objects
-				//	can appear is in the text
-				//	property, therefore we're guaranteed
-				//	to be in the text property, and
-				//	there's guaranteed to be an object
-				//	ahead of us (the one we just escaped
-				//	from).
-				in_text=true;
-				
-				--stack_depth;
-			
-			}
-		
-		};
-		
-		//	Loop for each token
-		for (const auto & token : message.Message) {
-		
-			switch (token.Type) {
-			
-				case ChatFormat::Push:
-					generate_style(token.Style);
-					break;
-				case ChatFormat::Pop:
-					pop();
-					break;
-				case ChatFormat::Label:{
-				
-					//	Labels are bold, push that
-					//	style onto the stack
-					generate_style(ChatStyle::Bold);
-					
-					String label;
-					
-					//	Is message from server?
-					if (message.From.IsNull()) {
-					
-						label << from_server;
-					
-					} else {
-					
-						//	Is this a whisper?
-						if (message.To.Count()==0) {
-						
-							//	NO
-							
-							label << message.From->GetUsername();
-						
-						} else {
-						
-							//	YES
-							
-							//	Is it a whisper back to the original
-							//	sender?
-							if (message.Echo) {
-							
-								label << you << " " << whisper << " " << recipient_list(
-									message.To,
-									message.Recipients
-								);
-							
-							} else {
-							
-								label << message.From->GetUsername() << " " << whispers;
-							
-							}
-						
-						}
-					
-					}
-					
-					//	Generate
-					generate_string(label);
-					
-					//	Remove bold from the stack
-					pop();
-				
-				}break;
-				case ChatFormat::Sender:
-					generate_string(message.From.IsNull() ? from_server : message.From->GetUsername());
-					break;
-				case ChatFormat::Recipients:
-					generate_string(
-						recipient_list(
-							message.To,
-							message.Recipients
-						)
-					);
-					break;
-				case ChatFormat::Segment:
-					generate_string(token.Segment);
-					break;
-				case ChatFormat::LabelSeparator:
-					generate_style(ChatStyle::Bold);
-					generate_string(label_separator);
-					pop();
-					break;
-				case ChatFormat::LabelStyle:
-					generate_style(ChatStyle::Bold);
-					break;
-				default:
-					break;
-			
-			}
-		
-		}
-		
-		//	If we're not outputting JSON
-		//	we're done
-		if (!json) return output;
-		
-		//	Did we output any text?
-		//
-		//	If not just return the empty
-		//	string
-		if (!did_output) return String();
-		
-		//	Navigate back down the stack
-		for (Word i=stack_depth;;--i) {
-		
-			if (in_text) output << "]";
-			
-			output << "}";
-			
-			in_text=true;
-		
-			if (i==0) break;
-		
-		}
-		
-		//	Is the output too long?
-		//
-		//	If so just return the empty
-		//	string
-		if (output.Size()>static_cast<Word>(std::numeric_limits<Int16>::max())) return String();
-		
-		//	Done
-		return output;
-	
-	}
-	
+
 
 }

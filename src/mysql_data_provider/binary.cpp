@@ -8,6 +8,104 @@ namespace MCPP {
 	static const char * insert_query="INSERT INTO `binary` (`value`,`key`) VALUES (?,?)";
 	static const char * update_query="UPDATE `binary` SET `value`=? WHERE `key`=?";
 	static const char * delete_query="DELETE FROM `binary` WHERE `key`=?";
+	
+	
+	Nullable<Vector<Byte>> MySQLConnection::GetBinary (const String & key) {
+	
+		//	Create input bind
+		MySQLBind<String> param(key);
+		
+		//	Create output bind
+		MYSQL_BIND result;
+		memset(&result,0,sizeof(result));
+		
+		result.buffer_type=MYSQL_TYPE_BLOB;
+		unsigned long real_len;
+		result.length=&real_len;
+		
+		//	Regenerate prepared statement
+		//	if necessary
+		prepare_stmt(
+			get_bin_stmt,
+			get_query
+		);
+		
+		//	Bynd and execute
+		int success;
+		if (
+			(mysql_stmt_bind_param(
+				get_bin_stmt,
+				param
+			)!=0) ||
+			(mysql_stmt_bind_result(
+				get_bin_stmt,
+				&result
+			)!=0) ||
+			(mysql_stmt_execute(get_bin_stmt)!=0) ||
+			((success=mysql_stmt_fetch(get_bin_stmt))==1)
+		) raise(get_bin_stmt);
+		
+		//	Value to return
+		Nullable<Vector<Byte>> retr;
+		
+		if (success!=MYSQL_NO_DATA) {
+		
+			//	There is data, but how much?
+			
+			if (real_len==0) {
+			
+				//	Empty array
+				
+				retr.Construct();
+			
+			} else {
+			
+				//	Non-empty array
+				
+				//	Allocate enough space to
+				//	hold it
+				Word len=Word(SafeInt<decltype(real_len)>(real_len));
+				retr.Construct(len);
+				
+				//	Wire buffer into result bind
+				result.buffer=static_cast<Byte *>(*retr);
+				result.buffer_length=real_len;
+				
+				//	Retrieve actual data
+				if (mysql_stmt_fetch_column(
+					get_bin_stmt,
+					&result,
+					0,
+					0
+				)!=0) raise(get_bin_stmt);
+				
+				//	SUCCESS -- set buffer
+				//	count
+				retr->SetCount(len);
+				
+				result.buffer=nullptr;
+				result.buffer_length=0;
+			
+			}
+		
+		}
+		
+		//	Flush all results out
+		//	of statement
+		while (success!=MYSQL_NO_DATA)
+		if ((success=mysql_stmt_fetch(get_bin_stmt))==1)
+		raise(get_bin_stmt);
+		
+		return retr;
+	
+	}
+	
+	
+	Nullable<Vector<Byte>> MySQLDataProvider::GetBinary (const String & key) {
+	
+		return execute([&] (std::unique_ptr<MySQLConnection> & conn) {	return conn->GetBinary(key);	});
+	
+	}
 
 
 	bool MySQLConnection::GetBinary (const String & key, void * ptr, Word * len) {

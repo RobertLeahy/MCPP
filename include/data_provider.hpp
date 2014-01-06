@@ -7,6 +7,9 @@
 
 
 #include <rleahylib/rleahylib.hpp>
+#include <cstdlib>
+#include <type_traits>
+#include <utility>
 
 
 namespace MCPP {
@@ -133,6 +136,20 @@ namespace MCPP {
 			 *	\param [in] key
 			 *		The key whose associated binary data
 			 *		shall be retrieved.
+			 *
+			 *	\return
+			 *		A vector of bytes if there was binary
+			 *		data associated with \em key, \em null
+			 *		otherwise.
+			 */
+			virtual Nullable<Vector<Byte>> GetBinary (const String & key) = 0;
+			/**
+			 *	When overriden in a derived class, fetches
+			 *	binary data from the binary store.
+			 *
+			 *	\param [in] key
+			 *		The key whose associated binary data
+			 *		shall be retrieved.
 			 *	\param [out] ptr
 			 *		A pointer to the region of memory where
 			 *		the binary data shall be stored.
@@ -178,9 +195,10 @@ namespace MCPP {
 			virtual void DeleteBinary (const String & key) = 0;
 			
 			
+			virtual Nullable<String> RetrieveSetting (const String & setting) = 0;
 			/**
-			 *	When overriden in a derived class, retrieves
-			 *	the value of a setting.
+			 *	Retrieves the value of a setting converted to
+			 *	an arbitrary type.
 			 *
 			 *	\param [in] setting
 			 *		The name of the setting to retrieve.
@@ -191,7 +209,25 @@ namespace MCPP {
 			 *		backing store supports storing null values
 			 *		and the value is null.
 			 */
-			virtual Nullable<String> GetSetting (const String & setting) = 0;
+			template <typename T=String>
+			Nullable<T> GetSetting (const String & setting);
+			/**
+			 *	Retrieves the value of a setting converted
+			 *	to an arbitrary type.
+			 *
+			 *	\tparam T
+			 *		The type as which to retrieve the setting.
+			 *
+			 *	\param [in] setting
+			 *		The name of the setting to retrieve.
+			 *
+			 *	\return
+			 *		The value of \em setting, or \em default_value
+			 *		if the value of \em setting does not exist, or
+			 *		could not be converted to a \em T.
+			 */
+			template <typename T>
+			T GetSetting (const String & setting, T default_value);
 			/**
 			 *	When overriden in a derived class, sets the
 			 *	value of a setting.
@@ -265,6 +301,155 @@ namespace MCPP {
 	
 	
 	};
+	 
+	 
+	template <typename T, typename=void>
+	class SettingConverter {
+	
+	
+		public:
+		
+		
+			static Nullable<T> Get (String value) {
+			
+				return Nullable<T>();
+			
+			}
+	
+	
+	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	 
+	 
+	template <>
+	class SettingConverter<String,void> {
+	
+	
+		public:
+		
+		
+			static Nullable<String> Get (String value) {
+			
+				return Nullable<String>(std::move(value));
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	class SettingConverter<T,typename std::enable_if<std::is_integral<T>::value && !std::is_same<T,bool>::value>::type> {
+	
+	
+		public:
+		
+		
+			static Nullable<T> Get (String value) {
+			
+				Nullable<T> retr;
+				
+				T val;
+				if (value.ToInteger(&val)) retr.Construct(val);
+				
+				return retr;
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	class SettingConverter<T,typename std::enable_if<std::is_floating_point<T>::value>::type> {
+	
+	
+		public:
+		
+		
+			static Nullable<T> Get (String value) {
+			
+				Nullable<T> retr;
+				
+				auto c_str=value.ToCString();
+				auto end_ptr=c_str.begin();
+				T val=(
+					std::is_same<T,Single>::value
+						?	static_cast<T>(strtof(end_ptr,&end_ptr))
+						:	(
+								std::is_same<T,Double>::value
+									?	static_cast<T>(strtod(end_ptr,&end_ptr))
+									:	static_cast<T>(strtold(end_ptr,&end_ptr))
+							)
+				);
+				
+				if (end_ptr!=c_str.begin()) retr.Construct(val);
+				
+				return retr;
+			
+			}
+	
+	
+	};
+	
+	
+	template <>
+	class SettingConverter<bool,void> {
+	
+	
+		public:
+		
+		
+			static Nullable<bool> Get (String value) {
+				
+				Nullable<bool> retr;
+				
+				if (Regex(
+					"^\\s*(?:t(?:rue)?|y(?:es)?)\\s*$",
+					RegexOptions().SetIgnoreCase()
+				).IsMatch(value)) retr.Construct(true);
+				else if (Regex(
+					"^\\s*(?:no?|f(?:alse)?)\\s*$",
+					RegexOptions().SetIgnoreCase()
+				).IsMatch(value)) retr.Construct(false);
+				
+				return retr;
+			
+			}
+	
+	
+	};
+	
+	
+	template <typename T>
+	Nullable<T> DataProvider::GetSetting (const String & setting) {
+	
+		auto value=RetrieveSetting(setting);
+		
+		return value.IsNull() ? Nullable<T>() : SettingConverter<typename std::decay<T>::type>::Get(
+			std::move(*value)
+		);
+	
+	}
+	
+	
+	template <typename T>
+	T DataProvider::GetSetting (const String & setting, T default_value) {
+	
+		auto value=GetSetting<T>(setting);
+		
+		return value.IsNull() ? default_value : std::move(*value);
+	
+	}
+	
+	
+	/**
+	 *	\endcond
+	 */
 
 
 }

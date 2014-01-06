@@ -71,6 +71,20 @@ namespace MCPP {
 	}
 	
 	
+	void MySQLDataProvider::keep_alive (std::unique_ptr<MySQLConnection> & conn) {
+	
+		Timer timer(Timer::CreateAndStart());
+		
+		if (conn->KeepAlive(host,port,username,password,database)) {
+		
+			connecting+=timer.ElapsedNanoseconds();
+			++connected;
+		
+		}
+	
+	}
+	
+	
 	std::unique_ptr<MySQLConnection> MySQLDataProvider::get () {
 	
 		thread_init();

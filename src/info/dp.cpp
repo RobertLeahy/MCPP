@@ -1,5 +1,10 @@
 #include <info/info.hpp>
+#include <data_provider.hpp>
+#include <server.hpp>
 #include <algorithm>
+
+
+using namespace MCPP;
 
 
 static const Word priority=1;
@@ -91,26 +96,4 @@ class DataProviderInfo : public Module, public InformationProvider {
 };
 
 
-static Nullable<DataProviderInfo> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(DataProviderInfo)

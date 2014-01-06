@@ -117,7 +117,7 @@ namespace MCPP {
 	}
 	
 	
-	Nullable<String> MySQLDataProvider::GetSetting (const String & setting) {
+	Nullable<String> MySQLDataProvider::RetrieveSetting (const String & setting) {
 	
 		return execute([&] (std::unique_ptr<MySQLConnection> & conn) {	return conn->GetSetting(setting);	});
 	

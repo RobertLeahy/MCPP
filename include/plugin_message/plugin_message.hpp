@@ -11,12 +11,46 @@
 #include <hash.hpp>
 #include <mod.hpp>
 #include <packet.hpp>
+#include <packet_router.hpp>
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
 
 
 namespace MCPP {
+
+
+	/**
+	 *	Represents a plugin message, either
+	 *	to be sent or received.
+	 */
+	class PluginMessage {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The client either that this plugin
+			 *	message should be sent to, or that
+			 *	this plugin message was received
+			 *	from.
+			 */
+			SmartPointer<Client> Endpoint;
+			/**
+			 *	The channel on which this plugin
+			 *	message was received, or on which
+			 *	it should be sent.
+			 */
+			String Channel;
+			/**
+			 *	The plugin message to be sent, or
+			 *	the plugin message which was received.
+			 */
+			Vector<Byte> Buffer;
+	
+	
+	};
 
 
 	/**
@@ -29,15 +63,20 @@ namespace MCPP {
 		private:
 		
 		
+			//	Packet types
+			typedef Packets::Play::Serverbound::PluginMessage incoming;
+			typedef Packets::Play::Clientbound::PluginMessage outgoing;
+		
+		
 			//	Maps channels to callbacks
 			//	which handle incoming messages
 			//	on that channel
 			std::unordered_map<
 				String,
-				std::function<void (SmartPointer<Client>, String, Vector<Byte>)>
+				std::function<void (PluginMessage)>
 			> callbacks;
 			//	Maps clients to channels they've
-			//	subscribe to
+			//	subscribed to
 			std::unordered_map<
 				SmartPointer<Client>,
 				std::unordered_set<String>
@@ -45,9 +84,9 @@ namespace MCPP {
 			RWLock lock;
 			
 			
-			inline bool handle (SmartPointer<Client> &, String &, Vector<Byte> &);
-			inline void reg_channels (SmartPointer<Client> &, const String &);
-			inline void unreg_channels (SmartPointer<Client> &, const String &);
+			void reg (SmartPointer<Client>, Vector<Byte>);
+			void unreg (SmartPointer<Client>, Vector<Byte>);
+			void handler (PacketEvent);
 			
 			
 		public:
@@ -90,7 +129,7 @@ namespace MCPP {
 			 *		whenever a plugin message
 			 *		on \em channel is received.
 			 */
-			void Add (String channel, std::function<void (SmartPointer<Client>, String, Vector<Byte>)> callback);
+			void Add (String channel, std::function<void (PluginMessage)> callback);
 			/**
 			 *	Attempts to send a plugin message
 			 *	on a certain channel to a certain
@@ -100,18 +139,14 @@ namespace MCPP {
 			 *	for the channel-in-question, the
 			 *	message will not be sent.
 			 *
-			 *	\param [in] client
-			 *		The client to send to.
-			 *	\param [in] channel
-			 *		The channel to send on.
-			 *	\param [in] buffer
+			 *	\param [in] message
 			 *		The message to send.
 			 *
 			 *	\return
 			 *		A send handle if the message
 			 *		was sent, null otherwise.
 			 */
-			SmartPointer<SendHandle> Send (SmartPointer<Client> client, String channel, Vector<Byte> buffer);
+			SmartPointer<SendHandle> Send (PluginMessage message);
 	
 	
 	};

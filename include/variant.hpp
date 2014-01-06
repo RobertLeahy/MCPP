@@ -25,6 +25,61 @@ namespace MCPP {
 	namespace VariantImpl {
 	
 	
+		template <typename T1, typename T2, typename=void>
+		class MaxAlignedImplHelper {
+		
+		
+			public:
+			
+			
+				typedef T1 Type;
+		
+		
+		};
+		
+		
+		template <typename T1, typename T2>
+		class MaxAlignedImplHelper<T1,T2,typename std::enable_if<alignof(T1)<alignof(T2)>::type> {
+		
+		
+			public:
+			
+			
+				typedef T2 Type;
+		
+		
+		};
+		
+		
+		template <typename T, typename... Args>
+		class MaxAlignedImpl {
+		
+		
+			public:
+			
+			
+				typedef typename MaxAlignedImplHelper<
+					T,
+					typename MaxAlignedImpl<Args...>::Type
+				>::Type Type;
+		
+		
+		};
+		
+		
+		template <typename T>
+		class MaxAlignedImpl<T> {
+		
+		
+			public:
+			
+			
+				typedef T Type;
+		
+		
+		};
+	
+	
 		template <typename...>
 		class MaxAlignOfImpl {	};
 		
@@ -188,6 +243,71 @@ namespace MCPP {
 		
 		
 		};
+		
+		
+		template <Word i, typename, typename...>
+		class FindConvertibleImpl {	};
+		
+		
+		template <Word i, typename From, typename To, typename... Args>
+		class FindConvertibleImpl<i,From,To,Args...> {
+		
+		
+			public:
+			
+			
+				constexpr static Word Value=std::is_constructible<
+					To,
+					From
+				>::value ? i : FindConvertibleImpl<i+1,From,Args...>::Value;
+		
+		
+		};
+		
+		
+		template <Word i, typename T>
+		class FindConvertibleImpl<i,T> {
+		
+		
+			public:
+			
+			
+				constexpr static Word Value=i;
+		
+		
+		};
+		
+		
+		template <bool, typename T, typename...>
+		class NoThrowConstructibleImpl {
+		
+		
+			public:
+			
+			
+				constexpr static bool Value=std::is_nothrow_constructible<T,T>::value;
+		
+		
+		};
+		
+		
+		template <typename T, typename... Args>
+		class NoThrowConstructibleImpl<true,T,Args...> {
+		
+		
+			public:
+			
+			
+				constexpr static bool Value=std::is_nothrow_constructible<
+					typename GetType<
+						FindConvertibleImpl<0,T,Args...>::Value,
+						Args...
+					>::Type,
+					T
+				>::value;
+		
+		
+		};
 	
 	
 		template <typename... Args>
@@ -223,6 +343,39 @@ namespace MCPP {
 				};
 				
 				
+				template <typename T>
+				class FindConvertible {
+				
+				
+					public:
+					
+					
+						constexpr static Word Value=FindConvertibleImpl<0,T,Args...>::Value;
+				
+				
+				};
+				
+				
+				template <typename T>
+				class NoThrowConstructible {
+				
+				
+					public:
+					
+					
+						constexpr static bool Value=NoThrowConstructibleImpl<
+							FindType<T>::Value==sizeof...(Args),
+							T,
+							Args...
+						>::Value;
+				
+				
+				};
+				
+				
+				typedef typename MaxAlignedImpl<Args...>::Type MaxAligned;
+				
+				
 				constexpr static Word MaxAlignOf=MaxAlignOfImpl<Args...>::Value;
 				
 				
@@ -245,24 +398,49 @@ namespace MCPP {
 	 *	\endcond
 	 */
 	 
-	 
+	
+	/**
+	 *	Thrown when an illegal operation
+	 *	is undertaken on a Variant.
+	 */
 	class BadVariantOperation : public std::exception {
 	
 	
 		public:
 		
 		
-			__attribute__((noreturn))
+			/**
+			 *	\cond
+			 */
+		
+		
+			[[noreturn]]
 			static void Raise () {
 			
 				throw BadVariantOperation();
 			
 			}
+			
+			
+			/**
+			 *	\endcond
+			 */
 	
 	
 	};
 	
 	
+	/**
+	 *	An object which may be imbued with
+	 *	any one of a number of types.
+	 *
+	 *	This object does not use or allocate
+	 *	heap memory for internal storage
+	 *	of stored objects, rather it contains
+	 *	an internal buffer with the necessary
+	 *	size and alignment to contain any
+	 *	of its possible types.
+	 */
 	template <typename... Args>
 	class Variant {
 	
@@ -271,14 +449,19 @@ namespace MCPP {
 		
 		
 			typedef VariantImpl::VariantInfo<Args...> info;
+			
+			
+			template <typename, typename=void>
+			class NoThrowConstructibleHelper;
+			
+			
+			template <typename, typename=void>
+			class NoThrowAssignableHelper;
 		
 		
 			bool engaged;
 			Word active;
-			alignas(
-				max_align_t
-				//info::MaxAlignOf
-			) Byte buffer [info::MaxSizeOf];
+			alignas(typename info::MaxAligned) Byte buffer [info::MaxSizeOf];
 			
 			
 			template <typename T>
@@ -342,7 +525,33 @@ namespace MCPP {
 				!std::is_same<
 					typename std::decay<T>::type,
 					Variant
+				>::value &&
+				(info::template FindType<T>::Value==sizeof...(Args)) &&
+				(info::template FindConvertible<T>::Value!=sizeof...(Args))
+			>::type construct (T && item) noexcept(
+				std::is_nothrow_constructible<
+					typename std::decay<T>::type,
+					T
 				>::value
+			) {
+			
+				constexpr Word index=info::template FindConvertible<T>::Value;
+				
+				new (buffer) typename info::template Types<index>::Type (std::forward<T>(item));
+				
+				engaged=true;
+				active=index;
+			
+			}
+			
+			
+			template <typename T>
+			typename std::enable_if<
+				!std::is_same<
+					typename std::decay<T>::type,
+					Variant
+				>::value &&
+				(info::template FindType<T>::Value!=sizeof...(Args))
 			>::type construct (T && item) noexcept(
 				std::is_nothrow_constructible<
 					typename std::decay<T>::type,
@@ -351,11 +560,6 @@ namespace MCPP {
 			) {
 			
 				constexpr Word index=info::template FindType<T>::Value;
-				
-				static_assert(
-					index!=sizeof...(Args),
-					"Variant does not contain that type"
-				);
 				
 				new (buffer) typename std::decay<T>::type (std::forward<T>(item));
 				
@@ -389,6 +593,7 @@ namespace MCPP {
 			
 			
 			template <Word i>
+			[[noreturn]]
 			typename std::enable_if<
 				!std::is_copy_constructible<typename info::template Types<i>::Type>::value
 			>::type copy_impl_impl (const Variant &) {
@@ -435,6 +640,7 @@ namespace MCPP {
 			
 			
 			template <Word i>
+			[[noreturn]]
 			typename std::enable_if<
 				!std::is_move_constructible<typename info::template Types<i>::Type>::value
 			>::type move_impl_impl (const Variant &) {
@@ -483,7 +689,7 @@ namespace MCPP {
 			
 			template <typename T>
 			void assign_impl (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				destroy();
@@ -500,7 +706,7 @@ namespace MCPP {
 					Variant
 				>::value
 			>::type assign (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				if (reinterpret_cast<const void *>(&item)!=this) assign_impl(std::forward<T>(item));
@@ -515,7 +721,7 @@ namespace MCPP {
 					Variant
 				>::value
 			>::type assign (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				assign_impl(std::forward<T>(item));
@@ -526,9 +732,23 @@ namespace MCPP {
 		public:
 		
 		
+			/**
+			 *	Creates an empty Variant.
+			 */
 			Variant () noexcept : engaged(false) {	}
 			
 			
+			/**
+			 *	Creates a variant by moving another
+			 *	Variant.
+			 *
+			 *	\except BadVariantOperation
+			 *		Thrown if \em other is currently
+			 *		of a type which cannot be moved.
+			 *
+			 *	\param [in] other
+			 *		The Variant to move.
+			 */
 			Variant (Variant && other) noexcept(
 				info::NoThrowMovable
 			) : engaged(false) {
@@ -538,6 +758,17 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Creates a variant by copying another
+			 *	Variant.
+			 *
+			 *	\except BadVariantOperation
+			 *		Thrown if \em other is currently
+			 *		of a type which cannot be copied.
+			 *
+			 *	\param [in] other
+			 *		The Variant to copy.
+			 */
 			Variant (const Variant & other) noexcept(
 				info::NoThrowCopyable
 			) : engaged(false) {
@@ -547,9 +778,17 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Creates a variant by imbuing it with a
+			 *	certain object of a type which it may
+			 *	contain.
+			 *
+			 *	\param [in] item
+			 *		The object to create this Variant from.
+			 */
 			template <typename T>
 			Variant (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowConstructibleHelper<T>::Value
 			) : engaged(false) {
 			
 				construct(std::forward<T>(item));
@@ -557,9 +796,24 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Assigns an item or another Variant to
+			 *	this object.
+			 *
+			 *	\except BadVariantOperation
+			 *		Thrown if \em item is a Variant, and
+			 *		the object within that Variant cannot
+			 *		be copied or moved (as applicable).
+			 *
+			 *	\param [in] item
+			 *		The item to assign to this Variant.
+			 *
+			 *	\return
+			 *		A reference to this Variant.
+			 */
 			template <typename T>
 			Variant & operator = (T && item) noexcept(
-				info::NoThrowMovable && info::NoThrowCopyable
+				NoThrowAssignableHelper<T>::Value
 			) {
 			
 				assign(std::forward<T>(item));
@@ -589,6 +843,10 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Destroys this Variant and any object
+			 *	contained within.
+			 */
 			~Variant () noexcept {
 			
 				destroy();
@@ -596,6 +854,9 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Destroys the object within this Variant.
+			 */
 			void Destroy () noexcept {
 			
 				destroy();
@@ -603,6 +864,14 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Determines whether or not this Variant
+			 *	currently contains an object.
+			 *
+			 *	\return
+			 *		\em true if this Variant does not
+			 *		contain an object, \em false otherwise.
+			 */
 			bool IsNull () const noexcept {
 			
 				return !engaged;
@@ -610,6 +879,18 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Determines whether this Variant currently
+			 *	contains an object of type \em T.
+			 *
+			 *	\tparam T
+			 *		The type-in-question.
+			 *
+			 *	\return
+			 *		\em true if this Variant contains an
+			 *		object of type \em T, \em false
+			 *		otherwise.
+			 */
 			template <typename T>
 			bool Is () const noexcept {
 			
@@ -618,6 +899,36 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Returns the zero-relative index of the
+			 *	type this Variant currently contains.
+			 *
+			 *	If this Variant is empty, the behaviour
+			 *	of this function is undefined.
+			 *
+			 *	\return
+			 *		The zero-relative index of the type
+			 *		this Variant currently contains.
+			 */
+			Word Type () const noexcept {
+			
+				return active;
+			
+			}
+			
+			
+			/**
+			 *	Gets a reference to the object contained
+			 *	within the variant.
+			 *
+			 *	If the Variant is empty, or does not contain
+			 *	an object of type \em T, the behaviour of
+			 *	this function is undefined.
+			 *
+			 *	\return
+			 *		A reference to the object stored within
+			 *		this Variant.
+			 */
 			template <typename T>
 			T & Get () noexcept {
 			
@@ -626,6 +937,18 @@ namespace MCPP {
 			}
 			
 			
+			/**
+			 *	Gets a reference to the object contained
+			 *	within the variant.
+			 *
+			 *	If the Variant is empty, or does not contain
+			 *	an object of type \em T, the behaviour of
+			 *	this function is undefined.
+			 *
+			 *	\return
+			 *		A reference to the object stored within
+			 *		this Variant.
+			 */
 			template <typename T>
 			const T & Get () const noexcept {
 			
@@ -635,6 +958,66 @@ namespace MCPP {
 	
 	
 	};
+	
+	
+	/**
+	 *	\cond
+	 */
+	
+	
+	template <typename... Args>
+	template <typename T, typename>
+	class Variant<Args...>::NoThrowConstructibleHelper {
+	
+	
+		public:
+		
+		
+			constexpr static bool Value=Variant<Args...>::info::template NoThrowConstructible<T>::Value;
+	
+	
+	};
+	
+	
+	template <typename... Args>
+	template <typename T>
+	class Variant<Args...>::NoThrowConstructibleHelper<T,typename std::enable_if<
+		std::is_same<
+			typename std::decay<T>::type,
+			Variant<Args...>
+		>::value
+	>::type> {
+	
+	
+		private:
+		
+		
+			typedef Variant<Args...>::info info;
+	
+	
+		public:
+		
+		
+			constexpr static bool Value=(
+				(
+					std::is_rvalue_reference<T>::value ||
+					!std::is_reference<T>::value
+				) &&
+				!std::is_const<T>::value
+			) ? info::NoThrowMovable : info::NoThrowCopyable;
+	
+	
+	};
+	
+	
+	template <typename... Args>
+	template <typename T, typename>
+	class Variant<Args...>::NoThrowAssignableHelper : public Variant<Args...>::template NoThrowConstructibleHelper<T> {	};
+	
+	
+	/**
+	 *	\endcond
+	 */
 
 
 }

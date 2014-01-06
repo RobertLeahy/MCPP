@@ -1,5 +1,7 @@
 #include <info/info.hpp>
+#include <format.hpp>
 #include <packet.hpp>
+#include <server.hpp>
 
 
 using namespace MCPP;
@@ -12,7 +14,6 @@ static const String help("Display information about mcpp.dll.");
 static const String mcpp_banner("MINECRAFT++:");
 static const String compiled_by_template("Compiled by {0} on {1}");
 static const String minecraft_compat("Compatible with Minecraft {0} (protocol version {1})");
-static const String version_template("{0}.{1}.{2}");
 
 
 class MCPPInfo : public Module, public InformationProvider {
@@ -64,17 +65,16 @@ class MCPPInfo : public Module, public InformationProvider {
 					<<	Newline
 					<<	String::Format(
 							compiled_by_template,
-							Server::Get().CompiledWith(),
-							Server::Get().BuildDate()
+							Server::CompiledWith,
+							Server::BuildDate
 						)
 					<<	Newline
 					<<	String::Format(
 							minecraft_compat,
-							String::Format(
-								version_template,
+							FormatVersion(
 								MinecraftMajorVersion,
 								MinecraftMinorVersion,
-								MinecraftSubminorVersion
+								MinecraftPatch
 							),
 							ProtocolVersion
 						);
@@ -85,26 +85,4 @@ class MCPPInfo : public Module, public InformationProvider {
 };
 
 
-static Nullable<MCPPInfo> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(MCPPInfo)

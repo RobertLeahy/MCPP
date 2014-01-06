@@ -7,1656 +7,2750 @@
 
 
 #include <rleahylib/rleahylib.hpp>
-#include <metadata.hpp>
 #include <compression.hpp>
-#include <functional>
-#include <stdexcept>
-#include <utility>
-#include <type_traits>
-#include <new>
+#include <nbt.hpp>
+#include <json.hpp>
+#include <traits.hpp>
+#include <cstddef>
+#include <cstring>
 #include <limits>
- 
- 
+#include <new>
+#include <type_traits>
+#include <unordered_map>
+#include <utility>
+
+
 namespace MCPP {
 
 
 	/**
-	 *	\cond
+	 *	Thrown when a packet contains incorrectly
+	 *	formatted data.
 	 */
-
-
-	class Packet;
-
-
-	class PacketFactory : public Memory::Managed {
+	class BadFormat : public std::exception {
 	
 	
 		public:
 		
 		
-			static PacketFactory * Make (Byte type);
+			/**
+			 *	\cond
+			 */
 		
 		
-			PacketFactory () noexcept;
-			PacketFactory (const PacketFactory &) = delete;
-			PacketFactory (PacketFactory &&) = delete;
-			PacketFactory & operator = (const PacketFactory &) = delete;
-			PacketFactory & operator = (PacketFactory &&) = delete;
-		
-		
-			virtual ~PacketFactory () noexcept;
+			[[noreturn]]
+			static void Raise ();
 			
 			
-			virtual void Install (Packet & packet) const = 0;
-			
-			
-			virtual bool FromBytes (
-				Packet & packet,
-				Vector<Byte> & buffer
-			) const = 0;
-			
-			
-			virtual Byte Type () const noexcept = 0;
-			
-			
-			virtual Vector<Byte> ToBytes (const Packet & packet) const = 0;
-			
-			
-			virtual Word Size (const Packet & packet) const = 0;
+			/**
+			 *	\endcond
+			 */
 	
 	
 	};
-	 
-	 
-	template <Byte, typename...>
-	class PacketType;
 	
 	
 	/**
-	 *	\endcond
+	 *	Thrown when insufficient bytes
+	 *	are provided to deserialize a
+	 *	packet.
+	 *
+	 *	Represents a corrupted/bad length
+	 *	header.
 	 */
+	class InsufficientBytes : public std::exception {
+	
+	
+		public:
+		
+		
+			/**
+			 *	\cond
+			 */
+		
+		
+			[[noreturn]]
+			static void Raise ();
+			
+			
+			/**
+			 *	\endcond
+			 */
+	
+	
+	};
+	
+	
+	/**
+	 *	Thrown when a bad packet ID is
+	 *	detected.
+	 */
+	class BadPacketID : public std::exception {
+	
+	
+		public:
+		
+		
+			/**
+			 *	\cond
+			 */
+		
+		
+			[[noreturn]]
+			static void Raise ();
+			
+			
+			/**
+			 *	\endcond
+			 */
+	
+	
+	};
 
 
 	/**
-	 *	Represents a single packet in the Minecraft
-	 *	protocol.
+	 *	Represents the states that the protocol
+	 *	may be in.
+	 */
+	enum class ProtocolState {
+	
+		Handshaking,	/**<	The client has just connected, and must specify which state it wishes to transition to.	*/
+		Play,			/**<	The client is in game.	*/
+		Status,			/**<	The client is requesting server status.	*/
+		Login			/**<	The client is logging in.	*/
+	
+	};
+	
+	
+	/**
+	 *	Represents the direction that the protocol
+	 *	may travel in.
+	 */
+	enum class ProtocolDirection {
+	
+		Clientbound,	/**<	Server to client.	*/
+		Serverbound,	/**<	Client to server.	*/
+		Both			/**<	Server to client and client to server.	*/
+	
+	};
+	
+	
+	/**
+	 *	Contains data about an item.
+	 */
+	class Slot {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The ID of the item.
+			 */
+			Int16 ItemID;
+			/**
+			 *	The number of the item in
+			 *	this stack.
+			 */
+			Byte Count;
+			/**
+			 *	The damage value of the item.
+			 */
+			Int16 Damage;
+			/**
+			 *	Any NBT data associated with the
+			 *	item.
+			 */
+			NBT::NamedTag Data;
+	
+	
+	};
+	
+	
+	/**
+	 *	A type which may contain entity
+	 *	metadata.
+	 */
+	typedef std::unordered_map<Byte,Variant<Byte,Int16,Int32,Single,String,Nullable<Slot>,Tuple<Int32,Int32,Int32>>> Metadata;
+	
+	
+	typedef Variant<Int32,Tuple<Int32,Int16,Int16,Int16>> ObjectData;
+	
+	
+	/**
+	 *	The base class from which all packets
+	 *	are derived.
 	 */
 	class Packet {
 	
 	
-		template <Byte, typename...>
-		friend class PacketType;
-	
-	
-		private:
+		protected:
 		
-
-			//	Buffer of bytes where objects
-			//	reside
-			Byte * buffer;
-			//	Information about each object
-			//	in the buffer
-			//
-			//	0 - The offset (in bytes) of that
-			//	object within the buffer.
-			//
-			//	1 - Whether that object is
-			//	constructed or not.
-			//
-			//	2 - The cleanup function for that
-			//	object.
-			Vector<
-				Tuple<
-					Word,
-					bool,
-					std::function<void (void *)>
-				>
-			> metadata;
-			//	The progress the packet factory has
-			//	made in constructing objects in
-			//	the buffer
-			Word curr;
-			//	Whether the packet has been built
-			bool complete;
-			//	The packet factory which shall be
-			//	used to manipulate the data in a
-			//	type-erased manner.
-			const PacketFactory * factory;
+		
+			Packet (UInt32) noexcept;
 			
 			
-			void destroy_buffer () noexcept;
-			void destroy () noexcept;
-			inline void bounds_check (Word offset) const {
-			
-				if (offset>=metadata.Count()) throw std::out_of_range("Index out of bounds");
-			
-			}
-			template <typename T>
-			inline void init (Word offset) const {
-			
-				//	If object is unconstructed
-				if (!metadata[offset].Item<1>()) {
-			
-					//	Get around constness
-					Packet * m_this=const_cast<Packet *>(this);
-					
-					//	Default initializer
-					new (m_this->buffer+metadata[offset].Item<0>()) T ();
-					
-					//	Flag as constructed
-					m_this->metadata[offset].Item<1>()=true;
-					
-				}
-			
-			}
-			
-			
+			Packet (const Packet &) = default;
+			Packet (Packet &&) = default;
+			Packet & operator = (const Packet &) = default;
+			Packet & operator = (Packet &&) = default;
+	
+	
 		public:
 		
 		
+			Packet () = delete;
+		
+		
 			/**
-			 *	Constructs a new, empty packet which
-			 *	has not yet been bound to a type.
+			 *	The ID of this packet.
 			 */
-			Packet () noexcept;
-			Packet (const Packet &) = delete;
-			Packet & operator = (const Packet &) = delete;
-			/**
-			 *	Creates a packet by moving another packet.
-			 *
-			 *	\param [in] other
-			 *		The packet to move.  This packet shall
-			 *		be returned to the state it would be in
-			 *		after being default constructed.
-			 */
-			Packet (Packet && other) noexcept;
-			/**
-			 *	Replaces this packet with the contents
-			 *	of another packet.
-			 *
-			 *	\param [in] other
-			 *		The packet to move.  This packet shall
-			 *		be returned to the state it would be in
-			 *		after being default constructed.
-			 *
-			 *	\return
-			 *		A reference to this object.
-			 */
-			Packet & operator = (Packet && other) noexcept;
-			/**
-			 *	Destroys this packet.
-			 */
-			~Packet () noexcept;
+			UInt32 ID;
 			
 			
 			/**
-			 *	Retrieves an element of this packet.
+			 *	Retrieves a reference to a particular
+			 *	kind of packet.
 			 *
-			 *	If the element has not been accessed or
-			 *	written, it will be returned default
-			 *	constructed.
+			 *	If the packet being retrieved does not
+			 *	have the ID given by ID, the behaviour
+			 *	of this function is undefined.
 			 *
 			 *	\tparam T
-			 *		The type of the element to retrieve.
-			 *		Setting this inappropriately leads to
-			 *		undefined behaviour.
-			 *
-			 *	\param [in] offset
-			 *		The zero-relative offset of the element
-			 *		to retrieve.
+			 *		The type of the packet to retrieve.
 			 *
 			 *	\return
-			 *		A reference to this requested element.
-			 */
-			template <typename T>
-			T & Retrieve (Word offset) {
-			
-				bounds_check(offset);
-				
-				init<T>(offset);
-				
-				return *reinterpret_cast<T *>(buffer+metadata[offset].Item<0>());
-			
-			}
-			
-			
-			/**
-			 *	Retrieves an element of this packet.
-			 *
-			 *	If the element has not been accessed or
-			 *	written, it will be returned default
-			 *	constructed.
-			 *
-			 *	\tparam T
-			 *		The type of the element to retrieve.
-			 *		Setting this inappropriately leads to
-			 *		undefined behaviour.
-			 *
-			 *	\param [in] offset
-			 *		The zero-relative offset of the element
-			 *		to retrieve.
-			 *
-			 *	\return
-			 *		A reference to this requested element.
-			 */
-			template <typename T>
-			const T & Retrieve (Word offset) const {
-			
-				bounds_check(offset);
-				
-				init<T>(offset);
-				
-				return *reinterpret_cast<const T *>(buffer+metadata[offset].Item<0>());
-			
-			}
-			
-			
-			/**
-			 *	Retrieves an element of this packet.
-			 *
-			 *	If the element has not been accessed or
-			 *	written, it will be returned default
-			 *	constructed.
-			 *
-			 *	\tparam T
-			 *		The type that this packet has been
-			 *		imbued with.
-			 *	\tparam offset
-			 *		The zero-relative offset of the item
-			 *		to retrieve.
-			 *
-			 *	\return
-			 *		A reference to the requested element.
-			 */
-			template <typename T, Word offset>
-			typename T::template RetrieveType<offset>::Type & Retrieve () {
-				
-				init<typename T::template RetrieveType<offset>::Type>(offset);
-				
-				return *reinterpret_cast<typename T::template RetrieveType<offset>::Type *>(
-					buffer+metadata[offset].Item<0>()
-				);
-			
-			}
-			
-			
-			/**
-			 *	Retrieves an element of this packet.
-			 *
-			 *	If the element has not been accessed or
-			 *	written, it will be returned default
-			 *	constructed.
-			 *
-			 *	\tparam T
-			 *		The type that this packet has been
-			 *		imbued with.
-			 *	\tparam offset
-			 *		The zero-relative offset of the item
-			 *		to retrieve.
-			 *
-			 *	\return
-			 *		A reference to the requested element.
-			 */
-			template <typename T, Word offset>
-			const typename T::template RetrieveType<offset>::Type & Retrieve () const {
-				
-				init<typename T::template RetrieveType<offset>::Type>(offset);
-				
-				return *reinterpret_cast<typename T::template RetrieveType<offset>::Type *>(
-					buffer+metadata[offset].Item<0>()
-				);
-			
-			}
-			
-			
-			/**
-			 *	Imbues this packet with a type.
-			 *
-			 *	\tparam T
-			 *		The type to imbue this packet with.
+			 *		A reference to a packet of type
+			 *		\em T.
 			 */
 			template <typename T>
 			typename std::enable_if<
-				std::is_base_of<PacketFactory,T>::value
-			>::type SetType () {
+				std::is_base_of<Packet,T>::value,
+				typename std::decay<T>::type
+			>::type & Get () noexcept {
 			
-				PacketFactory * factory=new T();
-				
-				factory->Install(*this);
+				return *reinterpret_cast<T *>(
+					reinterpret_cast<void *>(
+						this
+					)
+				);
 			
 			}
 			
 			
 			/**
-			 *	Converts raw bytes from the network into
-			 *	a packet.
+			 *	Retrieves a reference to a particular
+			 *	kind of packet.
 			 *
-			 *	Once this function returns \em true, all
-			 *	further calls to this function will
-			 *	clear the packet and begin building another
-			 *	packet inside it from the new buffer.
+			 *	If the packet being retrieved does not
+			 *	have the ID given by ID, the behaviour
+			 *	of this function is undefined.
 			 *
-			 *	A return value of \em false does not mean that
-			 *	\em buffer is unaffected.  This function
-			 *	builds the packet incrementally.  All consumed
-			 *	bytes will be removed as they are parsed.
-			 *
-			 *	\param [in] buffer
-			 *		A buffer of bytes.  Bytes shall be
-			 *		removed from this buffer appropriately
-			 *		as the packet is incrementally built.
+			 *	\tparam T
+			 *		The type of the packet to retrieve.
 			 *
 			 *	\return
-			 *		\em false if the packet could not be
-			 *		built completely, \em true otherwise.
+			 *		A reference to a packet of type
+			 *		\em T.
 			 */
-			bool FromBytes (Vector<Byte> & buffer);
+			template <typename T>
+			const typename std::enable_if<
+				std::is_base_of<Packet,T>::value,
+				typename std::decay<T>::type
+			>::type & Get () const noexcept {
 			
+				return *reinterpret_cast<const T *>(
+					reinterpret_cast<const void *>(
+						this
+					)
+				);
 			
-			/**
-			 *	Retrieves the type of this packet.
-			 *
-			 *	Raises an error if the packet has not been
-			 *	given a type.
-			 *
-			 *	Corresponds to the byte identifying each
-			 *	packet sent on the network as part of the
-			 *	Minecraft protocol.
-			 *
-			 *	\return
-			 *		The type of this packet.
-			 */
-			Byte Type () const;
-			
-			
-			/**
-			 *	Retrieves the number of bytes that would
-			 *	be required to transmit this packet.
-			 *
-			 *	Raises an error if any element in this
-			 *	packet is not in a state fit for network
-			 *	transmission.
-			 *
-			 *	\return
-			 *		The number of bytes in the serialization
-			 *		of this packet.
-			 */
-			Word Size () const;
-			
-			
-			/**
-			 *	Serializes this packet for transmission
-			 *	over the network.
-			 *
-			 *	\return
-			 *		A buffer of bytes representing this
-			 *		packet.
-			 */
-			Vector<Byte> ToBytes () const;
-			
-			
-			/**
-			 *	Obtains a string representation of this
-			 *	packet.
-			 *
-			 *	\return
-			 *		A string representation of this packet.
-			 */
-			String ToString () const;
-			
-			
-			/**
-			 *	Obtains a string representation of this
-			 *	packet.
-			 *
-			 *	\return
-			 *		A string representation of this packet.
-			 */
-			explicit operator String () const;
+			}
 	
 	
 	};
-	
-	
+
+
 	/**
-	 *	A thin wrapper for a Vector of elements of
-	 *	type \em TItem.
-	 *
-	 *	A valid specialization of PacketHelper must
-	 *	exist for \em TCount and \em TItem for this
-	 *	to be successfully serialized and unserialized.
-	 *
-	 *	The Minecraft protocol requires arrays to be
-	 *	sent and received, however in typical Notch
-	 *	fashion these arrays are not of uniform size,
-	 *	nor are they prepended with a standardized
-	 *	length format.  Some use signed bytes
-	 *	as the length type, some use signed 16-bit
-	 *	integers.  Therefore a wrapper pairing a
-	 *	Vector with a type to render its count as
-	 *	is required to fully genericize the protocol.
-	 *
-	 *	\tparam TCount
-	 *		The type to serialize the Vector's count
-	 *		as.  Must be a recognized integer type.
-	 *	\tparam TItem
-	 *		The type of the Vector to serialize.
+	 *	\cond
 	 */
-	template <typename TCount, typename TItem>
-	class PacketArray {
+
+
+	namespace PacketImpl {
 	
 	
-		static_assert(
-			std::numeric_limits<TCount>::is_integer,
-			"Count type must be integer"
-		);
-	
-	
-		public:
+		template <typename T>
+		class VarInt {
 		
 		
-			Vector<TItem> Payload;
+			private:
+			
+			
+				T value;
+				
+				
+			public:
+			
+			
+				VarInt () = default;
+				VarInt (T value) noexcept : value(std::move(value)) {	}
+				VarInt & operator = (T value) noexcept {
+				
+					this->value=value;
+					
+					return *this;
+				
+				}
+				operator T () const noexcept {
+				
+					return value;
+				
+				}
 		
 		
-			PacketArray () = default;
-			PacketArray (Vector<TItem> vec) noexcept : Payload(std::move(vec)) {	}
+		};
+		
+		
+	}
 	
 	
-	};
-	
-	
-	/**
-	 *	An helper class which provides a default
-	 *	serialization/unserialization mechanism for
-	 *	types.
-	 *
-	 *	This default mechanism is absolutely unsafe for
-	 *	non-trivial types, and if non-trivial types
-	 *	must be serialized appropriate specializations
-	 *	must be provided.
-	 *
-	 *	By default specializations exist such that all
-	 *	types used in the default Minecraft protocol
-	 *	may be serialized and unserialized.
-	 *
-	 *	\tparam T
-	 *		The type the helper should serialize and
-	 *		unserialize.
-	 */
+}
+
+
+namespace std {
+
+
 	template <typename T>
-	class PacketHelper {
-	
-	
-		public:
+	struct numeric_limits<MCPP::PacketImpl::VarInt<T>> : public numeric_limits<T> {	};
+	template <typename T>
+	struct is_signed<MCPP::PacketImpl::VarInt<T>> : public is_signed<T> {	};
+	template <typename T>
+	struct is_unsigned<MCPP::PacketImpl::VarInt<T>> : public is_unsigned<T> {	};
+
+
+}
+
+
+namespace MCPP {
+
+
+	namespace PacketImpl {
 		
 		
-			/**
-			 *	Whether this type is trivial, i.e. whether
-			 *	it can be simply copied/endian-corrected
-			 *	to serialize/unserialize, and whether its
-			 *	size on the wire is identical to its
-			 *	size in memory.
-			 */
-			static const bool Trivial=true;
+		template <Word i, typename... Args>
+		class MimicLayout : public MimicLayout<i-1,Args...> {
+		
+			
+			public:
 			
 			
-			/**
-			 *	Obtains the size of an element.
-			 *
-			 *	The default implementation does not throw, but
-			 *	specializations may.
-			 *
-			 *	The default implementation is \em constexpr, but
-			 *	specializations are not necessarily.
-			 *
-			 *	\param [in] obj
-			 *		The object to determine the size of,
-			 *		ignored in the default implementation.
-			 *
-			 *	\return
-			 *		The number of bytes required to serialize
-			 *		this object.
-			 */
-			constexpr static Word Size (const T & obj) noexcept {
+				typename GetType<i,Args...>::Type Value;
 			
-				return sizeof(T);
+		
+		};
+		
+		
+		template <typename... Args>
+		class MimicLayout<0,Args...> {
+		
+		
+			public:
+			
+			
+				typename GetType<0,Args...>::Type Value;
+		
+		
+		};
+		
+		
+		template <Word i>
+		class MimicLayout<i> {	};
+		
+		
+		template <Word i, typename... Args>
+		class GetOffset {
+		
+		
+			private:
+			
+			
+				typedef MimicLayout<i,Args...> type;
+		
+		
+			public:
+			
+			
+				#pragma GCC diagnostic push
+				#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+				constexpr static Word Value=offsetof(type,Value);
+				#pragma GCC diagnostic pop
+		
+		
+		};
+	
+	
+		template <typename... Args>
+		class PacketType {
+		
+		
+			private:
+			
+			
+				typedef VarInt<UInt32> id_type;
+		
+		
+			public:
+			
+			
+				template <Word i>
+				class Types {
+				
+				
+					public:
+					
+					
+						typedef typename GetType<i,Args...>::Type Type;
+						
+						
+						constexpr static Word Offset=GetOffset<i+1,id_type,Args...>::Value;
+				
+				
+				};
+				
+				
+				constexpr static Word Count=sizeof...(Args);
+				
+				
+				constexpr static Word Size=sizeof(MimicLayout<sizeof...(Args),id_type,Args...>);
+				
+				
+				constexpr static bool IsValid=true;
+		
+		
+		};
+		
+		
+		template <typename prefix, typename type>
+		class Array {
+		
+		
+			public:
+			
+			
+				Vector<type> Value;
+		
+		
+		};
+		
+		
+		template <ProtocolState, ProtocolDirection, UInt32>
+		class PacketMap : public PacketType<> {
+		
+		
+			public:
+			
+			
+				constexpr static bool IsValid=false;
+		
+		
+		};
+		
+		
+		constexpr ProtocolState HS=ProtocolState::Handshaking;
+		constexpr ProtocolState PL=ProtocolState::Play;
+		constexpr ProtocolState ST=ProtocolState::Status;
+		constexpr ProtocolState LI=ProtocolState::Login;
+		
+		
+		constexpr ProtocolDirection CB=ProtocolDirection::Clientbound;
+		constexpr ProtocolDirection SB=ProtocolDirection::Serverbound;
+		constexpr ProtocolDirection BO=ProtocolDirection::Both;
+		
+		
+		typedef Int32 PLACEHOLDER;	//	Placeholder for unimplemented types
+		
+		
+		//	HANDSHAKE
+		
+		//	SERVERBOUND
+		template <> class PacketMap<HS,SB,0x00> : public PacketType<VarInt<UInt32>,String,UInt16,ProtocolState> {	};
+		
+		//	PLAY
+		
+		//	CLIENTBOUND
+		template <> class PacketMap<PL,CB,0x00> : public PacketType<Int32> {	};
+		template <> class PacketMap<PL,CB,0x01> : public PacketType<Int32,Byte,SByte,Byte,Byte,String> {	};
+		template <> class PacketMap<PL,CB,0x02> : public PacketType<JSON::Value> {	};
+		template <> class PacketMap<PL,CB,0x03> : public PacketType<Int64,Int64> {	};
+		template <> class PacketMap<PL,CB,0x04> : public PacketType<Int32,Int16,Nullable<Slot>> {	};
+		template <> class PacketMap<PL,CB,0x05> : public PacketType<Int32,Int32,Int32> {	};
+		template <> class PacketMap<PL,CB,0x06> : public PacketType<Single,Int16,Single> {	};
+		template <> class PacketMap<PL,CB,0x07> : public PacketType<Int32,Byte,Byte> {	};
+		template <> class PacketMap<PL,CB,0x08> : public PacketType<Double,Double,Double,Single,Single,bool> {	};
+		template <> class PacketMap<PL,CB,0x09> : public PacketType<Byte> {	};
+		template <> class PacketMap<PL,CB,0x0A> : public PacketType<Int32,Int32,Byte,Int32> {	};
+		template <> class PacketMap<PL,CB,0x0B> : public PacketType<VarInt<UInt32>,Byte> {	};
+		template <> class PacketMap<PL,CB,0x0C> : public PacketType<VarInt<UInt32>,String,String,Int32,Int32,Int32,SByte,SByte,Int16,Metadata> {	};
+		template <> class PacketMap<PL,CB,0x0D> : public PacketType<Int32,Int32> {	};
+		template <> class PacketMap<PL,CB,0x0E> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,ObjectData> {	};
+		template <> class PacketMap<PL,CB,0x0F> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32,SByte,SByte,SByte,Int16,Int16,Int16,Metadata> {	};
+		template <> class PacketMap<PL,CB,0x10> : public PacketType<VarInt<UInt32>,String,Int32,Int32,Int32,Int32> {	};
+		template <> class PacketMap<PL,CB,0x11> : public PacketType<VarInt<UInt32>,Int32,Int32,Int32,Int16> {	};
+		template <> class PacketMap<PL,CB,0x12> : public PacketType<Int32,Int16,Int16,Int16> {	};
+		template <> class PacketMap<PL,CB,0x13> : public PacketType<Array<SByte,Int32>> {	};
+		template <> class PacketMap<PL,CB,0x14> : public PacketType<Int32> {	};
+		template <> class PacketMap<PL,CB,0x15> : public PacketType<Int32,SByte,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x16> : public PacketType<Int32,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x17> : public PacketType<Int32,SByte,SByte,SByte,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x18> : public PacketType<Int32,Int32,Int32,Int32,SByte,SByte> {	};
+		template <> class PacketMap<PL,CB,0x19> : public PacketType<Int32,SByte> {	};
+		template <> class PacketMap<PL,CB,0x1A> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,CB,0x1B> : public PacketType<Int32,Int32,bool> {	};
+		template <> class PacketMap<PL,CB,0x1C> : public PacketType<Int32,Metadata> {	};
+		template <> class PacketMap<PL,CB,0x1D> : public PacketType<Int32,Byte,Byte,Int16> {	};
+		template <> class PacketMap<PL,CB,0x1E> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,CB,0x1F> : public PacketType<Single,Int16,Int16> {	};
+		template <> class PacketMap<PL,CB,0x20> : public PacketType<Int32,Array<Int32,Tuple<String,Double,Array<Int16,Tuple<UInt128,Double,Byte>>>>> {	};
+		template <> class PacketMap<PL,CB,0x21> : public PacketType<Int32,Int32,bool,UInt16,UInt16,Array<Int32,Byte>> {	};
+		//	0x22
+		template <> class PacketMap<PL,CB,0x23> : public PacketType<Int32,Byte,UInt32,VarInt<UInt32>,Byte> {	};
+		template <> class PacketMap<PL,CB,0x24> : public PacketType<Int32,Int16,Int32,Byte,Byte,VarInt<UInt32>> {	};
+		template <> class PacketMap<PL,CB,0x25> : public PacketType<VarInt<UInt32>,Int32,Int32,Int32,Byte> {	};
+		//	0x26
+		template <> class PacketMap<PL,CB,0x27> : public PacketType<Single,Single,Single,Single,Array<Int32,Tuple<SByte,SByte,SByte>>,Single,Single,Single> {	};
+		template <> class PacketMap<PL,CB,0x28> : public PacketType<Int32,Int32,Byte,Int32,Int32,bool> {	};
+		template <> class PacketMap<PL,CB,0x29> : public PacketType<String,Int32,Int32,Int32,Single,Byte,Byte> {	};
+		template <> class PacketMap<PL,CB,0x2A> : public PacketType<String,Single,Single,Single,Single,Single,Single,Single,Int32> {	};
+		template <> class PacketMap<PL,CB,0x2B> : public PacketType<Byte,Single> {	};
+		template <> class PacketMap<PL,CB,0x2C> : public PacketType<VarInt<UInt32>,Byte,Int32,Int32,Int32> {	};
+		template <> class PacketMap<PL,CB,0x2D> : public PacketType<Byte,Byte,String,Byte,bool,Int32> {	};
+		template <> class PacketMap<PL,CB,0x2E> : public PacketType<Byte> {	};
+		template <> class PacketMap<PL,CB,0x2F> : public PacketType<Byte,Int16,Nullable<Slot>> {	};
+		template <> class PacketMap<PL,CB,0x30> : public PacketType<Byte,Array<Int16,Nullable<Slot>>> {	};
+		template <> class PacketMap<PL,CB,0x31> : public PacketType<Byte,Int16,Int16> {	};
+		template <> class PacketMap<PL,CB,0x32> : public PacketType<Byte,Int16,bool> {	};
+		template <> class PacketMap<PL,CB,0x33> : public PacketType<Int32,Int16,Int32,String,String,String,String> {	};
+		template <> class PacketMap<PL,CB,0x34> : public PacketType<VarInt<UInt32>,Array<Int16,Byte>> {	};
+		template <> class PacketMap<PL,CB,0x35> : public PacketType<Int32,Int16,Int32,Byte,NBT::NamedTag> {	};
+		template <> class PacketMap<PL,CB,0x36> : public PacketType<Int32,Int32,Int32> {	};
+		template <> class PacketMap<PL,CB,0x37> : public PacketType<Array<VarInt<UInt32>,Tuple<String,VarInt<UInt32>>>> {	};
+		template <> class PacketMap<PL,CB,0x38> : public PacketType<String,bool,Int16> {	};
+		template <> class PacketMap<PL,CB,0x39> : public PacketType<Byte,Single,Single> {	};
+		template <> class PacketMap<PL,CB,0x3A> : public PacketType<Array<VarInt<UInt32>,String>> {	};
+		template <> class PacketMap<PL,CB,0x3B> : public PacketType<String,String,Byte> {	};
+		template <> class PacketMap<PL,CB,0x3C> : public PacketType<String,Byte,String,Int32> {	};
+		template <> class PacketMap<PL,CB,0x3D> : public PacketType<Byte,String> {	};
+		//	Conditional parsing mess
+		//template <> class PacketMap<PL,CB,0x3E> : public PacketType<String,Byte,String,String,String,Byte,Array<Int16,String>> {	};
+		template <> class PacketMap<PL,CB,0x3F> : public PacketType<String,Array<Int16,Byte>> {	};
+		template <> class PacketMap<PL,CB,0x40> : public PacketType<String> {	};
+		
+		//	SERVERBOUND
+		
+		template <> class PacketMap<PL,SB,0x00> : public PacketType<Int32> {	};
+		template <> class PacketMap<PL,SB,0x01> : public PacketType<String> {	};
+		template <> class PacketMap<PL,SB,0x02> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,SB,0x03> : public PacketType<bool> {	};
+		template <> class PacketMap<PL,SB,0x04> : public PacketType<Double,Double,Double,Double,bool> {	};
+		template <> class PacketMap<PL,SB,0x05> : public PacketType<Single,Single,bool> {	};
+		template <> class PacketMap<PL,SB,0x06> : public PacketType<Double,Double,Double,Double,Single,Single,bool> {	};
+		template <> class PacketMap<PL,SB,0x07> : public PacketType<Byte,Int32,Byte,Int32,Byte> {	};
+		template <> class PacketMap<PL,SB,0x08> : public PacketType<Int32,Byte,Int32,SByte,Nullable<Slot>,SByte,SByte,SByte> {	};
+		template <> class PacketMap<PL,SB,0x09> : public PacketType<Int16> {	};
+		template <> class PacketMap<PL,SB,0x0A> : public PacketType<Int32,Byte> {	};
+		template <> class PacketMap<PL,SB,0x0B> : public PacketType<Int32,Byte,Int32> {	};
+		template <> class PacketMap<PL,SB,0x0C> : public PacketType<Single,Single,bool,bool> {	};
+		template <> class PacketMap<PL,SB,0x0D> : public PacketType<Byte> {	};
+		template <> class PacketMap<PL,SB,0x0E> : public PacketType<Byte,Int16,Byte,Int16,Byte,Nullable<Slot>> {	};
+		template <> class PacketMap<PL,SB,0x0F> : public PacketType<Byte,Int16,bool> {	};
+		template <> class PacketMap<PL,SB,0x10> : public PacketType<Int16,Nullable<Slot>> {	};
+		template <> class PacketMap<PL,SB,0x11> : public PacketType<Byte,Byte> {	};
+		template <> class PacketMap<PL,SB,0x12> : public PacketType<Int32,Int16,Int32,String,String,String,String> {	};
+		template <> class PacketMap<PL,SB,0x13> : public PacketType<Byte,Single,Single> {	};
+		template <> class PacketMap<PL,SB,0x14> : public PacketType<String> {	};
+		template <> class PacketMap<PL,SB,0x15> : public PacketType<String,Byte,Byte,bool,Byte,bool> {	};
+		template <> class PacketMap<PL,SB,0x16> : public PacketType<Byte> {	};
+		template <> class PacketMap<PL,SB,0x17> : public PacketType<String,Array<Int16,Byte>> {	};
+		
+		//	STATUS
+		
+		//	CLIENTBOUND
+		template <> class PacketMap<ST,CB,0x00> : public PacketType<JSON::Value> {	};
+		template <> class PacketMap<ST,CB,0x01> : public PacketType<Int64> {	};
+		
+		//	SERVERBOUND
+		template <> class PacketMap<ST,SB,0x00> : public PacketType<> {	};
+		template <> class PacketMap<ST,SB,0x01> : public PacketType<Int64> {	};
+		
+		//	LOGIN
+		
+		//	CLIENTBOUND
+		template <> class PacketMap<LI,CB,0x00> : public PacketType<JSON::Value> {	};
+		template <> class PacketMap<LI,CB,0x01> : public PacketType<String,Array<Int16,Byte>,Array<Int16,Byte>> {	};
+		template <> class PacketMap<LI,CB,0x02> : public PacketType<String,String> {	};
+		
+		//	SERVERBOUND
+		template <> class PacketMap<LI,SB,0x00> : public PacketType<String> {	};
+		template <> class PacketMap<LI,SB,0x01> : public PacketType<Array<Int16,Byte>,Array<Int16,Byte>> {	};
+		
+		
+		constexpr UInt32 LargestID=0x40;
+		
+		
+		constexpr ProtocolState Next (ProtocolState ps) noexcept {
+		
+			return (ps==HS) ? PL : ((ps==PL) ? ST : LI);
+		
+		}
+		
+		
+		constexpr ProtocolDirection Next (ProtocolDirection pd) noexcept {
+		
+			return (pd==CB) ? SB : ((pd==SB) ? BO : CB);
+		
+		}
+		
+		
+		template <typename T>
+		constexpr T Max (T a, T b) noexcept {
+		
+			return (a>b) ? a : b;
+		
+		}
+		
+		
+		template <ProtocolState ps, ProtocolDirection pd, UInt32 id>
+		class LargestImpl {
+		
+		
+			public:
+			
+			
+				constexpr static Word Value=Max(
+					PacketMap<ps,pd,id>::Size,
+					LargestImpl<ps,pd,id+1>::Value
+				);
+		
+		
+		};
+		
+		
+		template <ProtocolState ps, ProtocolDirection pd>
+		class LargestImpl<ps,pd,LargestID> {
+		
+		
+			public:
+			
+			
+				constexpr static Word Value=Max(
+					PacketMap<ps,pd,LargestID>::Size,
+					LargestImpl<
+						(pd==BO) ? Next(ps) : ps,
+						Next(pd),
+						0
+					>::Value
+				);
+		
+		
+		};
+		
+		
+		template <>
+		class LargestImpl<LI,BO,LargestID> {
+		
+		
+			public:
+			
+			
+				constexpr static Word Value=PacketMap<LI,BO,LargestID>::Size;
+		
+		
+		};
+		
+		
+		constexpr Word Largest=LargestImpl<HS,CB,0>::Value;
+		
+		
+		class PacketContainer {
+		
+		
+			public:
+			
+			
+				typedef void (*destroy_type) (void *);
+				typedef void (*from_bytes_type) (const Byte * &, const Byte *, void *);
+			
+			
+				destroy_type destroy;
+				from_bytes_type from_bytes;
+				bool engaged;
+				union {
+					Byte storage [Largest];
+					Packet packet;
+				};
+				
+				
+				inline void destroy_impl () noexcept;
+		
+		
+			public:
+			
+			
+				PacketContainer () noexcept;
+			
+			
+				PacketContainer (const PacketContainer &) = delete;
+				PacketContainer (PacketContainer &&) = delete;
+				PacketContainer & operator = (const PacketContainer &) = delete;
+				PacketContainer & operator = (PacketContainer &&) = delete;
+			
+			
+				~PacketContainer () noexcept;
+				
+				
+				void FromBytes (const Byte * &, const Byte *);
+				Packet & Get () noexcept;
+				const Packet & Get () const noexcept;
+				
+				
+				void Imbue (destroy_type, from_bytes_type) noexcept;
+		
+		
+		};
+		
+		
+		template <typename T>
+		class Serializer {
+		
+		
+			public:
+			
+			
+				constexpr static Word Size (const T &) noexcept {
+				
+					return sizeof(T);
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Make sure there's enough space
+					//	to extract an object of this
+					//	type from the buffer
+					if ((end-begin)<sizeof(T)) InsufficientBytes::Raise();
+					
+					if (Endianness::IsBigEndian<T>()) {
+					
+						//	If the system is big endian, simply
+						//	copy directly from the buffer to
+						//	the object pointer
+					
+						std::memcpy(ptr,begin,sizeof(T));
+					
+					} else {
+					
+						//	Otherwise reverse byte order as we
+						//	copy
+						
+						for (Word i=0;i<sizeof(T);++i) reinterpret_cast<Byte *>(ptr)[i]=begin[sizeof(T)-i-1];
+					
+					}
+					
+					//	Advance pointer
+					begin+=sizeof(T);
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const T & obj) {
+				
+					//	Resize buffer as/if necessary
+					while ((buffer.Capacity()-buffer.Count())<sizeof(T)) buffer.SetCapacity();
+					
+					auto end=buffer.end();
+					
+					//	If the system is big endian, we can
+					//	copy directly, otherwise reverse
+					//	byte order as we copy
+					if (Endianness::IsBigEndian<T>()) std::memcpy(end,&obj,sizeof(T));
+					else for (Word i=0;i<sizeof(T);++i) end[i]=reinterpret_cast<const Byte *>(
+						reinterpret_cast<const void *>(
+							&obj
+						)
+					)[sizeof(T)-i-1];
+					
+					//	Set buffer count
+					buffer.SetCount(buffer.Count()+sizeof(T));
+				
+				}
+		
+		
+		};
+		
+		
+		template <typename T>
+		T Deserialize (const Byte * & begin, const Byte * end) {
+		
+			alignas(T) Byte buffer [sizeof(T)];
+			
+			Serializer<T>::FromBytes(begin,end,buffer);
+			
+			Nullable<T> retr;
+			T * ptr=reinterpret_cast<T *>(
+				reinterpret_cast<void *>(
+					buffer
+				)
+			);
+			
+			try {
+			
+				retr.Construct(std::move(*ptr));
+				
+			} catch (...) {
+			
+				ptr->~T();
+				
+				throw;
 			
 			}
 			
+			ptr->~T();
 			
-			/**
-			 *	Adds the serialized representation of an object
-			 *	to a buffer for transmission over the network.
-			 *
-			 *	\param [in] obj
-			 *		The object to serialize.
-			 *	\param [in] buffer
-			 *		The buffer in which to place the serialization
-			 *		of \em obj.
-			 */
-			static void ToBytes (const T & obj, Vector<Byte> & buffer) {
+			return std::move(*retr);
+		
+		}
+		
+		
+		template <typename T>
+		class Serializer<VarInt<T>> {
+		
+		
+			private:
 			
-				//	If big endian, we can copy without
-				//	an intermediary copy
-				if (Endianness::IsBigEndian<T>()) {
+			
+				typedef typename std::make_unsigned<T>::type type;
 				
-					const Byte * obj_ptr=reinterpret_cast<const Byte *>(&obj);
 				
-					buffer.Add(
-						obj_ptr,
-						obj_ptr+sizeof(T)
-					);
+				constexpr static bool is_signed=std::is_signed<T>::value;
 				
-				//	Otherwise we have to swap the byte
-				//	order
-				} else {
+				
+				constexpr static Word bits=sizeof(T)*BitsPerByte();
+				
+				
+				constexpr static Word max_bytes=((bits%7)==0) ? (bits/7) : ((bits/7)+1);
+				
+				
+				constexpr static Byte get_final_mask_impl (Word target, Word i) noexcept {
+				
+					return (i==target) ? 0 : ((static_cast<Byte>(1)<<i)|get_final_mask_impl(target,i+1));
+				
+				}
+				
+				
+				constexpr static Byte get_final_mask () noexcept {
+				
+					return (~get_final_mask_impl(bits%7,0))&127;
+				
+				}
+		
+		
+			public:
+			
+			
+				static Word Size (VarInt<T> obj) noexcept {
 				
 					union {
-						T obj_copy;
-						Byte obj_bytes [sizeof(T)];
+						type value;
+						T s_value;
 					};
 					
-					memcpy(
-						&obj_copy,
-						&obj,
-						sizeof(T)
-					);
+					s_value=obj;
 					
-					Endianness::FixEndianness(&obj_copy);
+					UInt32 mask=127;
+					for (Word i=1;i<(max_bytes-1);++i) {
 					
-					buffer.Add(
-						&obj_bytes[0],
-						&obj_bytes[0]+sizeof(T)
-					);
-				
-				}
-			
-			}
-			
-			
-			/**
-			 *	Attempts to unserialize an object from a buffer of
-			 *	bytes.
-			 *
-			 *	The default implementation does not throw, but
-			 *	specialized implementations may.
-			 *
-			 *	\param [in,out] begin
-			 *		A pointer to a pointer to the current location
-			 *		in the buffer.  Must be updated to point
-			 *		after all bytes consumed by this unserialization.
-			 *	\param [in] end
-			 *		The end of the buffer.
-			 *	\param [in] ptr
-			 *		A pointer to an area of memory large enough
-			 *		and of sufficient alignment to construct an
-			 *		object of type \em T.  No object shall be
-			 *		constructed in this memory, and therefore
-			 *		placement new construction must be used
-			 *		to safely place objects in this memory.
-			 *
-			 *	\return
-			 *		\em true if one object of type \em T was
-			 *		unserialized and placed in the memory pointed
-			 *		to by \em ptr, \em false otherwise.
-			 */
-			static bool FromBytes (const Byte ** begin, const Byte * end, T * ptr) noexcept {
-			
-				//	Verify there's enough space
-				if ((end-(*begin))<sizeof(T)) return false;
-				
-				//	Copy from source buffer
-				//	to destination
-				memcpy(
-					ptr,
-					*begin,
-					sizeof(T)
-				);
-				
-				//	Advance iterator
-				*begin+=sizeof(T);
-				
-				//	Swap byte order if necessary
-				if (!Endianness::IsBigEndian<T>()) Endianness::FixEndianness(ptr);
-				
-				return true;
-			
-			}
-	
-	
-	};
-	
-	
-	/**
-	 *	\cond
-	 */
-	
-	
-	template <typename T, std::size_t len>
-	class PacketHelper<T [len]> {
-	
-	
-		public:
-		
-		
-			static const bool Trivial=PacketHelper<T>::Trivial;
-			
-			
-			static Word Size (const T * obj) noexcept(Trivial) {
-			
-				//	If we're trivial it means that
-				//	we contain objects that always
-				//	reduce to the same number of bytes
-				if (Trivial) return sizeof(T [len]);
-				
-				//	Otherwise we have to iterate
-				//	and obtain the size of each element
-				
-				SafeWord returnthis;
-				
-				for (Word i=0;i<len;++i) {
-				
-					returnthis+=SafeWord(PacketHelper<T>::Size(obj[i]));
-				
-				}
-				
-				return Word(returnthis);
-			
-			}
-			
-			
-			static void ToBytes (const T * obj, Vector<Byte> & buffer) {
-			
-				//	Iterate for each element and
-				//	convert it into bytes
-				for (Word i=0;i<len;++i) PacketHelper<T>::ToBytes(obj[i],buffer);
-			
-			}
-			
-			
-			static bool FromBytes (const Byte ** begin, const Byte * end, T (*ptr) [len]) noexcept(noexcept(PacketHelper<T>::FromBytes)) {
-			
-				//	Iterate for each element and
-				//	have it form itself in place
-				//	from the bytes in the buffer
-				for (Word i=0;i<len;++i) {
-				
-					if (!PacketHelper<T>::FromBytes(begin,end,&(*ptr)[i])) return false;
-				
-				}
-				
-				return true;
-			
-			}
-	
-	
-	};
-	
-	
-	template <>
-	class PacketHelper<String> {
-	
-	
-		public:
-		
-		
-			static const bool Trivial=false;
-			
-			
-			static Word Size (const String & obj) {
-			
-				//	Unimplemented
-				return 0;
-			
-			}
-			
-			
-			static void ToBytes (const String & obj, Vector<Byte> & buffer) {
-			
-				//	Obtain the encoding
-				Vector<Byte> encoded(UTF16(true).Encode(obj));
-				
-				//	Output length
-				PacketHelper<Int16>::ToBytes(
-					Int16(SafeWord(encoded.Count()/sizeof(UTF16CodeUnit))),
-					buffer
-				);
-				
-				//	Copy encoding into buffer
-				for (Byte b : encoded) buffer.Add(b);
-			
-			}
-			
-			
-			static bool FromBytes (const Byte ** begin, const Byte * end, String * ptr) {
-			
-				//	Attempt to retrieve the length of
-				//	the string
-				Int16 len;
-				if (!PacketHelper<Int16>::FromBytes(begin,end,&len)) return false;
-				
-				//	Sanity check on the length
-				//	made necessary but the utter
-				//	stupidity of Java in disallowing
-				//	unsigned types
-				if (len<0) throw std::runtime_error("Protocol error");
-				
-				//	Check to see if the buffer is long
-				//	enough to contain a string of that
-				//	length
-				Word byte_len=Word(
-					SafeWord(
-						Word(
-							SafeInt<Int16>(len)
-						)
-					)*
-					SafeWord(
-						sizeof(UTF16CodeUnit)
-					)
-				);
-				
-				auto buffer_len=end-(*begin);
-				
-				if (
-					Word(SafeInt<decltype(buffer_len)>(buffer_len))<
-					byte_len
-				) return false;
-				
-				//	Decode
-				new (ptr) String (UTF16().Decode(*begin,*begin+byte_len));
-				
-				//	Advance pointer
-				*begin+=byte_len;
-				
-				return true;
-			
-			}
-	
-	
-	};
-	
-	
-	template <typename TCount, typename TItem>
-	class PacketHelper<PacketArray<TCount,TItem>> {
-	
-		
-		public:
-		
-		
-			static const bool Trivial=false;
-			
-			
-			static Word Size (const PacketArray<TCount,TItem> & obj) {
-			
-				//	Size of the leading count
-				SafeWord size(sizeof(TCount));
-				
-				//	If the contained type is trivial,
-				//	we can simply take the count of items
-				//	and multiply
-				if (PacketHelper<TItem>::Trivial) {
-				
-					size+=SafeWord(sizeof(TItem))*SafeWord(obj.Payload.Count());
-				
-				//	Otherwise we have to iterate and
-				//	take the size of each.
-				} else {
-				
-					for (const TItem & item : obj.Payload) {
-					
-						size+=SafeWord(PacketHelper<TItem>::Size(item));
+						if ((value&~mask)==0) return i;
+						
+						mask<<=7;
+						mask|=127;
 					
 					}
+					
+					return max_bytes;
 				
 				}
 				
-				//	Return total size
-				return Word(size);
-			
-			}
-			
-			
-			static void ToBytes (const PacketArray<TCount,TItem> & obj, Vector<Byte> & buffer) {
-			
-				//	Insert size of leading count
-				PacketHelper<TCount>::ToBytes(
-					TCount(SafeWord(obj.Payload.Count())),
-					buffer
-				);
 				
-				//	Insert each element
-				for (const TItem & item : obj.Payload) {
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
 				
-					PacketHelper<TItem>::ToBytes(
-						item,
-						buffer
-					);
-				
-				}
-			
-			}
-			
-			
-			static bool FromBytes (const Byte ** begin, const Byte * end, PacketArray<TCount,TItem> * ptr) {
-			
-				//	Read in the size
-				TCount size;
-				if (!PacketHelper<TCount>::FromBytes(begin,end,&size)) return false;
-				
-				//	Safely convert the size
-				//	to a word
-				Word count=Word(SafeInt<TCount>(size));
-				
-				//	Create buffer to hold
-				//	unserialized items
-				Vector<TItem> buffer(count);
-				
-				//	Unserialize each item
-				for (Word i=0;i<count;++i) {
-				
-					//	Vector's underlying storage
-					//	is necessarily at least
-					//	as large as the number of
-					//	elements thanks to careful
-					//	constructor call above,
-					//	therefore we can use the buffer
-					//	features of the RLeahyLib vector
-					//	to instantiate objects in place
-					//	which eliminates copying and
-					//	moving, allowing even uncopyable
-					//	and unmovable objects to be
-					//	unserialized.
+					//	Build a value from the bytes in
+					//	the buffer -- start at zero
+					type value=0;
 					
-					if (!PacketHelper<TItem>::FromBytes(
-						begin,
-						end,
-						static_cast<TItem *>(buffer)+i
-					)) return false;
-					
-					//	Expand Vector's count so that
-					//	it takes ownership of the newly-
-					//	constructed item.
-					buffer.SetCount(i+1);
-				
-				}
-				
-				//	PacketArray<TCount,TItem> has an identical
-				//	memory layout to Vector<TItem> given that
-				//	it's a very thin wrapper around Vector<TItem>.
-				//
-				//	Therefore treat ptr as a ptr to a Vector<TItem>
-				//	and move
-				new (ptr) Vector<TItem> (std::move(buffer));
-				
-				//	Success!
-				return true;
-			
-			}
-		
-	
-	};
-	
-	
-	template <>
-	class PacketHelper<Coordinates> {
-	
-	
-		public:
-		
-		
-			static const bool Trivial=true;
-			
-			
-			constexpr static Word Size (const Coordinates & obj) noexcept {
-			
-				return sizeof(Coordinates);
-			
-			}
-			
-			
-			static void ToBytes (const Coordinates & obj, Vector<Byte> & buffer) {
-			
-				PacketHelper<Int32>::ToBytes(obj.X,buffer);
-				PacketHelper<Int32>::ToBytes(obj.Y,buffer);
-				PacketHelper<Int32>::ToBytes(obj.Z,buffer);
-			
-			}
-			
-			
-			static bool FromBytes (const Byte ** begin, const Byte * end, Coordinates * ptr) noexcept {
-			
-				return (
-					PacketHelper<Int32>::FromBytes(begin,end,&(ptr->X)) &&
-					PacketHelper<Int32>::FromBytes(begin,end,&(ptr->Y)) &&
-					PacketHelper<Int32>::FromBytes(begin,end,&(ptr->Z))
-				);
-			
-			}
-	
-	
-	};
-	
-	
-	template <>
-	class PacketHelper<Vector<Metadatum>> {
-	
-	
-		public:
-		
-		
-			static const bool Trivial=false;
-			
-			
-			static Word Size (const Vector<Metadatum> & obj) {
-			
-				//	Always at least one for
-				//	the trailing 127
-				SafeWord size(1);
-				
-				for (const Metadatum & metadata : obj) {
-				
-					//	Always at least one for
-					//	the leading pair of
-					//	key and type packed into
-					//	a single byte
-					size+=SafeWord(1);
-				
-					switch (metadata.Type()) {
-					
-						case MetadatumType::Byte:
-							size+=SafeWord(sizeof(Byte));
-							break;
-						case MetadatumType::Short:
-							size+=SafeWord(sizeof(Int16));
-							break;
-						case MetadatumType::Int:
-							size+=SafeWord(sizeof(Int32));
-							break;
-						case MetadatumType::Float:
-							size+=SafeWord(sizeof(Single));
-							break;
-						case MetadatumType::String:
-							size+=SafeWord(PacketHelper<String>::Size(metadata.Value<String>()));
-							break;
-						//	TODO: Add slot
-						default:
-							size+=SafeWord(PacketHelper<Coordinates>::Size(metadata.Value<Coordinates>()));
-							break;
-					
-					}
-				
-				}
-				
-				//	Return
-				return Word(size);
-			
-			}
-			
-			
-			static void ToBytes (const Vector<Metadatum> & obj, Vector<Byte> & buffer) {
-			
-				//	Loop for each piece of metadata
-				for (const Metadatum & metadata : obj) {
-				
-					//	Pack type and key
-					buffer.Add(metadata.Key()|(static_cast<Byte>(metadata.Type())<<5));
-					
-					//	Serialize payload
-					switch (metadata.Type()) {
-					
-						case MetadatumType::Byte:
-							PacketHelper<SByte>::ToBytes(
-								metadata.Value<SByte>(),
-								buffer
-							);
-							break;
-						case MetadatumType::Short:
-							PacketHelper<Int16>::ToBytes(
-								metadata.Value<Int16>(),
-								buffer
-							);
-							break;
-						case MetadatumType::Int:
-							PacketHelper<Int32>::ToBytes(
-								metadata.Value<Int32>(),
-								buffer
-							);
-							break;
-						case MetadatumType::Float:
-							PacketHelper<Single>::ToBytes(
-								metadata.Value<Single>(),
-								buffer
-							);
-							break;
-						case MetadatumType::String:
-							PacketHelper<String>::ToBytes(
-								metadata.Value<String>(),
-								buffer
-							);
-							break;
-						//	TODO: Add slot
-						default:
-							PacketHelper<Coordinates>::ToBytes(
-								metadata.Value<Coordinates>(),
-								buffer
-							);
-							break;
-							
-					}
-				
-				}
-				
-				//	Add the final trailing byte
-				buffer.Add(127);
-			
-			}
-			
-			
-			static bool FromBytes (const Byte ** begin, const Byte * end, Vector<Metadatum> * ptr) {
-			
-				Vector<Metadatum> metadata;
-			
-				while (!(
-					//	We need to be able to read at least
-					//	one byte
-					(*begin==end) ||
-					//	127 signals end of metadata
-					(**begin==127)
-				)) {
-					
-					//	Unpack the leading byte
-					Byte key=**begin&31;
-					Byte type=**begin>>5;
-					
-					++(*begin);
-					
-					//	Verify the type
-					if (type>6) throw std::runtime_error("Protocol error");
-					
-					//	Extract what follows based on type
-					switch (static_cast<MetadatumType>(type)) {
-					
-						case MetadatumType::Byte:{
-						
-							SByte sbyte;
-							if (!PacketHelper<SByte>::FromBytes(begin,end,&sbyte)) return false;
-							
-							metadata.EmplaceBack(
-								key,
-								sbyte
-							);
-						
-						}break;
-						
-						case MetadatumType::Short:{
-						
-							Int16 int16;
-							if (!PacketHelper<Int16>::FromBytes(begin,end,&int16)) return false;
-							
-							metadata.EmplaceBack(
-								key,
-								int16
-							);
-						
-						}break;
-						
-						case MetadatumType::Int:{
-						
-							Int32 int32;
-							if (!PacketHelper<Int32>::FromBytes(begin,end,&int32)) return false;
-							
-							metadata.EmplaceBack(
-								key,
-								int32
-							);
-						
-						}break;
-						
-						case MetadatumType::Float:{
-						
-							Single single;
-							if (!PacketHelper<Single>::FromBytes(begin,end,&single)) return false;
-							
-							metadata.EmplaceBack(
-								key,
-								single
-							);
-						
-						}break;
-						
-						case MetadatumType::String:{
-						
-						}break;
-						
-						//	TODO: Add slot
-						
-						default:{
-						
-							Coordinates coords;
-							if (!PacketHelper<Coordinates>::FromBytes(begin,end,&coords)) return false;
-							
-							metadata.EmplaceBack(
-								key,
-								coords
-							);
-						
-						}break;
-					
-					}
-				
-				}
-				
-				//	Why'd we exit the loop?
-				
-				//	Not enough bytes?
-				if (*begin==end) return false;
-				
-				//	Must've found the 127
-				++(*begin);
-				
-				//	Move the metadata into place
-				new (ptr) Vector<Metadatum> (std::move(metadata));
-				
-				return true;
-			
-			}
-	
-	
-	};
-	
-	
-	template <typename... Args>
-	class PacketHelper<Tuple<Args...>> {
-	
-	
-		private:
-		
-		
-			template <Word i>
-			constexpr static inline typename std::enable_if<
-				i>=sizeof...(Args),
-				Word
-			>::type size (const Tuple<Args...> &) {
-			
-				return 0;
-			
-			}
-			
-			
-			template <Word i>
-			static inline typename std::enable_if<
-				i<sizeof...(Args),
-				Word
-			>::type size (const Tuple<Args...> & obj) {
-			
-				SafeWord recurse(
-					size<i+1>(obj)
-				);
-				
-				SafeWord curr(
-					PacketHelper<
-						typename std::decay<
-							decltype(
-								obj.template Item<i>()
-							)
-						>::type
-					>::Size(
-						obj.template Item<i>()
-					)
-				);
-				
-				return Word(recurse+curr);
-			
-			}
-			
-			
-			template <Word i>
-			static inline typename std::enable_if<
-				i>=sizeof...(Args)
-			>::type to_bytes (const Tuple<Args...> &, Vector<Byte> &) noexcept {	}
-			
-			
-			template <Word i>
-			static inline typename std::enable_if<
-				i<sizeof...(Args)
-			>::type to_bytes (const Tuple<Args...> & obj, Vector<Byte> & buffer) {
-			
-				PacketHelper<
-					typename std::decay<
-						decltype(
-							obj.template Item<i>()
-						)
-					>::type
-				>::ToBytes(
-					obj.template Item<i>(),
-					buffer
-				);
-				
-				to_bytes<i+1>(obj,buffer);
-			
-			}
-			
-			
-			template <Word i>
-			constexpr static inline typename std::enable_if<
-				i>=sizeof...(Args),
-				bool
-			>::type from_bytes (const Byte **, const Byte *, Tuple<Args...> *) noexcept {
-			
-				return true;
-			
-			}
-			
-			
-			template <Word i>
-			static inline typename std::enable_if<
-				i<sizeof...(Args),
-				bool
-			>::type from_bytes (const Byte ** begin, const Byte * end, Tuple<Args...> * ptr) {
-			
-				if (!PacketHelper<
-					typename std::decay<
-						decltype(
-							ptr->template Item<i>()
-						)
-					>::type
-				>::FromBytes(
-					begin,
-					end,
-					&(ptr->template Item<i>())
-				)) return false;
-				
-				return from_bytes<i+1>(begin,end,ptr);
-			
-			}
-	
-	
-		public:
-		
-		
-			static const bool Trivial=false;
-			
-			
-			static Word Size (const Tuple<Args...> & obj) {
-			
-				return size<0>(obj);
-			
-			}
-			
-			
-			static void ToBytes (const Tuple<Args...> & obj, Vector<Byte> & buffer) {
-			
-				to_bytes<0>(obj,buffer);
-			
-			}
-			
-			
-			static bool FromBytes (const Byte ** begin, const Byte * end, Tuple<Args...> * ptr) {
-			
-				return from_bytes<0>(begin,end,ptr);
-			
-			}
-	
-	
-	};
-	
-	
-	/**
-	 *	\endcond
-	 */
-	
-	
-	template <Byte type, typename... Types>
-	class PacketType : public PacketFactory {
-	
-	
-		public:
-		
-		
-			/**
-			 *	The number of objects in the payload
-			 *	of this packet type.
-			 */
-			static const Word TypesCount=sizeof...(Types);
-			/**
-			 *	A helper class which allows access to
-			 *	arbitrary types within the payload
-			 *	of this packet type.
-			 *
-			 *	\tparam i
-			 *		The zero-relative index of the type
-			 *		to retrieve.
-			 */
-			template <Word i>
-			class RetrieveType {
-			
-			
-				public:
-				
-				
-					/**
-					 *	Specifies the type of the \em ith
-					 *	item in the payload of the containing
-					 *	packet type.
-					 */
-					typedef typename GetParameterType<i,Types...>::Type Type;
-			
-			
-			};
-	
-	
-		private:
-	
-	
-			template <Word i>
-			typename std::enable_if<
-				i<GetParameterCount<Types...>::Value,
-				Word
-			>::type memory (Word curr, Packet & packet) const {
-			
-				typedef typename GetParameterType<i,Types...>::Type curr_type;
-				
-				//	Cleanup function
-				std::function<void (void *)> cleanup;
-				
-				//	If this type isn't trivial, we'll have
-				//	to have it cleaned up
-				if (!std::is_trivial<curr_type>::value) {
-				
-					cleanup=[] (void * ptr) {	reinterpret_cast<curr_type *>(ptr)->~curr_type();	};
-				
-				}
-			
-				//	Check to see if placing this
-				//	object adjacent to the last one
-				//	would result in alignment
-				//	issues
-				if ((curr%alignof(curr_type))!=0) {
-				
-					//	Adjust size to ensure this
-					//	object will be properly aligned
-					
-					curr=Word(
-						SafeWord(alignof(curr_type))*(
-							SafeWord(curr/alignof(curr_type))+
-							SafeWord(1)
-						)
-					);
-				
-				}
-				
-				//	Create metadata
-				packet.metadata.EmplaceBack(
-					curr,
-					false,	//	Not yet constructed
-					std::move(cleanup)
-				);
-				
-				//	Recurse and return
-				return memory<i+1>(
-					Word(
-						SafeWord(curr)+
-						SafeWord(sizeof(curr_type))
-					),
-					packet
-				);
-			
-			}
-			
-			
-			template <Word i>
-			typename std::enable_if<
-				i>=GetParameterCount<Types...>::Value,
-				Word
-			>::type memory (Word curr, Packet & packet) const noexcept {
-			
-				return curr;
-			
-			}
-			
-			
-			template <Word i>
-			typename std::enable_if<
-				i<GetParameterCount<Types...>::Value,
-				bool
-			>::type from_bytes (const Byte ** begin, const Byte * end, Packet & packet) const {
-			
-				//	Skip if this object has already
-				//	been constructed
-				if (packet.curr<=i) {
-				
-					//	Save begin pointer in case this
-					//	fails
-					const Byte * before=*begin;
-				
-					if (
-						//	Was this object previously
-						//	constructed?
-						packet.metadata[i].Item<1>() &&
-						//	Does it have a cleanup function?
-						packet.metadata[i].Item<2>()
+					//	When this is set to true, we've
+					//	reached the end of the VarInt,
+					//	i.e. the msb was not set
+					bool complete=false;
+					for (
+						Word i=1;
+						!((begin==end) || complete);
+						++i
 					) {
 					
-						//	Destroy it
-						packet.metadata[i].Item<2>()(
-							packet.buffer+packet.metadata[i].Item<0>()
-						);
+						Byte b=*(begin++);
+						
+						//	If msb is set, we're done
+						//	after considering this byte
+						if ((b&128)==0) complete=true;
+						//	Otherwise we ignore msb
+						else b&=~static_cast<Byte>(128);
+						
+						//	On the last byte we do some
+						//	special processing to make sure
+						//	that the integer we're decoding
+						//	doesn't overflow
+						if (
+							(i==max_bytes) &&
+							//	We need to make sure bits
+							//	that would cause an overflow
+							//	are not set
+							((i&get_final_mask())!=0)
+						) BadFormat::Raise();
+						
+						//	Add the value of this byte to
+						//	the value we're building
+						value|=static_cast<type>(b)<<(7*(i-1));
+						
+						//	If this is the last possible
+						//	byte, and we've not reached
+						//	the end of the VarInt, there's
+						//	a problem with the format of
+						//	the data
+						if (
+							!complete &&
+							(i==max_bytes)
+						) BadFormat::Raise();
 					
 					}
 					
-					typedef typename GetParameterType<i,Types...>::Type curr_type;
+					//	If the VarInt is not complete,
+					//	we didn't finish
+					if (!complete) InsufficientBytes::Raise();
 					
-					//	Attempt to get the object from
-					//	the buffer
-					if (!PacketHelper<curr_type>::FromBytes(
-						begin,
-						end,
-						reinterpret_cast<curr_type *>(
-							packet.buffer+packet.metadata[i].Item<0>()
-						)
-					)) {
+					//	Convert bitwise representation over
+					//	to signed if necessary
+					union {
+						type built;
+						T final;
+					};
 					
-						//	Restore begin
-						*begin=before;
-						
-						//	Fail
-						return false;
-						
-					}
+					built=value;
 					
-					//	Object constructed
-					packet.metadata[i].Item<1>()=true;
-					
-					//	Success, update count of items
-					//	retrieved
-					packet.curr=i+1;
+					new (ptr) VarInt<T> (final);
 				
 				}
 				
-				//	Recurse
-				return from_bytes<i+1>(begin,end,packet);
-			
-			}
-			
-			
-			template <Word i>
-			typename std::enable_if<
-				i>=GetParameterCount<Types...>::Value,
-				bool
-			>::type from_bytes (const Byte **, const Byte *, Packet & packet) const noexcept {
-			
-				//	Done
-				packet.curr=GetParameterCount<Types...>::Value;
-				packet.complete=true;
-			
-				return true;
-			
-			}
-			
-			
-			template <Word i>
-			typename std::enable_if<
-				i<GetParameterCount<Types...>::Value,
-				Word
-			>::type size (Word curr, const Packet & packet) const {
-			
-				typedef typename GetParameterType<i,Types...>::Type curr_type;
 				
-				//	If the object is not trivial,
-				//	and is uninitialized, that's
-				//	an error
-				if (!(
-					PacketHelper<curr_type>::Trivial ||
-					packet.metadata[i].Item<1>()
-				)) throw std::runtime_error("Non-trivial object uninitialized");
+				static void ToBytes (Vector<Byte> & buffer, VarInt<T> obj) {
 				
-				//	Get the size, recurse, and return
-				return Word(
-					SafeWord(PacketHelper<curr_type>::Size(
-						*reinterpret_cast<curr_type *>(
-							packet.buffer+packet.metadata[i].Item<0>()
+					union {
+						type value;
+						T s_value;
+					};
+					
+					s_value=obj;
+					
+					do {
+					
+						//	Get bottom seven bits
+						Byte b=static_cast<Byte>(value&127);
+						
+						//	Discard bottom seven bits
+						value>>=7;
+						
+						//	Set msb if necessary
+						if (value!=0) b|=128;
+						
+						//	Add
+						buffer.Add(b);
+					
+					} while (value!=0);
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
+		class Serializer<String> {
+		
+		
+			private:
+			
+			
+				typedef UInt32 size_type;
+				typedef VarInt<size_type> var_int_type;
+		
+		
+			public:
+			
+			
+				static Word Size (const String & obj) {
+				
+					SafeWord safe(obj.Size());
+					
+					//	Maximum number of UTF-8 code units per code point
+					safe*=4;
+					
+					//	Size of the VarInt which describes the maximum
+					//	number of code units (i.e. bytes) in the string
+					var_int_type var_int=size_type(safe);
+					
+					//	Add VarInt byte count to code unit (i.e. byte)
+					//	count
+					safe+=SafeWord(Serializer<decltype(var_int)>::Size(var_int));
+					
+					return Word(safe);
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Get length of string in bytes
+					var_int_type len=Deserialize<decltype(len)>(begin,end);
+					
+					//	Check to make sure there's enough
+					//	bytes for this string to actually
+					//	be in the buffer
+					if ((end-begin)<size_type(len)) InsufficientBytes::Raise();
+					
+					auto start=begin;
+					begin+=size_type(len);
+					
+					//	Decode
+					new (ptr) String (UTF8().Decode(start,begin));
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const String & obj) {
+				
+					//	Get UTF-8 encoding of string
+					auto encoded=UTF8().Encode(obj);
+					
+					//	Place the VarInt encoding of the
+					//	string in the buffer
+					Serializer<var_int_type>::ToBytes(
+						buffer,
+						size_type(SafeWord(encoded.Count()))
+					);
+					
+					//	Make enough space in the buffer
+					//	for the string
+					while ((buffer.Capacity()-buffer.Count())<encoded.Count()) buffer.SetCapacity();
+					
+					//	Copy
+					std::memcpy(
+						buffer.end(),
+						encoded.begin(),
+						encoded.Count()
+					);
+					
+					buffer.SetCount(buffer.Count()+encoded.Count());
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
+		class Serializer<JSON::Value> {
+		
+		
+			private:
+			
+			
+				//	Maximum recursion the JSON parser
+				//	will be willing to go through before
+				//	bailing out and throwing when parsing
+				//	incoming JSON
+				constexpr static Word max_recursion=10;
+		
+		
+			public:
+			
+			
+				constexpr static Word Size (const JSON::Value &) noexcept {
+				
+					//	This is unknowable without actually
+					//	serializing
+					return 0;
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Get the string from which we'll
+					//	extract JSON
+					auto str=Deserialize<String>(begin,end);
+					
+					//	Parse JSON
+					new (ptr) JSON::Value (JSON::Parse(str,max_recursion));
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const JSON::Value & obj) {
+				
+					Serializer<String>::ToBytes(
+						buffer,
+						JSON::Serialize(obj)
+					);
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
+		class Serializer<ProtocolState> {
+		
+		
+			public:
+			
+			
+				constexpr static Word Size (ProtocolState) noexcept {
+				
+					//	Only ever 1 byte
+					return 1;
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Get the raw byte
+					auto b=Deserialize<Byte>(begin,end);
+					
+					//	Only valid values are 1 or 2
+					if (!((b==1) || (b==2))) BadFormat::Raise();
+					
+					//	Create
+					new (ptr) ProtocolState ((b==1) ? ProtocolState::Status : ProtocolState::Login);
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, ProtocolState state) {
+				
+					Byte b;
+					switch (state) {
+					
+						case ProtocolState::Status:
+							b=1;
+							break;
+						case ProtocolState::Login:
+							b=2;
+							break;
+						default:
+							BadFormat::Raise();
+					
+					}
+					
+					Serializer<Byte>::ToBytes(buffer,b);
+				
+				}
+		
+		
+		};
+		
+		
+		template <typename T>
+		class GetIntegerType {
+		
+		
+			public:
+			
+			
+				typedef T Type;
+		
+		
+		};
+		
+		
+		template <typename T>
+		class GetIntegerType<VarInt<T>> {
+		
+		
+			public:
+			
+			
+				typedef T Type;
+		
+		
+		};
+
+		
+		template <typename prefix, typename inner>
+		class Serializer<Array<prefix,inner>> {
+		
+		
+			private:
+			
+			
+				typedef Array<prefix,inner> type;
+				typedef typename GetIntegerType<prefix>::Type int_type;
+		
+		
+			public:
+			
+			
+				static Word Size (const type & obj) {
+				
+					SafeWord size=Serializer<prefix>::Size(obj.Value.Count());
+					
+					for (const auto & i : obj.Value) size+=SafeWord(Serializer<inner>::Size(i));
+					
+					return Word(size);
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Get array count
+					auto count=Deserialize<prefix>(begin,end);
+					
+					//	Check to make sure array
+					//	count is not negative
+					if (
+						std::is_signed<prefix>::value &&
+						(count<0)
+					) BadFormat::Raise();
+					
+					Vector<inner> vec;
+					
+					//	Loop and get each element in
+					//	the array
+					for (Word i=0;i<count;++i) vec.Add(Deserialize<inner>(begin,end));
+					
+					new (ptr) Vector<inner> (std::move(vec));
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const type & obj) {
+				
+					//	Serialize count
+					Serializer<prefix>::ToBytes(
+						buffer,
+						int_type(SafeWord(obj.Value.Count()))
+					);
+					
+					//	Serialize each object
+					for (const auto & i : obj.Value) Serializer<inner>::ToBytes(buffer,i);
+				
+				}
+		
+		
+		};
+		
+		
+		template <typename... Args>
+		class Serializer<Tuple<Args...>> {
+		
+		
+			private:
+			
+			
+				typedef Tuple<Args...> type;
+				
+				
+				template <Word i>
+				constexpr static typename std::enable_if<
+					i>=sizeof...(Args),
+					Word
+				>::type size_impl (const type &) noexcept {
+				
+					return 0;
+				
+				}
+			
+			
+				template <Word i>
+				static typename std::enable_if<
+					i<sizeof...(Args),
+					Word
+				>::type size_impl (const type & obj) {
+				
+					const auto & curr=obj.template Item<i>();
+					
+					return Word(
+						SafeWord(Serializer<typename std::decay<decltype(curr)>::type>::Size(curr))+
+						SafeWord(size_impl<i+1>(obj))
+					);
+				
+				}
+				
+				
+				template <Word i>
+				static typename std::enable_if<
+					i>=sizeof...(Args)
+				>::type serialize_impl (Vector<Byte> &, const type &) noexcept {	}
+				
+				
+				template <Word i>
+				static typename std::enable_if<
+					i<sizeof...(Args)
+				>::type serialize_impl (Vector<Byte> & buffer, const type & obj) {
+				
+					const auto & curr=obj.template Item<i>();
+					
+					Serializer<typename std::decay<decltype(curr)>::type>::ToBytes(buffer,curr);
+					
+					serialize_impl<i+1>(buffer,obj);
+				
+				}
+				
+				
+				template <Word i>
+				static typename std::enable_if<
+					i>=sizeof...(Args)
+				>::type deserialize_impl (const Byte * &, const Byte *, type &) noexcept {	}
+				
+				
+				template <Word i>
+				static typename std::enable_if<
+					i<sizeof...(Args)
+				>::type deserialize_impl (const Byte * & begin, const Byte * end, type & obj) {
+				
+					auto & curr=obj.template Item<i>();
+					
+					typedef typename std::decay<decltype(curr)>::type curr_type;
+					
+					Serializer<curr_type>::FromBytes(begin,end,&curr);
+					
+					try {
+					
+						deserialize_impl<i+1>(begin,end,obj);
+					
+					} catch (...) {
+					
+						curr.~curr_type();
+						
+						throw;
+					
+					}
+				
+				}
+		
+			
+			public:
+			
+			
+				static Word Size (const type & obj) {
+				
+					return size_impl<0>(obj);
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					deserialize_impl<0>(
+						begin,
+						end,
+						*reinterpret_cast<type *>(ptr)
+					);
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const type & obj) {
+				
+					serialize_impl<0>(buffer,obj);
+				
+				}
+			
+		
+		};
+		
+		
+		template <>
+		class Serializer<ObjectData> {
+		
+		
+			private:
+			
+			
+				typedef Tuple<Int32,Int16,Int16,Int16> inner;
+		
+		
+			public:
+			
+			
+				static Word Size (const ObjectData & obj) {
+				
+					if (obj.Is<Int32>()) return Serializer<Int32>::Size(obj.Get<Int32>());
+					
+					return Serializer<inner>::Size(obj.Get<inner>());
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Always begins with a 32-bit
+					//	signed integer
+					auto leading=Deserialize<Int32>(begin,end);
+					
+					//	If it's zero, nothing follows
+					if (leading==0) {
+					
+						new (ptr) ObjectData (leading);
+						
+						return;
+					
+					}
+					
+					//	Otherwise a tuple follows
+					
+					new (ptr) ObjectData ();
+					ObjectData & obj=*reinterpret_cast<ObjectData *>(ptr);
+					
+					//	We're responsible for the lifetime
+					//	of the variant
+					try {
+					
+						obj.Construct<inner>();
+						auto & t=obj.Get<inner>();
+						
+						t.Item<0>()=leading;
+						t.Item<1>()=Deserialize<Int16>(begin,end);
+						t.Item<2>()=Deserialize<Int16>(begin,end);
+						t.Item<3>()=Deserialize<Int16>(begin,end);
+					
+					} catch (...) {
+					
+						obj.~ObjectData();
+						
+						throw;
+					
+					}
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const ObjectData & obj) {
+				
+					//	Get/send the leading integer
+				
+					auto leading=obj.Is<Int32>() ? obj.Get<Int32>() : obj.Get<inner>().Item<0>();
+					
+					Serializer<Int32>::ToBytes(buffer,leading);
+					
+					if (leading==0) return;
+					
+					//	If the leading integer is not
+					//	zero, we must send a tuple
+					//	regardless of the in memory
+					//	structure
+					
+					Tuple<Int16,Int16,Int16> t(0,0,0);
+					
+					if (obj.Is<inner>()) {
+					
+						auto & i=obj.Get<inner>();
+						
+						t.Item<0>()=i.Item<1>();
+						t.Item<1>()=i.Item<2>();
+						t.Item<2>()=i.Item<3>();
+					
+					}
+					
+					Serializer<decltype(t)>::ToBytes(buffer,t);
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
+		class Serializer<NBT::NamedTag> {
+		
+		
+			private:
+			
+			
+				//	Maximum recursive depth to which the
+				//	NBT parser will descend.
+				constexpr static Word max_recursion=10;
+		
+		
+			public:
+			
+			
+				constexpr static Word Size (const NBT::NamedTag &) noexcept {
+				
+					//	We'd have to parse out the whole
+					//	thing and compress it -- just return
+					//	zero
+					return 0;
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Read length
+					auto len=Deserialize<Int16>(begin,end);
+					
+					//	Is there NBT data to read?
+					if (len<0) {
+					
+						//	NO
+						
+						new (ptr) NBT::NamedTag ();
+						
+						return;
+					
+					}
+					
+					//	YES
+					
+					//	Is there a sufficient number of bytes?
+					if ((end-begin)<len) InsufficientBytes::Raise();
+					
+					//	Decompress and parse
+					
+					auto decompressed=Inflate(begin,begin+len);
+					
+					const Byte * nbt_begin=decompressed.begin();
+					
+					new (ptr) NBT::NamedTag (
+						NBT::Parse(
+							nbt_begin,
+							decompressed.end(),
+							max_recursion
 						)
-					))+
-					SafeWord(size<i+1>(curr,packet))
-				);
-			
-			}
-			
-			
-			template <Word i>
-			typename std::enable_if<
-				i>=GetParameterCount<Types...>::Value,
-				Word
-			>::type size (Word curr, const Packet &) const noexcept {
-			
-				return curr;
-			
-			}
-			
-			
-			template <Word i>
-			typename std::enable_if<
-				i<GetParameterCount<Types...>::Value
-			>::type to_bytes (Vector<Byte> & buffer, const Packet & packet) const {
-			
-				typedef typename GetParameterType<i,Types...>::Type curr_type;
-			
-				//	Load buffer
-				PacketHelper<curr_type>::ToBytes(
-					*reinterpret_cast<curr_type *>(
-						packet.buffer+packet.metadata[i].Item<0>()
-					),
-					buffer
-				);
+					);
+					
+					//	Advance pointer
+					begin+=len;
 				
-				//	Recurse
-				to_bytes<i+1>(buffer,packet);
-			
-			}
-			
-			
-			template <Word i>
-			constexpr typename std::enable_if<
-				i>=GetParameterCount<Types...>::Value
-			>::type to_bytes (Vector<Byte> &, const Packet &) const noexcept {	}
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const NBT::NamedTag & obj) {
+				
+					//	If there's no data, we just write out
+					//	-1 as the length and bail out
+					if (obj.Payload.IsNull()) {
+					
+						Serializer<Int16>::ToBytes(buffer,-1);
+						
+						return;
+					
+					}
+					
+					//	There's NBT data to write
+					
+					Int16 size;
+					
+					//	Make enough space for the size
+					//	(since it's unknown at the present
+					//	time we'll add it after serializing
+					//	and compressing)
+					while ((buffer.Capacity()-buffer.Count())<Serializer<Int16>::Size(size)) buffer.SetCapacity();
+					//	Record position so we can come back
+					//	here after serializing and compressing
+					Word size_pos=buffer.Count();
+					//	Advance position
+					buffer.SetCount(buffer.Count()+Serializer<Int16>::Size(size));
+					//	Record start of NBT for size calculation
+					Word nbt_start=buffer.Count();
+					
+					//	Serialize
+					auto nbt=NBT::Serialize(obj);
+					
+					//	Compress (GZip)
+					Deflate(nbt.begin(),nbt.end(),&buffer,true);
+					
+					//	Output size
+					size=Int16(SafeWord(buffer.Count()-nbt_start));
+					Word nbt_end=buffer.Count();
+					buffer.SetCount(size_pos);
+					Serializer<Int16>::ToBytes(buffer,size);
+					buffer.SetCount(nbt_end);
+				
+				}
 		
 		
+		};
+		
+		
+		template <>
+		class Serializer<Nullable<Slot>> {
+		
+		
+			public:
+			
+			
+				static Word Size (const Nullable<Slot> & obj) {
+				
+					if (obj.IsNull()) return Serializer<Int16>::Size(-1);
+					
+					SafeWord size(Serializer<Int16>::Size(obj->ItemID));
+					size+=Serializer<Byte>::Size(obj->Count);
+					size+=Serializer<Int16>::Size(obj->Damage);
+					
+					//	Don't bother with the NBT, we'd
+					//	have to serialize and compress it,
+					//	too expensive
+					
+					return Word(size);
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					//	Get the item ID
+					auto id=Deserialize<Int16>(begin,end);
+					
+					//	Initialize item nulled
+					new (ptr) Nullable<Slot> ();
+					
+					//	If the item ID is negative,
+					//	there's no slot data
+					if (id<0) return;
+					
+					auto & slot=*reinterpret_cast<Nullable<Slot> *>(ptr);
+					
+					//	We're responsible for the
+					//	above placement new constructed
+					//	object's lifetime
+					try {
+					
+						//	Default construct the slot
+						//	object
+						slot.Construct();
+						
+						slot->ItemID=id;
+						slot->Count=Deserialize<Byte>(begin,end);
+						slot->Damage=Deserialize<Int16>(begin,end);
+						slot->Data=Deserialize<NBT::NamedTag>(begin,end);
+					
+					} catch (...) {
+					
+						slot.~Nullable<Slot>();
+						
+						throw;
+					
+					}
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const Nullable<Slot> & obj) {
+				
+					//	If the slot is null, just write -1
+					//	and bail out
+					if (obj.IsNull()) {
+					
+						Serializer<Int16>::ToBytes(buffer,-1);
+						
+						return;
+					
+					}
+					
+					//	Otherwise we have to write out the
+					//	whole object
+					Serializer<Int16>::ToBytes(buffer,obj->ItemID);
+					Serializer<Byte>::ToBytes(buffer,obj->Count);
+					Serializer<Int16>::ToBytes(buffer,obj->Damage);
+					Serializer<NBT::NamedTag>::ToBytes(buffer,obj->Data);
+				
+				}
+		
+		
+		};
+		
+		
+		template <>
+		class Serializer<Metadata> {
+		
+		
+			private:
+			
+			
+				typedef Metadata::value_type::second_type inner;
+				typedef Tuple<Int32,Int32,Int32> coord;
+		
+		
+			public:
+			
+			
+				constexpr static Word Size () noexcept {
+				
+					//	Too expensive to calculate, just
+					//	return zero
+					return 0;
+				
+				}
+				
+				
+				static void FromBytes (const Byte * & begin, const Byte * end, void * ptr) {
+				
+					new (ptr) Metadata ();
+					Metadata & dict=*reinterpret_cast<Metadata *>(ptr);
+					
+					//	We're responsible for this
+					//	object's lifetime
+					try {
+					
+						//	Parse until 127 is read
+						Byte b;
+						while ((b=Deserialize<Byte>(begin,end))!=127) {
+						
+							//	Decompose byte
+							Byte key=b&31;
+							
+							//	If the key already exists in the
+							//	dictionary, bail out immediately
+							if (dict.count(key)!=0) BadFormat::Raise();
+							
+							Byte type=b&224;
+							
+							inner variant;
+							
+							switch (type) {
+							
+								//	Byte
+								case 0:
+									variant=Deserialize<Byte>(begin,end);
+									break;
+								//	Signed 16-bit integer
+								case 1:
+									variant=Deserialize<Int16>(begin,end);
+									break;
+								//	Signed 32-bit integer
+								case 2:
+									variant=Deserialize<Int32>(begin,end);
+									break;
+								//	Single-precision floating point number
+								case 3:
+									variant=Deserialize<Single>(begin,end);
+									break;
+								//	String
+								case 4:
+									variant=Deserialize<String>(begin,end);
+									break;
+								//	Slot data
+								case 5:
+									variant=Deserialize<Nullable<Slot>>(begin,end);
+									break;
+								break;
+								//	Coordinates
+								case 6:
+									variant=Deserialize<coord>(begin,end);
+									break;
+								default:
+									BadFormat::Raise();
+							
+							}
+							
+							dict.emplace(
+								key,
+								std::move(variant)
+							);
+						
+						}
+					
+					} catch (...) {
+					
+						dict.~Metadata();
+						
+						throw;
+					
+					}
+				
+				}
+				
+				
+				static void ToBytes (Vector<Byte> & buffer, const Metadata & obj) {
+				
+					//	Loop over each pair
+					for (const auto & pair : obj) {
+					
+						auto & v=pair.second;
+					
+						if (
+							//	If the key is over 31, we can't
+							//	encode
+							(pair.first>31) ||
+							//	We have no way of representing
+							//	nulls
+							v.IsNull()
+						) BadFormat::Raise();
+						
+						//	Get the type of this object
+						Byte type=static_cast<Byte>(v.Type());
+						
+						//	Output key and type packed
+						//	into a single byte
+						Serializer<Byte>::ToBytes(buffer,pair.first|type);
+						
+						//	Serialize/get type
+						switch (type) {
+
+							//	Byte
+							case 0:
+								Serializer<Byte>::ToBytes(buffer,v.Get<Byte>());
+								break;
+							//	Signed 16-bit integer
+							case 1:
+								Serializer<Int16>::ToBytes(buffer,v.Get<Int16>());
+								break;
+							//	Signed 32-bit integer
+							case 2:
+								Serializer<Int32>::ToBytes(buffer,v.Get<Int32>());
+								break;
+							//	Single-precision floating point number
+							case 3:
+								Serializer<Single>::ToBytes(buffer,v.Get<Single>());
+								break;
+							//	String
+							case 4:
+								Serializer<String>::ToBytes(buffer,v.Get<String>());
+								break;
+							//	Slot data
+							case 5:
+								Serializer<Nullable<Slot>>::ToBytes(buffer,v.Get<Nullable<Slot>>());
+								break;
+							//	Coordinates
+							case 6:
+							default:
+								Serializer<coord>::ToBytes(buffer,v.Get<coord>());
+								break;
+						
+						}
+					
+					}
+					
+					//	Write a terminating 127 byte
+					Serializer<Byte>::ToBytes(buffer,127);
+				
+				}
+		
+		
+		};
+	
+	
+	}
+	
+	
+	/**
+	 *	\endcond
+	 */
+	 
+	
+	/**
+	 *	Parses packets from a buffer of bytes.
+	 */
+	class PacketParser {
+	
+	
+		private:
+		
+		
+			PacketImpl::PacketContainer container;
+			bool in_progress;
+			Word waiting_for;
+			
+			
 		public:
 		
 		
-			virtual void Install (Packet & packet) const override {
-			
-				//	First clean up the packet
-				packet.destroy();
-				packet.metadata.Delete(0,packet.metadata.Count());
-				packet.factory=this;
-			
-				//	We haven't started anything yet
-				packet.curr=0;
-				packet.complete=false;
-				
-				try {
-				
-					//	Allocate memory and get metadata
-					packet.buffer=Memory::Allocate<Byte>(
-						memory<0>(0,packet)
-					);
-					
-				} catch (...) {
-				
-					//	Put packet back in consistent state
-					delete this;
-					packet.factory=nullptr;
-					
-					throw;
-				
-				}
-			
-			}
-
-			
-			virtual bool FromBytes (Packet & packet, Vector<Byte> & buffer) const override {
-			
-				//	Get iterator
-				const Byte * begin=buffer.begin();
-				
-				//	Call helper function
-				bool success=from_bytes<0>(&begin,buffer.end(),packet);
-				
-				//	Delete consumed bytes
-				buffer.Delete(
-					0,
-					begin-buffer.begin()
-				);
-				
-				//	Return
-				return success;
-			
-			}
+			/**
+			 *	Creates a new packet parser.
+			 */
+			PacketParser () noexcept;
+		
+		
+			/**
+			 *	Attempts to construct a packet from
+			 *	a buffer of bytes.
+			 *
+			 *	\param [in,out] buffer
+			 *		A buffer of bytes.  Consumed bytes
+			 *		will be removed.
+			 *	\param [in] state
+			 *		The current state of the protocol.
+			 *	\param [in] direction
+			 *		The direction of the buffer of bytes
+			 *		to parse.
+			 *
+			 *	\return
+			 *		\em true if a packet was parsed,
+			 *		\em false otherwise.  Whether \em true
+			 *		or \em false is returned, \em buffer
+			 *		may have been altered.
+			 */
+			bool FromBytes (Vector<Byte> & buffer, ProtocolState state, ProtocolDirection direction);
 			
 			
-			virtual Byte Type () const noexcept override {
-			
-				return type;
-			
-			}
-			
-			
-			virtual Word Size (const Packet & packet) const override {
-			
-				return Word(SafeWord(1)+SafeWord(size<0>(0,packet)));
-			
-			}
-			
-			
-			virtual Vector<Byte> ToBytes (const Packet & packet) const {
-			
-				//	Create buffer large enough
-				//
-				//	This has the side effect of checking
-				//	for incomplete non-trivial objects
-				Vector<Byte> buffer(Size(packet));
-				
-				//	Add initial type byte
-				buffer.Add(type);
-				
-				//	Recurse and load buffer
-				to_bytes<0>(buffer,packet);
-				
-				//	Return loaded buffer
-				return buffer;
-			
-			}
+			/**
+			 *	Returns a reference to the internally
+			 *	allocated packet.
+			 *
+			 *	The reference returned by this function
+			 *	always refers to the internally allocated
+			 *	packet, therefore accessing it, and calling
+			 *	this function, is only defined while this
+			 *	object exists, and after a call to FromBytes
+			 *	returns \em true, and before a subsequenc call
+			 *	to FromBytes.
+			 *
+			 *	\return
+			 *		A reference to an internally allocated
+			 *		packet.
+			 */
+			Packet & Get () noexcept;
+			/**
+			 *	Returns a reference to the internally
+			 *	allocated packet.
+			 *
+			 *	The reference returned by this function
+			 *	always refers to the internally allocated
+			 *	packet, therefore accessing it, and calling
+			 *	this function, is only defined while this
+			 *	object exists, and after a call to FromBytes
+			 *	returns \em true, and before a subsequenc call
+			 *	to FromBytes.
+			 *
+			 *	\return
+			 *		A reference to an internally allocated
+			 *		packet.
+			 */
+			const Packet & Get () const noexcept;
 	
 	
 	};
 	
 	
-	typedef Int32 PLACEHOLDER;
+	namespace Packets {
 	
 	
-	template <Byte i>
-	class PacketTypeMap {	};
+		/**
+		 *	\cond
+		 */
+	
+	
+		class HSPacket {
+		
+		
+			public:
+			
+			
+				constexpr static ProtocolState State=ProtocolState::Handshaking;
+		
+		
+		};
+		
+		
+		class PLPacket {
+		
+		
+			public:
+			
+			
+				constexpr static ProtocolState State=ProtocolState::Play;
+		
+		
+		};
+		
+		
+		class STPacket {
+		
+		
+			public:
+			
+			
+				constexpr static ProtocolState State=ProtocolState::Status;
+		
+		
+		};
+		
+		
+		class LIPacket {
+		
+		
+			public:
+			
+			
+				constexpr static ProtocolState State=ProtocolState::Login;
+		
+		
+		};
+		
+		
+		class CBPacket {
+		
+		
+			public:
+			
+			
+				constexpr static ProtocolDirection Direction=ProtocolDirection::Clientbound;
+		
+		
+		};
+		
+		
+		class SBPacket {
+		
+		
+			public:
+			
+			
+				constexpr static ProtocolDirection Direction=ProtocolDirection::Serverbound;
+		
+		
+		};
+		
+		
+		class BOPacket {
+		
+		
+			public:
+			
+			
+				constexpr static ProtocolDirection Direction=ProtocolDirection::Both;
+		
+		
+		};
+		
+		
+		template <UInt32 id>
+		class IDPacket : public Packet {
+		
+		
+			public:
+			
+			
+				constexpr static UInt32 PacketID=id;
+				
+				
+				IDPacket () noexcept : Packet(id) {	}
+		
+		
+		};
+		
+		
+		/**
+		 *	\endcond
+		 */
+	
+	
+		namespace Handshaking {
+		
+		
+			namespace Serverbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public HSPacket, public SBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+			
+			
+				class Handshake : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						UInt32 ProtocolVersion;
+						String ServerAddress;
+						UInt16 ServerPort;
+						ProtocolState CurrentState;
+				
+				
+				};
+			
+			
+			}
+		
+		
+		}
+		
+		
+		namespace Play {
+		
+		
+			namespace Clientbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public PLPacket, public CBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class KeepAlive : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						Int32 KeepAliveID;
+				
+				
+				};
+				
+				
+				class JoinGame : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						Int32 EntityID;
+						Byte GameMode;
+						SByte Dimension;
+						Byte Difficulty;
+						Byte MaxPlayers;
+						String LevelType;
+				
+				
+				};
+				
+				
+				class ChatMessage : public Base, public IDPacket<0x02> {
+				
+				
+					public:
+					
+					
+						JSON::Value Value;
+				
+				
+				};
+				
+				
+				class TimeUpdate : public Base, public IDPacket<0x03> {
+				
+				
+					public:
+					
+					
+						Int64 Age;
+						Int64 Time;
+				
+				
+				};
+				
+				
+				class EntityEquipment : public Base, public IDPacket<0x04> {
+				
+				
+					public:
+					
+					
+						Int32 EntityID;
+						Int16 EquipmentSlot;
+						Nullable<Slot> Data;
+				
+				
+				};
+				
+				
+				class SpawnPosition : public Base, public IDPacket<0x05> {
+				
+				
+					public:
+					
+					
+						Int32 X;
+						Int32 Y;
+						Int32 Z;
+				
+				
+				};
+				
+				
+				class UpdateHealth : public Base, public IDPacket<0x06> {
+				
+				
+					public:
+					
+					
+						Single Health;
+						Int16 Food;
+						Single Saturation;
+				
+				
+				};
+				
+				
+				class Respawn : public Base, public IDPacket<0x07> {
+				
+				
+					public:
+					
+					
+						Int32 Dimension;
+						Byte Difficulty;
+						Byte GameMode;
+				
+				
+				};
+				
+				
+				class PlayerPositionAndLook : public Base, public IDPacket<0x08> {
+				
+				
+					public:
+					
+					
+						Double X;
+						Double Y;
+						Double Z;
+						Single Yaw;
+						Single Pitch;
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class HeldItemChange : public Base, public IDPacket<0x09> {
+				
+				
+					public:
+					
+					
+						Byte Selected;
+				
+				
+				};
+				
+				
+				class UseBed : public Base, public IDPacket<0x0A> {
+				
+				
+					public:
+					
+					
+						Int32 EntityID;
+						Int32 X;
+						Byte Y;
+						Int32 Z;
+				
+				
+				};
+				
+				
+				class Animation : public Base, public IDPacket<0x0B> {
+				
+				
+					public:
+					
+					
+						Int32 EntityID;
+						Byte AnimationID;
+				
+				
+				};
+				
+				
+				class SpawnPlayer : public Base, public IDPacket<0x0C> {
+				
+				
+					public:
+					
+					
+						UInt32 EntityID;
+						String UUID;
+						String Name;
+						Int32 X;
+						Int32 Y;
+						Int32 Z;
+						Single Yaw;
+						Single Pitch;
+						Int16 CurrentItem;
+				
+				
+				};
+				
+				
+				class CollectItem : public Base, public IDPacket<0x0D> {
+				
+				
+					public:
+					
+					
+						Int32 Collected;
+						Int32 Collector;
+				
+				
+				};
+				
+				
+				class SpawnObject : public Base, public IDPacket<0x0E> {
+				
+				
+					public:
+					
+					
+						UInt32 EntityID;
+						Byte Type;
+						Int32 X;
+						Int32 Y;
+						Int32 Z;
+						Byte Pitch;
+						Byte Yaw;
+						Variant<
+							Int32,
+							Tuple<Int32,Int16,Int16,Int16>
+						> Data;
+				
+				
+				};
+				
+				
+				class ChunkData : public Base, public IDPacket<0x21> {
+				
+				
+					public:
+					
+					
+						Int32 X;
+						Int32 Z;
+						bool Continuous;
+						UInt16 Primary;
+						UInt16 Add;
+						Vector<Byte> Data;
+				
+				
+				};
+				
+				
+				class BlockChange : public Base, public IDPacket<0x23> {
+				
+				
+					public:
+					
+					
+						Int32 X;
+						Byte Y;
+						Int32 Z;
+						UInt32 Type;
+						Byte Metadata;
+				
+				
+				};
+				
+				
+				class PlayerListItem : public Base, public IDPacket<0x38> {
+				
+				
+					public:
+					
+					
+						String Name;
+						bool Online;
+						Int16 Ping;
+				
+				
+				};
+				
+				
+				class TabComplete : public Base, public IDPacket<0x3A> {
+				
+				
+					public:
+					
+					
+						Vector<String> Match;
+				
+				
+				};
+				
+				
+				class PluginMessage : public Base, public IDPacket<0x3F> {
+				
+				
+					public:
+					
+					
+						String Channel;
+						Vector<Byte> Data;
+				
+				
+				};
+			
+			
+			}
+			
+			
+			namespace Serverbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public PLPacket, public SBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class KeepAlive : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						Int32 KeepAliveID;
+				
+				
+				};
+			
+			
+				class ChatMessage : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						String Value;
+				
+				
+				};
+				
+				
+				class UseEntity : public Base, public IDPacket<0x02> {
+				
+				
+					public:
+					
+					
+						Int32 Target;
+						Byte Mouse;
+				
+				
+				};
+				
+				
+				class Player : public Base, public IDPacket<0x03> {
+				
+				
+					public:
+					
+					
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class PlayerPosition : public Base, public IDPacket<0x04> {
+				
+				
+					public:
+					
+					
+						Double X;
+						Double Y;
+						Double Stance;
+						Double Z;
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class PlayerLook : public Base, public IDPacket<0x05> {
+				
+				
+					public:
+					
+					
+						Single Yaw;
+						Single Pitch;
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class PlayerPositionAndLook : public Base, public IDPacket<0x06> {
+				
+				
+					public:
+					
+					
+						Double X;
+						Double Y;
+						Double Stance;
+						Double Z;
+						Single Yaw;
+						Single Pitch;
+						bool OnGround;
+				
+				
+				};
+				
+				
+				class TabComplete : public Base, public IDPacket<0x14> {
+				
+				
+					public:
+					
+					
+						String Text;
+				
+				
+				};
+				
+				
+				class PluginMessage : public Base, public IDPacket<0x17> {
+				
+				
+					public:
+					
+					
+						String Channel;
+						Vector<Byte> Data;
+				
+				
+				};
+			
+			
+			}
+		
+		
+		}
+	
+	
+		namespace Status {
+		
+		
+			namespace Clientbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public STPacket, public CBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class Response : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						JSON::Value Value;
+				
+				
+				};
+				
+				
+				class Ping : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						Int64 Time;
+				
+				
+				};
+			
+			
+			}
+			
+			
+			namespace Serverbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public STPacket, public SBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class Request : public Base, public IDPacket<0x00> {	};
+				
+				
+				class Ping : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						Int64 Time;
+				
+				
+				};
+			
+			
+			}
+		
+		
+		}
+		
+		
+		namespace Login {
+		
+		
+			namespace Clientbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public LIPacket, public CBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class Disconnect : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						JSON::Value Value;
+				
+				
+				};
+				
+				
+				class EncryptionResponse : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						String ServerID;
+						Vector<Byte> PublicKey;
+						Vector<Byte> VerifyToken;
+				
+				
+				};
+				
+				
+				class LoginSuccess : public Base, public IDPacket<0x02> {
+				
+				
+					public:
+					
+					
+						String UUID;
+						String Username;
+				
+				
+				};
+			
+			
+			}
+			
+			
+			namespace Serverbound {
+			
+			
+				/**
+				 *	\cond
+				 */
+				 
+				 
+				class Base : public LIPacket, public CBPacket {	};
+				
+				
+				/**
+				 *	\endcond
+				 */
+				 
+				 
+				class LoginStart : public Base, public IDPacket<0x00> {
+				
+				
+					public:
+					
+					
+						String Name;
+				
+				
+				};
+				
+				
+				class EncryptionRequest : public Base, public IDPacket<0x01> {
+				
+				
+					public:
+					
+					
+						Vector<Byte> Secret;
+						Vector<Byte> VerifyToken;
+				
+				
+				};
+			
+			
+			}
+		
+		
+		}
+	
+	
+	}
 	
 	
 	/**
@@ -1664,181 +2758,256 @@ namespace MCPP {
 	 */
 	
 	
-	template <> class PacketTypeMap<0x00> : public PacketType<0x00,Int32> {	};
-	template <> class PacketTypeMap<0x01> : public PacketType<0x01,Int32,String,SByte,SByte,SByte,SByte,SByte> {	};
-	template <> class PacketTypeMap<0x02> : public PacketType<0x02,SByte,String,String,Int32> {	};
-	template <> class PacketTypeMap<0x03> : public PacketType<0x03,String> {	};
-	template <> class PacketTypeMap<0x04> : public PacketType<0x04,Int64,Int64> {	};
-	template <> class PacketTypeMap<0x05> : public PacketType<0x05,Int32,Int16,PLACEHOLDER> {	};
-	template <> class PacketTypeMap<0x06> : public PacketType<0x06,Int32,Int32,Int32> { };
-	template <> class PacketTypeMap<0x07> : public PacketType<0x07,Int32,Int32,bool> {	};
-	template <> class PacketTypeMap<0x08> : public PacketType<0x08,Int16,Int16,Single> { };
-	template <> class PacketTypeMap<0x09> : public PacketType<0x09,Int32,SByte,SByte,Int16,String> { };
-	template <> class PacketTypeMap<0x0A> : public PacketType<0x0A,bool> { };
-	template <> class PacketTypeMap<0x0B> : public PacketType<0x0B,Double,Double,Double,Double,bool> { };
-	template <> class PacketTypeMap<0x0C> : public PacketType<0x0C,Single,Single,bool> { };
-	template <> class PacketTypeMap<0x0D> : public PacketType<0x0D,Double,Double,Double,Double,Single,Single,bool> { };
-	template <> class PacketTypeMap<0x0E> : public PacketType<0x0E,SByte,Int32,SByte,Int32,SByte> { };
-	template <> class PacketTypeMap<0x0F> : public PacketType<0x0F,Int32,Byte,Int32,SByte,PLACEHOLDER,SByte,SByte,SByte> { };
-	template <> class PacketTypeMap<0x10> : public PacketType<0x10,Int16> { };
-	template <> class PacketTypeMap<0x11> : public PacketType<0x11,Int32,SByte,Int32,SByte,Int32> { };
-	template <> class PacketTypeMap<0x12> : public PacketType<0x12,Int32,SByte> { };
-	template <> class PacketTypeMap<0x13> : public PacketType<0x13,Int32,SByte,Int32> {	};
-	template <> class PacketTypeMap<0x14> : public PacketType<0x14,Int32,String,Int32,Int32,Int32,SByte,SByte,Int16,Vector<Metadatum>> { };
-	//	0x15
-	template <> class PacketTypeMap<0x16> : public PacketType<0x16,Int32,Int32> { };
-	template <> class PacketTypeMap<0x17> : public PacketType<0x17,Int32,SByte,Int32,Int32,Int32,SByte,SByte,PLACEHOLDER> { };
-	template <> class PacketTypeMap<0x18> : public PacketType<0x18,Int32,SByte,Int32,Int32,Int32,SByte,SByte,SByte,Int16,Int16,Int16,Vector<Metadatum>> { };
-	template <> class PacketTypeMap<0x19> : public PacketType<0x19,Int32,String,Int32,Int32,Int32,Int32> { };
-	template <> class PacketTypeMap<0x1A> : public PacketType<0x1A,Int32,Int32,Int32,Int32,Int16> { };
-	//	0x1B
-	template <> class PacketTypeMap<0x1C> : public PacketType<0x1C,Int32,Int16,Int16,Int16> { };
-	template <> class PacketTypeMap<0x1D> : public PacketType<0x1D,PacketArray<SByte,Int32>> { };
-	template <> class PacketTypeMap<0x1E> : public PacketType<0x1E,Int32> { };
-	template <> class PacketTypeMap<0x1F> : public PacketType<0x1F,Int32,SByte,SByte,SByte> { };
-	template <> class PacketTypeMap<0x20> : public PacketType<0x20,Int32,SByte,SByte> { };
-	template <> class PacketTypeMap<0x21> : public PacketType<0x21,Int32,SByte,SByte,SByte,SByte,SByte> { };
-	template <> class PacketTypeMap<0x22> : public PacketType<0x22,Int32,Int32,Int32,Int32,SByte,SByte> { };
-	template <> class PacketTypeMap<0x23> : public PacketType<0x23,Int32,SByte> { };
-	//	0x24
-	//	0x25
-	template <> class PacketTypeMap<0x26> : public PacketType<0x26,Int32,SByte> { };
-	template <> class PacketTypeMap<0x27> : public PacketType<0x27,Int32,Int32> { };
-	template <> class PacketTypeMap<0x28> : public PacketType<0x28,Int32,Vector<Metadatum>> { };
-	template <> class PacketTypeMap<0x29> : public PacketType<0x29,Int32,SByte,SByte,Int16> { };
-	template <> class PacketTypeMap<0x2A> : public PacketType<0x2A,Int32,SByte> { };
-	template <> class PacketTypeMap<0x2B> : public PacketType<0x2B,Single,Int16,Int16> { };
-	template <> class PacketTypeMap<0x2C> : public PacketType<0x2C,PacketArray<Int32,Tuple<String,Double,PacketArray<Int16,Tuple<UInt128,Double,SByte>>>>> {	};
-	//	0x2D
-	//	0x2F
-	//	0x30
-	//	0x31
-	//	0x32
-	//	0x33
-	//	0x34
-	template <> class PacketTypeMap<0x35> : public PacketType<0x35,Int32,Byte,Int32,Int16,Byte> {	};
-	template <> class PacketTypeMap<0x36> : public PacketType<0x36,Int32,Int16,Int32,Byte,Byte,Int16> {	};
-	template <> class PacketTypeMap<0x37> : public PacketType<0x37,Int32,Int32,Int32,Int32,Byte> {	};
-	//	0x38
-	//	0x39
-	//	0x3A
-	//	0x3B
-	template <> class PacketTypeMap<0x3C> : public PacketType<0x3C,Double,Double,Double,Single,PacketArray<Int32,SByte [3]>,Single,Single,Single> {	};
-	template <> class PacketTypeMap<0x3D> : public PacketType<0x3D,Int32,Int32,SByte,Int32,Int32,bool> {	};
-	template <> class PacketTypeMap<0x3E> : public PacketType<0x3E,String,Int32,Int32,Int32,Single,SByte> {	};
-	template <> class PacketTypeMap<0x3F> : public PacketType<0x3F,String,Single,Single,Single,Single,Single,Single,Single,Int32> {	};
-	//	0x40
-	//	0x41
-	//	0x42
-	//	0x43
-	//	0x44
-	//	0x45
-	template <> class PacketTypeMap<0x46> : public PacketType<0x46,SByte,SByte> {	};
-	template <> class PacketTypeMap<0x47> : public PacketType<0x47,Int32,SByte,Int32,Int32,Int32> {	};
-	//	0x48
-	//	0x49
-	//	0x4A
-	//	0x4B
-	//	0x4C
-	//	0x4D
-	//	0x4E
-	//	0x4F
-	//	0x50
-	//	0x51
-	//	0x52
-	//	0x53
-	//	0x54
-	//	0x55
-	//	0x56
-	//	0x57
-	//	0x58
-	//	0x59
-	//	0x5A
-	//	0x5B
-	//	0x5C
-	//	0x5D
-	//	0x5F
-	//	0x60
-	//	0x61
-	//	0x62
-	//	0x63
-	template <> class PacketTypeMap<0x64> : public PacketType<0x64,SByte,SByte,String,SByte,bool> {	};
-	template <> class PacketTypeMap<0x65> : public PacketType<0x65,SByte> {	};
-	template <> class PacketTypeMap<0x66> : public PacketType<0x66,SByte,Int16,SByte,Int16,SByte,PLACEHOLDER> {	};
-	template <> class PacketTypeMap<0x67> : public PacketType<0x67,SByte,Int16,PLACEHOLDER> {	};
-	template <> class PacketTypeMap<0x68> : public PacketType<0x68,SByte,PacketArray<Int16,PLACEHOLDER>> {	};
-	template <> class PacketTypeMap<0x69> : public PacketType<0x69,SByte,Int16,Int16> {	};
-	template <> class PacketTypeMap<0x6A> : public PacketType<0x6A,SByte,Int16,bool> {	};
-	template <> class PacketTypeMap<0x6B> : public PacketType<0x6B,Int16,PLACEHOLDER> {	};
-	template <> class PacketTypeMap<0x6C> : public PacketType<0x6C,SByte,SByte> {	};
-	//	0x6D
-	//	0x6E
-	//	0x6F
-	//	0x70
-	//	0x71
-	//	0x72
-	//	0x73
-	//	0x74
-	//	0x75
-	//	0x76
-	//	0x77
-	//	0x78
-	//	0x79
-	//	0x7A
-	//	0x7B
-	//	0x7C
-	//	0x7D
-	//	0x7E
-	//	0x7F
-	//	0x80
-	//	0x81
-	template <> class PacketTypeMap<0x82> : public PacketType<0x82,Int32,Int16,Int32,String,String,String,String> {	};
-	template <> class PacketTypeMap<0x83> : public PacketType<0x83,Int16,Int16,PacketArray<Int16,Byte>> {	};
-	template <> class PacketTypeMap<0x84> : public PacketType<0x84,Int32,Int16,Int32,SByte,PLACEHOLDER> {	};
-	//	...
-	template <> class PacketTypeMap<0xC9> : public PacketType<0xC9,String,bool,Int16> {	};
-	template <> class PacketTypeMap<0xCA> : public PacketType<0xCA,Byte,Single,Single> {	};
-	template <> class PacketTypeMap<0xCB> : public PacketType<0xCB,String> {	};
-	template <> class PacketTypeMap<0xCC> : public PacketType<0xCC,String,SByte,SByte,SByte,bool> {	};
-	template <> class PacketTypeMap<0xCD> : public PacketType<0xCD,SByte> {	};
-	template <> class PacketTypeMap<0xCE> : public PacketType<0xCE,String,String,SByte> {	};
-	template <> class PacketTypeMap<0xCF> : public PacketType<0xCF,String,SByte,String,Int32> {	};
-	template <> class PacketTypeMap<0xD0> : public PacketType<0xD0,SByte,String> {	};
-	template <> class PacketTypeMap<0xD1> : public PacketType<0xD1,String,SByte,String,String,String,SByte,PacketArray<Int16,String>> {	};
-	//	...
-	template <> class PacketTypeMap<0xFA> : public PacketType<0xFA,String,PacketArray<Int16,Byte>> {	};
-	//	0xFB
-	template <> class PacketTypeMap<0xFC> : public PacketType<0xFC,PacketArray<Int16,Byte>,PacketArray<Int16,Byte>> {	};
-	template <> class PacketTypeMap<0xFD> : public PacketType<0xFD,String,PacketArray<Int16,Byte>,PacketArray<Int16,Byte>> {	};
-	template <> class PacketTypeMap<0xFE> : public PacketType<0xFE,SByte,Byte,String,Int16,Byte,String,Int32> {	};
-	template <> class PacketTypeMap<0xFF> : public PacketType<0xFF,String> {	};
+	namespace PacketImpl {
+	
+	
+		template <Word i, typename T>
+		constexpr typename std::enable_if<
+			i>=T::Count,
+			Word
+		>::type SizeImpl (const void *) noexcept {
+		
+			return 0;
+		
+		}
+		
+		
+		template <Word i, typename T>
+		typename std::enable_if<
+			i<T::Count,
+			Word
+		>::type SizeImpl (const void * ptr) {
+		
+			typedef typename T::template Types<i> types;
+			typedef typename types::Type type;
+		
+			return Word(
+				SafeWord(
+					Serializer<type>::Size(
+						*reinterpret_cast<const type *>(
+							reinterpret_cast<const void *>(
+								reinterpret_cast<const Byte *>(ptr)+types::Offset
+							)
+						)
+					)
+				)+
+				SafeWord(SizeImpl<i+1,T>(ptr))
+			);
+		
+		}
+		
+		
+		template <Word i, typename T>
+		typename std::enable_if<
+			i>=T::Count
+		>::type SerializeImpl (const Vector<Byte> &, const void *) noexcept {	}
+		
+		
+		template <Word i, typename T>
+		typename std::enable_if<
+			i<T::Count
+		>::type SerializeImpl (Vector<Byte> & buffer, const void * ptr) {
+		
+			typedef typename T::template Types<i> types;
+			typedef typename types::Type type;
+			
+			Serializer<type>::ToBytes(
+				buffer,
+				*reinterpret_cast<const type *>(
+					reinterpret_cast<const void *>(
+						reinterpret_cast<const Byte *>(ptr)+types::Offset
+					)
+				)
+			);
+			
+			SerializeImpl<i+1,T>(buffer,ptr);
+		
+		}
+	
+	
+	}
 	
 	
 	/**
 	 *	\endcond
 	 */
-	 
-	 
+	
+	
 	/**
-	 *	Current Minecraft protocol
-	 *	version.
+	 *	Serializes a packet to bytes.
+	 *
+	 *	\tparam T
+	 *		The type of packet to serialize.
+	 *
+	 *	\param [in] packet
+	 *		The packet to serialize.
+	 *
+	 *	\return
+	 *		A buffer of bytes containing the
+	 *		Minecraft protocol representation
+	 *		of \em packet.
+	 */
+	template <typename T>
+	typename std::enable_if<
+		PacketImpl::PacketMap<T::State,T::Direction,T::PacketID>::IsValid,
+		Vector<Byte>
+	>::type Serialize (const T & packet) {
+	
+		typedef PacketImpl::PacketMap<T::State,T::Direction,T::PacketID> type;
+		typedef PacketImpl::Serializer<PacketImpl::VarInt<UInt32>> serializer;
+		
+		//	Obtain a buffer reasonably sized
+		//	for the packet-in-question
+		Vector<Byte> buffer(
+			Word(
+				SafeWord(PacketImpl::SizeImpl<0,type>(&packet))+
+				SafeWord(serializer::Size(T::PacketID))
+			)
+		);
+		
+		//	Place the ID in the buffer
+		serializer::ToBytes(buffer,T::PacketID);
+		
+		//	Place all elements in the buffer
+		PacketImpl::SerializeImpl<0,type>(buffer,&packet);
+		
+		//	Get the length of the buffer,
+		//	for the length header
+		UInt32 len=UInt32(
+			SafeWord(
+				buffer.Count()
+			)
+		);
+		
+		//	Determine how many bytes it will
+		//	take to serialize this length
+		Word len_len=serializer::Size(len);
+		
+		//	Calculate final size of the buffer
+		Word final_count=Word(
+			SafeWord(len_len)+
+			SafeWord(buffer.Count())
+		);
+		
+		//	Make sure there's enough
+		//	space for that plus the payload
+		//	in the buffer
+		buffer.SetCapacity(final_count);
+		
+		//	Move the contents of the buffer
+		//	backwards to make space for the
+		//	length header at the beginning
+		std::memmove(
+			buffer.begin()+len_len,
+			buffer.begin(),
+			buffer.Count()
+		);
+		
+		//	Serialize the length header to
+		//	the beginning of the buffer
+		buffer.SetCount(0);
+		serializer::ToBytes(buffer,len);
+		buffer.SetCount(final_count);
+		
+		return buffer;
+	
+	}
+	
+	
+	/**
+	 *	Generates a string representation of
+	 *	a packet.
+	 *
+	 *	\param [in] packet
+	 *		The packet to represent.
+	 *	\param [in] state
+	 *		The state \em packet requires
+	 *		the protocol to be in to be valid.
+	 *	\param [in] dir
+	 *		The direction the protocol may
+	 *		move in the protocol.
+	 *
+	 *	\return
+	 *		A string representation of
+	 *		\em packet.
+	 */
+	String ToString (const Packet & packet, ProtocolState state, ProtocolDirection dir);
+	/**
+	 *	Retrieves a string representation of
+	 *	a member of the ProtocolState
+	 *	enumeration.
+	 *
+	 *	\param [in] state
+	 *		A protocol state.
+	 *
+	 *	\return
+	 *		A string representation of \em state.
+	 */
+	const String & ToString (ProtocolState state);
+	/**
+	 *	Retrieves a string representation of
+	 *	a member of the ProtocolDirection
+	 *	enumeration.
+	 *
+	 *	\param [in] dir
+	 *		A protocol direction.
+	 *
+	 *	\return
+	 *		A string representation of \em dir.
+	 */
+	const String & ToString (ProtocolDirection dir);
+	/**
+	 *	Generates a string representation of a
+	 *	packet.
+	 *
+	 *	\tparam T
+	 *		The type of \em packet, which must
+	 *		derive from the Packet class.
+	 *
+	 *	\param [in] packet
+	 *		The packet of type \em T to
+	 *		represent.
+	 *
+	 *	\return
+	 *		A string representation of \em packet.
+	 */
+	template <typename T>
+	typename std::enable_if<
+		std::is_base_of<Packet,T>::value,
+		String
+	>::type ToString (const T & packet) {
+	
+		return ToString(packet,T::State,T::Direction);
+	
+	}
+	
+	
+	/**
+	 *	The Minecraft protocol version this
+	 *	server is compatible with.
 	 */
 	extern const Word ProtocolVersion;
 	/**
-	 *	Current Minecraft major version
-	 *	number.
+	 *	The major version number associated
+	 *	with the version of vanilla Minecraft
+	 *	this protocol implementation is
+	 *	compatible with.
 	 */
 	extern const Word MinecraftMajorVersion;
 	/**
-	 *	Current Minecraft minor version
-	 *	number.
+	 *	The minor version number associated
+	 *	with the version of vanilla Minecraft
+	 *	this protocol implementation is
+	 *	compatible with.
 	 */
 	extern const Word MinecraftMinorVersion;
 	/**
-	 *	Current Minecraft sub-minor version
-	 *	number.
+	 *	The patch number associated with the
+	 *	version of vanilla Minecraft this
+	 *	protocol implementation is compatible
+	 *	with.
 	 */
-	extern const Word MinecraftSubminorVersion;
-	
+	extern const Word MinecraftPatch;
+
 
 }

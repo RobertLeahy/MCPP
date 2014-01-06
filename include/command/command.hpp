@@ -10,9 +10,95 @@
 #include <chat/chat.hpp>
 #include <command_interpreter.hpp>
 #include <mod.hpp>
+#include <unordered_map>
 
 
 namespace MCPP {
+
+
+	/**
+	 *	Represents a command which is either
+	 *	being executed, or which may be
+	 *	executed
+	 */
+	class CommandEvent {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The client object representing the
+			 *	client who issued the command, or
+			 *	a null pointer if no client issued
+			 *	the command.
+			 */
+			SmartPointer<Client> Issuer;
+			/**
+			 *	The identifier that caused this
+			 *	event.  In the case of a command
+			 *	event initiated through chat or
+			 *	other text interface, this is all
+			 *	characters after the leading
+			 *	solidus up until the first whitespace
+			 *	character.
+			 */
+			String Identifier;
+			/**
+			 *	The arguments passed to the command.
+			 */
+			Vector<String> Arguments;
+			/**
+			 *	The raw string that was parsed to
+			 *	initiate this event.
+			 */
+			String Raw;
+			/**
+			 *	The raw arguments parsed into the
+			 *	\em Arguments vector.
+			 */
+			String RawArguments;
+	
+	
+	};
+	
+	
+	/**
+	 *	Represents the result of attempting
+	 *	to execute a command.
+	 */
+	enum class CommandStatus {
+	
+		Success,		/**<	The command was successful.	*/
+		SyntaxError,	/**<	There was a syntax error.	*/
+		DoesNotExist,	/**<	The requested command does not exist.	*/
+		Forbidden		/**<	User is not permitted to do that.	*/
+	
+	};
+	
+	
+	/**
+	 *	Represents the result of executing a command.
+	 */
+	class CommandResult {
+	
+	
+		public:
+		
+		
+			/**
+			 *	Represents the status the execution completed
+			 *	with.
+			 */
+			CommandStatus Status;
+			/**
+			 *	A ChatMessage which represents the response
+			 *	that should be sent to the user (if any).
+			 */
+			ChatMessage Message;
+	
+	
+	};
 	
 	
 	/**
@@ -26,104 +112,88 @@ namespace MCPP {
 		
 		
 			/**
-			 *	Retrieves this command's identifier.
-			 *	The identifier is the string after
-			 *	the solidus at the beginning of a chat
-			 *	message which shall identify this command.
+			 *	Gets a summary entry for this command.
 			 *
-			 *	\return
-			 *		A reference to an immutable string
-			 *		containing this command's identifier.
-			 */
-			virtual const String & Identifier () const noexcept = 0;
-			/**
-			 *	Checks to see if a given user is
-			 *	permitted to execute a command.
+			 *	Summary entries should provide a brief overview
+			 *	of a command's purpose.
 			 *
-			 *	Default implementation allows every
-			 *	user to execute a command.
-			 *
-			 *	\param [in] client
-			 *		The client to check.
-			 *
-			 *	\return
-			 *		\em true if \em client is permitted
-			 *		to execute this command, \em false
-			 *		otherwise.
-			 */
-			virtual bool Check (SmartPointer<Client> client) const;
-			/**
-			 *	Retrieves a summary of this command's
-			 *	functionality.
-			 *
-			 *	\return
-			 *		A reference to an immutable string
-			 *		containing a summary of this command's
-			 *		functionality.
-			 */
-			virtual const String & Summary () const noexcept = 0;
-			/**
-			 *	Retrieves help for this command.
-			 *
-			 *	\return
-			 *		A reference to an immutable string
-			 *		containing help regarding this
-			 *		command's functionality and 
-			 *		accepted arguments.
-			 */
-			virtual const String & Help () const noexcept = 0;
-			/**
-			 *	Retrieves possible autocompletions
-			 *	for this command.
-			 *
-			 *	Default implementation is no autocompletes.
-			 *
-			 *	\param [in] args
-			 *		A string containing the arguments
-			 *		to autocomplete.
-			 *
-			 *	\return
-			 *		A vector of strings containing all
-			 *		possible autocompletions for the
-			 *		last word in \em args.
-			 */
-			virtual Vector<String> AutoComplete (const String & args) const;
-			/**
-			 *	Executes a command.
-			 *
-			 *	\param [in] client
-			 *		The client issuing the command, or
-			 *		null if there is no specific client
-			 *		issuing this command.
-			 *	\param [in] args
-			 *		A string containing the arguments
-			 *		to this command.
+			 *	\param [in] identifier
+			 *		The identifier to get the summary for.  Can
+			 *		be ignored if the implementing command object
+			 *		only implements a single identifier.
 			 *	\param [in] message
-			 *		A chat message which the command shall
-			 *		populate it and which shall be passed
-			 *		back to the caller.
+			 *		A ChatMessage object to which the summary
+			 *		for this command shall be appended.
+			 */
+			virtual void Summary (const String & identifier, ChatMessage & message) = 0;
+		
+		
+			/**
+			 *	Gets a help entry for this command.
+			 *
+			 *	Help entries should document the syntax
+			 *	and purpose of a command fully.
+			 *
+			 *	\param [in] identifier
+			 *		The identifier to get help for.  Can
+			 *		be ignored if the implementing command
+			 *		object only implements a single identifier.
+			 *	\param [in] message
+			 *		A ChatMessage object to which the help
+			 *		for this command shall be appended.
+			 */
+			virtual void Help (const String & identifier, ChatMessage & message) = 0;
+			
+			
+			/**
+			 *	Attempts to get autocompletions.
+			 *
+			 *	Default implementation returns no auto
+			 *	completions.
+			 *
+			 *	\param [in] event
+			 *		A CommandEvent representing what the user
+			 *		has already typed.
 			 *
 			 *	\return
-			 *		\em true if the command completed
-			 *		successfully, \em false if there was
-			 *		an error in the syntax of \em args.
-			 *		
+			 *		A vector of string representing possible
+			 *		auto completions for the last work the user
+			 *		typed.
 			 */
-			virtual bool Execute (SmartPointer<Client> client, const String & args, ChatMessage & message) = 0;
+			virtual Vector<String> AutoComplete (const CommandEvent & event);
+		
+		
+			/**
+			 *	Checks to see if a given command event should
+			 *	be permitted to proceed.
+			 *
+			 *	Default implementation allows all commands to
+			 *	proceed.
+			 *
+			 *	\param [in] event
+			 *		The CommandEvent encapsulating the command
+			 *		event to check.
+			 *
+			 *	\return
+			 *		\em true if \em event should be allowed to
+			 *		proceed, \em false otherwise.
+			 */
+			virtual bool Check (const CommandEvent & event);
+			
+			
+			/**
+			 *	Executes the command.
+			 *
+			 *	\param [in] event
+			 *		A CommandEvent encapsulating the command event
+			 *		to execute.
+			 *
+			 *	\return
+			 *		A CommandResult object encapsulating the
+			 *		result of executing the command.
+			 */
+			virtual CommandResult Execute (CommandEvent event) = 0;
 	
-	
-	};
-	
-	
-	/**
-	 *	Represents the result of attempting
-	 *	to execute a command.
-	 */
-	enum class CommandResult {
-	
-		Success,		/**<	The command was successful.	*/
-		SyntaxError,	/**<	There was a syntax error.	*/
-		DoesNotExist	/**<	The requested command does not exist.	*/
 	
 	};
 
@@ -140,22 +210,31 @@ namespace MCPP {
 		private:
 		
 		
-			Vector<Command *> commands;
+			std::unordered_map<
+				String,
+				Command *
+			> map;
+			Vector<
+				Tuple<
+					String,
+					Command *
+				>
+			> list;
 			
 			
-			inline Command * retrieve (const String &);
-			inline Vector<Command *> retrieve (const Regex &);
+			Command * get (const String &);
 			
 			
-			static ChatMessage incorrect_syntax (Command *);
+			static ChatMessage incorrect_syntax ();
+			static ChatMessage incorrect_syntax (const String &);
 			static ChatMessage command_dne ();
 			static ChatMessage insufficient_privileges ();
-			static String get_command (const String &);
-			ChatMessage help (SmartPointer<Client>, const String &);
 			
 			
-			ChatMessage execute (SmartPointer<Client>, const String &, const String &);
-			ChatMessage parse_and_execute (SmartPointer<Client>, const String &);
+			ChatMessage help (CommandEvent);
+			Nullable<CommandEvent> parse (SmartPointer<Client>, const String &, bool keep_trailing=false);
+			Nullable<ChatMessage> execute (SmartPointer<Client>, const String &);
+			Vector<String> auto_complete (SmartPointer<Client>, const String &);
 		
 		
 		public:
@@ -193,11 +272,14 @@ namespace MCPP {
 			 *	Not thread safe, do not invoke after
 			 *	start up.
 			 *
+			 *	\param [in] identifier
+			 *		The identifier by which this Command
+			 *		object shall be identified.
 			 *	\param [in] command
 			 *		A pointer to the Command object
 			 *		to be managed.
 			 */
-			void Add (Command * command);
+			void Add (String identifier, Command * command);
 	
 	
 	};

@@ -6,9 +6,11 @@
 #pragma once
 
 
-#include <common.hpp>
-#include <command/command.hpp>
+#include <rleahylib/rleahylib.hpp>
 #include <chat/chat.hpp>
+#include <command/command.hpp>
+#include <mod.hpp>
+#include <unordered_map>
 
 
 namespace MCPP {
@@ -43,11 +45,11 @@ namespace MCPP {
 		private:
 		
 		
-			Vector<InformationProvider *> providers;
+			std::unordered_map<String,InformationProvider *> map;
+			Vector<InformationProvider *> list;
 			
 			
-			Vector<InformationProvider *> retrieve (const Regex &);
-			InformationProvider * retrieve (const String &);
+			InformationProvider * get (const String &);
 			
 			
 		public:
@@ -67,19 +69,18 @@ namespace MCPP {
 			/**
 			 *	\cond
 			 */
-			 
-			 
+			
+			
 			virtual Word Priority () const noexcept override;
 			virtual const String & Name () const noexcept override;
 			virtual void Install () override;
-			 
-			 
-			virtual const String & Identifier () const noexcept override;
-			virtual bool Check (SmartPointer<Client>) const override;
-			virtual const String & Summary () const noexcept override;
-			virtual const String & Help () const noexcept override;
-			virtual Vector<String> AutoComplete (const String &) const override;
-			virtual bool Execute (SmartPointer<Client>, const String &, ChatMessage &) override;
+			
+			
+			virtual void Summary (const String &, ChatMessage &) override;
+			virtual void Help (const String &, ChatMessage &) override;
+			virtual Vector<String> AutoComplete (const CommandEvent &) override;
+			virtual bool Check (const CommandEvent &) override;
+			virtual CommandResult Execute (CommandEvent) override;
 			 
 			 
 			/**

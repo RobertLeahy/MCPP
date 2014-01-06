@@ -17,6 +17,110 @@ namespace MCPP {
 	static const Regex is_builtin("^MC\\|");
 	
 	
+	static Vector<String> get_strings (const Vector<Byte> & buffer) {
+	
+		//	Decode
+		auto str=UTF8().Decode(buffer.begin(),buffer.end());
+		
+		//	Separate on NULL character
+		Vector<String> retr;
+		for (auto cp : str.CodePoints()) {
+		
+			if (retr.Count()==0) retr.EmplaceBack();
+			
+			if (cp=='\0') {
+			
+				retr.EmplaceBack();
+				
+				continue;
+			
+			}
+			
+			retr[retr.Count()-1] << cp;
+		
+		}
+		
+		return retr;
+	
+	}
+	
+	
+	void PluginMessages::reg (SmartPointer<Client> client, Vector<Byte> data) {
+		
+		auto channels=get_strings(data);
+		
+		lock.Write([&] () mutable {
+		
+			auto iter=clients.find(client);
+			
+			if (iter==clients.end()) return;
+			
+			for (auto & channel : channels) iter->second.insert(std::move(channel));
+		
+		});
+	
+	}
+	
+	
+	void PluginMessages::unreg (SmartPointer<Client> client, Vector<Byte> data) {
+	
+		auto channels=get_strings(data);
+		
+		lock.Write([&] () mutable {
+		
+			auto iter=clients.find(client);
+			
+			if (iter==clients.end()) return;
+			
+			for (auto & channel : channels) iter->second.erase(channel);
+		
+		});
+	
+	}
+	
+	
+	void PluginMessages::handler (PacketEvent event) {
+	
+		auto & packet=event.Data.Get<incoming>();
+		
+		//	Handle register/unregister separately
+		if (packet.Channel==MCPP::reg) {
+		
+			reg(
+				std::move(event.From),
+				std::move(packet.Data)
+			);
+			
+			return;
+		
+		} else if (packet.Channel==MCPP::unreg) {
+		
+			unreg(
+				std::move(event.From),
+				std::move(packet.Data)
+			);
+		
+			return;
+		
+		}
+	
+		//	Try and get associated handler
+		auto iter=callbacks.find(packet.Channel);
+		
+		//	If there's no associated handler,
+		//	just pass
+		if (iter==callbacks.end()) return;
+		
+		//	Invoke handler
+		iter->second(PluginMessage{
+			std::move(event.From),
+			std::move(packet.Channel),
+			std::move(packet.Data)
+		});
+	
+	}
+	
+	
 	Word PluginMessages::Priority () const noexcept {
 	
 		return priority;
@@ -31,151 +135,14 @@ namespace MCPP {
 	}
 	
 	
-	static inline Vector<String> split (String str) {
-	
-		Vector<String> retr;
-		
-		String in_progress;
-		for (const auto & gc : str) {
-		
-			if (
-				(gc=='\0') &&
-				(in_progress.Size()!=0)
-			) retr.Add(std::move(in_progress));
-			else in_progress << gc;
-		
-		}
-		
-		if (in_progress.Size()!=0) retr.Add(std::move(in_progress));
-		
-		return retr;
-	
-	}
-	
-	
-	inline void PluginMessages::reg_channels (SmartPointer<Client> & client, const String & channels) {
-	
-		auto strs=split(channels);
-		
-		if (strs.Count()!=0) lock.Write([&] () mutable {
-		
-			auto iter=clients.find(client);
-			if (iter!=clients.end()) for (auto & str : strs) iter->second.insert(std::move(str));
-		
-		});
-	
-	}
-	
-	
-	inline void PluginMessages::unreg_channels (SmartPointer<Client> & client, const String & channels) {
-	
-		auto strs=split(channels);
-		
-		if (strs.Count()!=0) lock.Write([&] () mutable {
-		
-			auto iter=clients.find(client);
-			if (iter!=clients.end()) for (const auto & str : strs) iter->second.erase(str);
-		
-		});
-	
-	}
-	
-	
-	static inline String decode (const Vector<Byte> & buffer) {
-	
-		return UTF16().Decode(
-			buffer.begin(),
-			buffer.end()
-		);
-	
-	}
-	
-	
-	inline bool PluginMessages::handle (SmartPointer<Client> & client, String & channel, Vector<Byte> & buffer) {
-	
-		//	Is this a REGISTER directive?
-		if (channel==reg) {
-		
-			reg_channels(
-				client,
-				decode(buffer)
-			);
-		
-			return true;
-		
-		}
-		
-		//	is this an UNREGISTER directive?
-		if (channel==unreg) {
-		
-			unreg_channels(
-				client,
-				decode(buffer)
-			);
-			
-			return true;
-		
-		}
-		
-		//	Can we handle this plugin message
-		//	channel?
-		
-		auto iter=callbacks.find(channel);
-		
-		//	NO
-		
-		if (iter==callbacks.end()) return false;
-		
-		//	YES
-		
-		iter->second(
-			std::move(client),
-			std::move(channel),
-			std::move(buffer)
-		);
-		
-		return true;
-	
-	}
-	
-	
 	void PluginMessages::Install () {
 	
 		auto & server=Server::Get();
 	
-		//	Install ourselves as the handler
-		//	of 0xFA
-		
-		auto prev=std::move(server.Router[0xFA]);
-		
-		server.Router[0xFA]=[=] (SmartPointer<Client> client, Packet packet) mutable {
-			
-			//	Dispatch to handler
-			//
-			//	Pass through if we couldn't
-			//	handle it
-			if (
-				!(
-					(client->GetState()==ClientState::Authenticated) &&
-					handle(
-						client,
-						packet.Retrieve<
-							PacketTypeMap<0xFA>,
-							0
-						>(),
-						packet.Retrieve<Vector<Byte>>(1)
-					)
-				) &&
-				prev
-			) prev(
-				std::move(client),
-				std::move(packet)
-			);
-		
-		};
-		
-		//	Install connect/disconnect
-		//	handlers
+		server.Router(
+			incoming::PacketID,
+			incoming::State
+		)=[this] (PacketEvent event) mutable {	handler(std::move(event));	};
 		
 		server.OnConnect.Add([this] (SmartPointer<Client> client) mutable {
 		
@@ -192,56 +159,66 @@ namespace MCPP {
 		
 		server.OnDisconnect.Add([this] (SmartPointer<Client> client, const String &) mutable {
 		
-			lock.Write([&] () mutable {	clients.erase(client);	});
+			lock.Write([&] () mutable {
+			
+				clients.erase(client);
+			
+			});
 		
 		});
+		
+		server.OnShutdown.Add([this] () mutable {	callbacks.clear();	});
 	
 	}
-
-
-	void PluginMessages::Add (String channel, std::function<void (SmartPointer<Client>, String, Vector<Byte>)> callback) {
+	
+	
+	void PluginMessages::Add (String channel, std::function<void (PluginMessage)> callback) {
 	
 		auto iter=callbacks.find(channel);
-		if (iter==callbacks.end()) callbacks.emplace(
-			std::move(channel),
-			std::move(callback)
-		);
-		else iter->second=std::move(callback);
+		
+		//	Replace handler if one already exists
+		if (iter==callbacks.end()) {
+		
+			callbacks.emplace(
+				std::move(channel),
+				std::move(callback)
+			);
+		
+		} else {
+		
+			iter->second=std::move(callback);
+		
+		}
 	
 	}
 	
 	
-	SmartPointer<SendHandle> PluginMessages::Send (SmartPointer<Client> client, String channel, Vector<Byte> buffer) {
+	SmartPointer<SendHandle> PluginMessages::Send (PluginMessage message) {
 	
-		bool builtin=is_builtin.IsMatch(channel);
-	
-		//	Prepare a packet
-	
-		typedef PacketTypeMap<0xFA> pt;
+		SmartPointer<SendHandle> retr;
 		
-		Packet packet;
-		packet.SetType<pt>();
-		packet.Retrieve<pt,0>()=std::move(channel);
-		packet.Retrieve<pt,1>()=std::move(buffer);
+		if (message.Endpoint.IsNull()) return retr;
 		
-		//	If this is a built-in channel,
-		//	send at once
-		if (builtin) return client->Send(packet);
-	
-		//	Otherwise only send if the client
-		//	has registered for this channel
-		return lock.Read([&] () {
-		
-			auto iter=clients.find(client);
+		if (
+			is_builtin.IsMatch(message.Channel) ||
+			lock.Read([&] () mutable {
 			
-			if (
-				(iter==clients.end()) ||
-				(iter->second.count(channel)==0)
-			) return SmartPointer<SendHandle>();
+				auto iter=clients.find(message.Endpoint);
+				
+				return !((iter==clients.end()) || (iter->second.count(message.Channel)==0));
 			
-			return client->Send(packet);
+			})
+		) {
 		
-		});
+			outgoing packet;
+			packet.Channel=std::move(message.Channel);
+			packet.Data=std::move(message.Buffer);
+			
+			retr=message.Endpoint->Send(packet);
+		
+		}
+		
+		return retr;
 	
 	}
 

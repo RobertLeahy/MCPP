@@ -1,133 +1,87 @@
-#include <common.hpp>
+#include <rleahylib/rleahylib.hpp>
 #include <chat/chat.hpp>
-#include <utility>
-#include <unordered_map>
+#include <mod.hpp>
+#include <server.hpp>
 
 
-namespace MCPP {
+using namespace MCPP;
 
 
-	static const String name("Chat Login/Logout Broadcast Support");
-	static const Word priority=1;
-	static const String online(" has come online");
-	static const String offline(" has gone offline");
-	static const String start_reason(" (");
-	static const String end_reason(")");
+static const String name("Chat Login/Logout Broadcast");
+static const Word priority=1;
+static const String online(" has come online");
+static const String offline(" has gone offline");
+static const String start_reason(" (");
+static const String end_reason(")");
+
+
+class LoginLogout : public Module {
+
+
+	public:
 	
 	
-	class LoginLogout : public Module {
-	
-	
-		private:
+		virtual const String & Name () const noexcept override {
+		
+			return name;
+		
+		}
 		
 		
-			std::unordered_map<const Connection *,SmartPointer<Client>> map;
-			Mutex map_lock;
-	
-	
-		public:
+		virtual Word Priority () const noexcept override {
+		
+			return priority;
+		
+		}
 		
 		
-			virtual const String & Name () const noexcept override {
+		virtual void Install () override {
+		
+			auto & server=Server::Get();
 			
-				return name;
+			//	Subscribe to the on login event
+			server.OnLogin.Add([] (SmartPointer<Client> client) {
 			
-			}
-			
-			
-			virtual Word Priority () const noexcept override {
-			
-				return priority;
-			
-			}
-			
-			
-			virtual void Install () override {
-			
-				//	Subscribe to the onlogin
-				//	event within the server
-				Server::Get().OnLogin.Add([] (SmartPointer<Client> client) {
-				
-					ChatMessage message;
-					message.Message.EmplaceBack(ChatStyle::BrightGreen);
-					message.Message.EmplaceBack(ChatStyle::Bold);
-					message.Message.EmplaceBack(client->GetUsername());
-					message.Message.EmplaceBack(ChatFormat::Pop);
-					message.Message.EmplaceBack(online);
-					
-					Chat::Get().Send(message);
-				
-				});
-				
-				//	Subscribe to the ondisconnect
-				//	event within the server
-				Server::Get().OnDisconnect.Add([] (SmartPointer<Client> client, const String & reason) {
-				
-					//	Only proceed if the user was
-					//	authenticated
-					if (client->GetState()==ClientState::Authenticated) {
-					
-						ChatMessage message;
-						message.Message.EmplaceBack(ChatStyle::Red);
-						message.Message.EmplaceBack(ChatStyle::Bold);
-						message.Message.EmplaceBack(client->GetUsername());
-						message.Message.EmplaceBack(ChatFormat::Pop);
-						message.Message.EmplaceBack(offline);
+				ChatMessage message;
+				message	<<	ChatStyle::BrightGreen
+						<<	ChatStyle::Bold
+						<<	client->GetUsername()
+						<<	ChatFormat::Pop
+						<<	online;
 						
-						//	Add reason if there was
-						//	a reason associated with
-						//	the disconnect
-						if (reason.Size()!=0) {
-						
-							message.Message.EmplaceBack(start_reason);
-							message.Message.EmplaceBack(ChatStyle::Bold);
-							message.Message.EmplaceBack(reason);
-							message.Message.EmplaceBack(ChatFormat::Pop);
-							message.Message.EmplaceBack(end_reason);
-						
-						}
-						
-						Chat::Get().Send(message);
-					
-					}
+				Chat::Get().Send(message);
+			
+			});
+			
+			//	Subscribe to the on disconnect event
+			server.OnDisconnect.Add([] (SmartPointer<Client> client, const String & reason) {
+			
+				//	Only proceed if the user was authenticated
+				if (client->GetState()!=ProtocolState::Play) return;
 				
-				});
+				ChatMessage message;
+				message	<<	ChatStyle::Red
+						<<	ChatStyle::Bold
+						<<	client->GetUsername()
+						<<	ChatFormat::Pop
+						<<	offline;
+						
+				//	If there was a reason associated with the disconnect,
+				//	append that
+				if (reason.Size()!=0) message	<<	start_reason
+												<<	ChatStyle::Bold
+												<<	reason
+												<<	ChatFormat::Pop
+												<<	end_reason;
+												
+				Chat::Get().Send(message);
 			
-			}
-	
-	
-	};
-
-
-}
-
-
-static Nullable<LoginLogout> login_logout;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		try {
+			});
 		
-			if (login_logout.IsNull()) login_logout.Construct();
-			
-			return &(*login_logout);
-		
-		} catch (...) {	}
-		
-		return nullptr;
-	
-	}
-	
-	
-	void Unload () {
-	
-		login_logout.Destroy();
-	
-	}
+		}
 
 
-}
+};
+
+
+INSTALL_MODULE(LoginLogout)

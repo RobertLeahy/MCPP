@@ -8,8 +8,8 @@
 
 #include <rleahylib/rleahylib.hpp>
 #include <aes_128_cfb_8.hpp>
-#include <packet.hpp>
 #include <network.hpp>
+#include <packet.hpp>
 #include <atomic>
 #include <functional>
 #include <type_traits>
@@ -76,34 +76,24 @@ namespace MCPP {
 	};
 	
 	
-	template <typename T, typename... Args>
-	class PackContains {
+	namespace ClientImpl {
 	
 	
-		template <typename... Args_i>
-		class inner {
+		template <typename...>
+		class ContainsPacketImpl {	};
+		
+		
+		template <typename T, typename... Args_i>
+		class ContainsPacketImpl<T,Args_i...> {
 		
 		
 			public:
 			
 			
-				static constexpr Word Value=0;
-		
-		
-		};
-		
-		
-		template <typename T_i, typename... Args_i>
-		class inner<T_i,Args_i...> {
-		
-		
-			public:
-			
-			
-				static constexpr Word Value=inner<Args_i...>::Value+(
-					std::is_same<
-						typename std::decay<T>::type,
-						typename std::decay<T_i>::type
+				constexpr static Word Value=ContainsPacketImpl<Args_i...>::Value+(
+					std::is_base_of<
+						Packet,
+						typename std::decay<T>::type
 					>::value
 						?	1
 						:	0
@@ -113,13 +103,33 @@ namespace MCPP {
 		};
 		
 		
-		public:
+		template <>
+		class ContainsPacketImpl<> {
 		
 		
-			static constexpr Word Value=inner<Args...>::Value;
+			public:
+			
+			
+				constexpr static Word Value=0;
+		
+		
+		};
 	
 	
-	};
+		template <typename... Args>
+		class ContainsPacket {
+
+		
+			public:
+			
+			
+				constexpr static Word Value=ContainsPacketImpl<Args...>::Value;
+		
+		
+		};
+		
+		
+	}
 	 
 	 
 	/**
@@ -138,18 +148,6 @@ namespace MCPP {
 	/**
 	 *	\endcond
 	 */
-	 
-	
-	/**
-	 *	The states that a client connection
-	 *	goes through.
-	 */
-	enum class ClientState {
-	
-		Connected,		/**<	Client is newly-connected, and hasn't entered any state yet.	*/
-		Authenticated	/**<	Client has logged in.	*/
-	
-	};
 
 
 	/**
@@ -188,21 +186,12 @@ namespace MCPP {
 			//	Receive buffer
 			
 			//	Packet currently being built
-			Packet in_progress;
+			PacketParser parser;
 			//	Decrypted bytes
 			Vector<Byte> encryption_buffer;
-			//	If a packet has had at
-			//	least one byte added to it
-			//	this is set to true
-			bool packet_in_progress;
-			//	If packet_in_progress is
-			//	true and the packet
-			//	was started with encryption
-			//	this is true
-			bool packet_encrypted;
 			
 			//	Client's current state
-			ClientState state;
+			ProtocolState state;
 			
 			//	Client's username
 			String username;
@@ -219,7 +208,62 @@ namespace MCPP {
 			
 			
 			void enable_encryption (const Vector<Byte> &, const Vector<Byte> &);
-			SmartPointer<SendHandle> send (const Packet &);
+			void log (const Packet &, ProtocolState, ProtocolDirection, const Vector<Byte> &, const Vector<Byte> &) const;
+			
+			
+			template <typename T>
+			SmartPointer<SendHandle> send (const T & packet) {
+			
+				auto buffer=Serialize(packet);
+				Vector<Byte> ciphertext;
+				
+				SmartPointer<SendHandle> retr;
+				
+				if (encryptor.IsNull()) {
+				
+					log(
+						packet,
+						T::State,
+						T::Direction,
+						buffer,
+						ciphertext
+					);
+					
+					retr=conn->Send(std::move(buffer));
+				
+				} else {
+				
+					encryptor->BeginEncrypt();
+					
+					try {
+					
+						ciphertext=encryptor->Encrypt(buffer);
+						
+						log(
+							packet,
+							T::State,
+							T::Direction,
+							buffer,
+							ciphertext
+						);
+						
+						retr=conn->Send(std::move(ciphertext));
+					
+					} catch (...) {
+					
+						encryptor->EndEncrypt();
+						
+						throw;
+					
+					}
+					
+					encryptor->EndEncrypt();
+				
+				}
+				
+				return retr;
+				
+			}
 			
 			
 			template <typename T>
@@ -398,7 +442,11 @@ namespace MCPP {
 			}
 			
 			
-			inline SmartPointer<SendHandle> atomic_perform (const Packet & packet) {
+			template <typename T>
+			inline typename std::enable_if<
+				std::is_base_of<Packet,T>::value,
+				SmartPointer<SendHandle>
+			>::type atomic_perform (const T & packet) {
 			
 				return send(packet);
 			
@@ -430,7 +478,7 @@ namespace MCPP {
 			}
 			
 			
-			inline SmartPointer<SendHandle> atomic_perform (ClientState state) noexcept {
+			inline SmartPointer<SendHandle> atomic_perform (ProtocolState state) noexcept {
 			
 				this->state=state;
 				
@@ -498,7 +546,7 @@ namespace MCPP {
 			
 			template <typename... Args>
 			static typename std::enable_if<
-				PackContains<Packet,Args...>::Value==1,
+				ClientImpl::ContainsPacket<Args...>::Value==1,
 				SmartPointer<SendHandle>
 			>::type get_atomic () noexcept {
 			
@@ -509,7 +557,7 @@ namespace MCPP {
 			
 			template <typename... Args>
 			static typename std::enable_if<
-				PackContains<Packet,Args...>::Value!=1,
+				ClientImpl::ContainsPacket<Args...>::Value!=1,
 				Vector<SmartPointer<SendHandle>>
 			>::type get_atomic () noexcept {
 			
@@ -544,7 +592,7 @@ namespace MCPP {
 			 */
 			template <typename... Args>
 			typename std::enable_if<
-				PackContains<Packet,Args...>::Value==0
+				ClientImpl::ContainsPacket<Args...>::Value==0
 			>::type Atomic (Args &&... args) {
 			
 				bool locked;
@@ -598,7 +646,7 @@ namespace MCPP {
 			 */
 			template <typename... Args>
 			typename std::enable_if<
-				PackContains<Packet,Args...>::Value!=0,
+				ClientImpl::ContainsPacket<Args...>::Value!=0,
 				decltype(get_atomic<Args...>())
 			>::type Atomic (Args &&... args) {
 			
@@ -688,6 +736,10 @@ namespace MCPP {
 			/**
 			 *	Sends data to the client.
 			 *
+			 *	\tparam T
+			 *		The type of packet which shall be
+			 *		sent.
+			 *
 			 *	\param [in] packet
 			 *		The packet to send to the client.
 			 *
@@ -696,7 +748,12 @@ namespace MCPP {
 			 *		monitor the progress of the asynchronous
 			 *		send operation.
 			 */
-			SmartPointer<SendHandle> Send (const Packet & packet);
+			template <typename T>
+			SmartPointer<SendHandle> Send (const T & packet) {
+			
+				return read([&] () {	return send(packet);	});
+			
+			}
 			
 			
 			/**
@@ -714,19 +771,15 @@ namespace MCPP {
 			 *		\em true if a packet is ready for consumption,
 			 *		\em false otherwise.
 			 */
-			bool Receive (Vector<Byte> * buffer);
+			bool Receive (Vector<Byte> & buffer);
 			/**
-			 *	Completes a receive, clearing the in progress
-			 *	packet and retrieving it.
-			 *
-			 *	Calling this function except immediately after
-			 *	Receive returns \em true results in undefined
-			 *	behaviour.
+			 *	Gets a received packet.
 			 *
 			 *	\return
-			 *		The completed packet.
+			 *		A reference to the last packet
+			 *		received.
 			 */
-			Packet CompleteReceive () noexcept;
+			Packet & GetPacket () noexcept;
 			
 			
 			/**
@@ -771,14 +824,14 @@ namespace MCPP {
 			/**
 			 *	Sets the client's state.
 			 */
-			void SetState (ClientState state) noexcept;
+			void SetState (ProtocolState state) noexcept;
 			/**
 			 *	Retrieves the client's state.
 			 *
 			 *	\return
 			 *		The client's current state.
 			 */
-			ClientState GetState () const noexcept;
+			ProtocolState GetState () const noexcept;
 			
 			
 			/**
@@ -926,10 +979,10 @@ namespace MCPP {
 			
 			
 			iter_type iter;
-			ClientList & list;
+			ClientList * list;
 			
 			
-			ClientListIterator (ClientList &, iter_type) noexcept;
+			ClientListIterator (ClientList *, iter_type) noexcept;
 			
 			
 		public:
@@ -937,6 +990,8 @@ namespace MCPP {
 		
 			ClientListIterator () = delete;
 			~ClientListIterator () noexcept;
+			ClientListIterator (const ClientListIterator &) noexcept;
+			ClientListIterator & operator = (const ClientListIterator &) noexcept;
 			
 			
 			SmartPointer<Client> & operator * () noexcept;
@@ -991,19 +1046,7 @@ namespace MCPP {
 			mutable RWLock map_lock;
 			
 			
-			//	The number of active iterators
-			//	holding a lock on this object
-			Word iters;
-			Mutex iters_lock;
-			
-			
-			inline void acquire () noexcept;
-			
-			
 		public:
-		
-		
-			ClientList () noexcept;
 		
 		
 			/**

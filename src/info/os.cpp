@@ -1,5 +1,10 @@
+#include <rleahylib/rleahylib.hpp>
+#include <chat/chat.hpp>
 #include <info/info.hpp>
 #include <system_error>
+
+
+using namespace MCPP;
 
 
 #ifdef ENVIRONMENT_WINDOWS
@@ -428,26 +433,4 @@ class OSInfo : public Module, public InformationProvider {
 };
 
 
-static Nullable<OSInfo> module;
-
-
-extern "C" {
-
-
-	Module * Load () {
-	
-		if (module.IsNull()) module.Construct();
-		
-		return &(*module);
-	
-	}
-	
-	
-	void Unload () {
-	
-		module.Destroy();
-	
-	}
-
-
-}
+INSTALL_MODULE(OSInfo)

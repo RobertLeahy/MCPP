@@ -27,8 +27,6 @@ namespace MCPP {
 				Nullable<String>
 			> brands;
 			RWLock lock;
-			//	Encoded brand string
-			Vector<Byte> encoded;
 		
 		
 		public:

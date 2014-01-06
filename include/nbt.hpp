@@ -6,426 +6,386 @@
 #pragma once
  
  
-#include <common.hpp>
-#include <type_traits>
-#include <typeinfo>
+#include <rleahylib/rleahylib.hpp>
+#include <hash.hpp>
+#include <variant.hpp>
+#include <exception>
+#include <memory>
+#include <unordered_map>
 #include <utility>
  
- 
-namespace MCPP {
+
+namespace NBT {
 
 
-	namespace NBT {
+	/**
+	 *	The types that a tag may take on.
+	 */
+	enum class TagType : Byte {
+
+		End=0,			/**<	An end tag.  Unnamed.	*/
+		Byte=1,			/**<	A single signed byte.	*/
+		Short=2,		/**<	A single signed 16-bit integer.	*/
+		Int=3,			/**<	A single signed 32-bit integer.	*/
+		Long=4,			/**<	A single signed 64-bit integer.	*/
+		Float=5,		/**<	An IEEE 754 32-bit floating point number.	*/
+		Double=6,		/**<	An IEEE 754 64-bit floating point number.	*/
+		ByteArray=7,	/**<	An array of bytes.	*/
+		String=8,		/**<	A string of Unicode characters.	*/
+		List=9,			/**<	A sequential list of unnamed tags.	*/
+		Compound=10,	/**<	A sequential list of named tags.	*/
+		IntArray=11		/**<	An array of 32-bit integers.	*/
+		
+	};
+	
+	
+	/**
+	 *	\cond
+	 */
 
 
-		/**
-		 *	The types of a named binary tag.
-		 */
-		enum class TagType : Byte {
-		
-			End=0,			/**<	An end tag.  Unnamed.	*/
-			Byte=1,			/**<	A single signed byte.	*/
-			Short=2,		/**<	A single signed 16-bit integer.	*/
-			Int=3,			/**<	A single signed 32-bit integer.	*/
-			Long=4,			/**<	A single signed 64-bit integer.	*/
-			Float=5,		/**<	An IEEE 754 32-bit floating point number.	*/
-			Double=6,		/**<	An IEEE 754 64-bit floating point number.	*/
-			ByteArray=7,	/**<	An array of bytes.	*/
-			String=8,		/**<	A string of Unicode characters.	*/
-			List=9,			/**<	A sequential list of unnamed tags.	*/
-			Compound=10,	/**<	A sequential list of named tags.	*/
-			IntArray=11		/**<	An array of 32-bit integers.	*/
-		
-		};
-		
-		
-		/**
-		 *	\cond
-		 */
+	template <typename... Args>
+	using Variant=MCPP::Variant<Args...>;
+	
+	
+	class NamedTag;
+	class Tag;
+	
+	
+	/**
+	 *	\endcond
+	 */
+	 
+	
+	/**
+	 *	A list of unnamed tags.
+	 *
+	 *	All tags must be of the same type.
+	 */
+	class List {
+	
+	
+		public:
 		
 		
-		class NamedTag;
+			/**
+			 *	The type of the tags this list
+			 *	contains.
+			 */
+			TagType Type;
+			/**
+			 *	The tags this list contains.
+			 */
+			Vector<Tag> Payload;
+	
+	
+	};
+	 
+	
+	/**
+	 *	The type of a TAG_Compound.
+	 */
+	typedef std::unique_ptr<std::unordered_map<String,NamedTag>> Compound;
+	/**
+	 *	The type of a tag's payload.
+	 */
+	typedef Variant<
+		SByte,
+		Int16,
+		Int32,
+		Int64,
+		Single,
+		Double,
+		Vector<SByte>,
+		String,
+		List,
+		Compound,
+		Vector<Int32>
+	> PayloadType;
+	
+	
+	/**
+	 *	Thrown when an error occurs during an
+	 *	NBT operation.
+	 */
+	class Error : public std::exception {
+	
+	
+		private:
 		
 		
-		/**
-		 *	\endcond
-		 */
-		
-		
-		/**
-		 *	An unnamed binary tag.
-		 */
-		class Tag {
-		
-		
-			private:
+			const char * what_str;
 			
 			
-				TagType type;
-				union {
-					SByte tag_byte;
-					Int16 tag_short;
-					Int32 tag_int;
-					Int64 tag_long;
-					Single tag_float;
-					Double tag_double;
-					Vector<SByte> tag_bytearray;
-					String tag_string;
-					Vector<Tag> tag_list;
-					Vector<NamedTag> tag_compound;
-					Vector<Int32> tag_intarray;
-				};
-				
-				
-				inline void destroy () noexcept;
-				inline void move (Tag &&) noexcept;
-				inline void copy (const Tag &);
-				template <typename T>
-				const T & get () const;
-				
-				
-			public:
+		public:
+		
+		
+			Error (const char * what) noexcept;
 			
 			
-				Tag () = delete;
-				
-				
-				/**
-				 *	Copies a tag.
-				 */
-				Tag (const Tag & other);
-				/**
-				 *	Moves a tag.
-				 *
-				 *	\param [in] other
-				 *		The tag to move.
-				 */
-				Tag (Tag && other) noexcept;
-				/**
-				 *	Replaces this tag with a
-				 *	copy of another tag.
-				 *
-				 *	\param [in] other
-				 *		The tag to copy.
-				 *
-				 *	\return
-				 *		A reference to this object.
-				 */
-				Tag & operator = (const Tag & other);
-				/**
-				 *	Replaces this tag by moving
-				 *	another tag.
-				 *
-				 *	\param [in] other
-				 *		The tag to move.
-				 *
-				 *	\return
-				 *		A reference to this object.
-				 */
-				Tag & operator = (Tag && other) noexcept;
+			virtual const char * what () const noexcept override;
+	
+	
+	};
+	
+	
+	/**
+	 *	An unnamed tag.
+	 */
+	class Tag {
+	
+	
+		public:
+		
+		
+			Tag () = default;
+			Tag (const Tag &) = default;
+			Tag (Tag &&) = default;
+			Tag & operator = (const Tag &) = default;
+			Tag & operator = (Tag &&) = default;
 			
 			
-				Tag (SByte data) noexcept;
-				Tag (Int16 data) noexcept;
-				Tag (Int32 data) noexcept;
-				Tag (Int64 data) noexcept;
-				Tag (Single data) noexcept;
-				Tag (Double data) noexcept;
-				Tag (Vector<SByte> data) noexcept;
-				Tag (String data) noexcept;
-				Tag (Vector<Tag> data) noexcept;
-				Tag (Vector<NamedTag> data) noexcept;
-				Tag (Vector<Int32> data) noexcept;
-				
-				
-				/**
-				 *	Destroys this tag.
-				 */
-				~Tag () noexcept;
-				
-				
-				/**
-				 *	Retrieves the type of this tag.
-				 */
-				TagType Type () const noexcept;
-				/**
-				 *	Gets the value of the tag.
-				 *
-				 *	\tparam T
-				 *		The type of value to retrieve.
-				 *
-				 *	\return
-				 *		The value encapsulated by
-				 *		this tag.
-				 */
-				template <typename T>
-				T & Value ();
-				/**
-				 *	Gets the value of the tag.
-				 *
-				 *	\tparam T
-				 *		The type of value to retrieve.
-				 *
-				 *	\return
-				 *		The value encapsulated by
-				 *		this tag.
-				 */
-				template <typename T>
-				const T & Value () const;
-				
-				
-				/**
-				 *	Retrieves a string representation
-				 *	of the type of this tag.
-				 *
-				 *	\return
-				 *		A string representing the type
-				 *		of this tag.
-				 */
-				String TypeToString () const;
-				/**
-				 *	Retrieves a string representation
-				 *	of the value of this tag.
-				 *
-				 *	\return
-				 *		A string representing the value
-				 *		of this tag.
-				 */
-				String ValueToString () const;
+			/**
+			 *	Initializes an unnamed tag with
+			 *	a given payload.
+			 *
+			 *	\param [in] payload
+			 *		The payload to initialize this
+			 *		tag with.
+			 */
+			Tag (PayloadType payload) noexcept;
 		
 		
-		};
+			/**
+			 *	The payload of the tag.
+			 */
+			PayloadType Payload;
+			
+			
+			/**
+			 *	Accesses the payload of this tag.
+			 *
+			 *	\return
+			 *		The payload of this tag.
+			 */
+			PayloadType & operator * () noexcept;
+			/**
+			 *	Accesses the payload of this tag.
+			 *
+			 *	\return
+			 *		The payload of this tag.
+			 */
+			const PayloadType & operator * () const noexcept;
+			/**
+			 *	Accesses the payload of this tag.
+			 *
+			 *	\return
+			 *		The payload of this tag.
+			 */
+			PayloadType * operator -> () noexcept;
+			/**
+			 *	Accesses the payload of this tag.
+			 *
+			 *	\return
+			 *		The payload of this tag.
+			 */
+			const PayloadType * operator -> () const noexcept;
+	
+	
+	};
+	
+	
+	/**
+	 *	A named tag.
+	 */
+	class NamedTag : public Tag {
+	
+	
+		public:
 		
 		
-		template <typename T>
-		const T & Tag::Value () const {
+			NamedTag () = default;
+			NamedTag (const NamedTag &) = default;
+			NamedTag (NamedTag &&) = default;
+			NamedTag & operator = (const NamedTag &) = default;
+			NamedTag & operator = (NamedTag &&) = default;
 		
-			return get<T>();
+		
+			/**
+			 *	Initializes a named tag with a given
+			 *	name and payload.
+			 *
+			 *	\param [in] name
+			 *		The name of this tag.
+			 *	\param [in] payload
+			 *		The payload of this tag.
+			 */
+			NamedTag (String name, PayloadType payload) noexcept;
+		
+		
+			/**
+			 *	The name of this tag.
+			 */
+			String Name;
+	
+	
+	};
+	
+	
+	/**
+	 *	The type of the unordered map which
+	 *	contains the key/value pairs which
+	 *	make up a TAG_Compound.
+	 */
+	typedef Compound::element_type KeyValue;
+	
+	
+	/**
+	 *	\cond
+	 */
+	
+	
+	namespace NBTImpl {
+	
+	
+		inline void Add (const Compound &) noexcept {	}
+	
+	
+		template <typename T, typename... Args>
+		void Add (Compound & compound, T && tag, Args &&... args) {
+		
+			String name=tag.Name;
+		
+			compound->emplace(
+				name,
+				std::forward<T>(tag)
+			);
+			
+			Add(compound,std::forward<Args>(args)...);
 		
 		}
-		
-		
-		template <typename T>
-		T & Tag::Value () {
-		
-			return const_cast<T &>(get<T>());
-		
-		}
-		
-		
-		template <typename T>
-		const T & Tag::get () const {
-		
-			//	Type check
-		
-			//	TAG_Byte
-			if (!(
-				//	TAG_Byte
-				(
-					(type==TagType::Byte) &&
-					std::is_same<SByte,T>::value
-				) ||
-				//	TAG_Short
-				(
-					(type==TagType::Short) &&
-					std::is_same<Int16,T>::value
-				) ||
-				//	TAG_Int
-				(
-					(type==TagType::Int) &&
-					std::is_same<Int32,T>::value
-				) ||
-				//	TAG_Long
-				(
-					(type==TagType::Long) &&
-					std::is_same<Int64,T>::value
-				) ||
-				//	TAG_Float
-				(
-					(type==TagType::Float) &&
-					std::is_same<Single,T>::value
-				) ||
-				//	TAG_Double
-				(
-					(type==TagType::Double) &&
-					std::is_same<Double,T>::value
-				) ||
-				//	TAG_Byte_Array
-				(
-					(type==TagType::ByteArray) &&
-					std::is_same<Vector<SByte>,T>::value
-				) ||
-				//	TAG_String
-				(
-					(type==TagType::String) &&
-					std::is_same<String,T>::value
-				) ||
-				//	TAG_List
-				(
-					(type==TagType::List) &&
-					std::is_same<Vector<Tag>,T>::value
-				) ||
-				//	TAG_Compound
-				(
-					(type==TagType::Compound) &&
-					std::is_same<Vector<NamedTag>,T>::value
-				) ||
-				//	TAG_IntArray
-				(
-					(type==TagType::IntArray) &&
-					std::is_same<Vector<Int32>,T>::value
-				)
-			)) throw std::bad_cast();
-			
-			return *reinterpret_cast<const T *>(&tag_byte);
-		
-		}
-		
-		
-		/**
-		 *	A named binary tag.
-		 */
-		class NamedTag {
-		
-		
-			private:
-			
-			
-				String name;
-				Tag tag;
-				
-				
-			public:
-			
-			
-				/**
-				 *	Creates a named tag from a buffer
-				 *	of bytes.
-				 *
-				 *	\param [in] begin
-				 *		A pointer to the beginning of
-				 *		a buffer of bytes.
-				 *	\param [in] end
-				 *		A pointer to the end of a buffer
-				 *		of bytes.
-				 *
-				 *	\return
-				 *		A named tag created from the buffer
-				 *		of bytes.
-				 */
-				static NamedTag Create (const Byte * begin, const Byte * end);
-			
-			
-				NamedTag () = delete;
-			
-			
-				/**
-				 *	Creates a new named tag.
-				 *
-				 *	\tparam T
-				 *		The type of the parameter
-				 *		\em data, which will be used to
-				 *		create the Tag object which this
-				 *		object names.
-				 *
-				 *	\param [in] name
-				 *		The name of this tag.
-				 *	\param [in] data
-				 *		The payload of this tag.
-				 */
-				template <typename T>
-				NamedTag (const String & name, T && data);
-				/**
-				 *	Creates a new named tag.
-				 *
-				 *	\tparam T
-				 *		The type of the parameter
-				 *		\em data, which will be used to
-				 *		create the Tag object which this
-				 *		object names.
-				 *
-				 *	\param [in] name
-				 *		The name of this tag.
-				 *	\param [in] data
-				 *		The payload of this tag.
-				 */
-				template <typename T>
-				NamedTag (String && name, T && data);
-				
-				
-				/**
-				 *	Retrieves the name of this tag.
-				 *
-				 *	\return
-				 *		The name of this tag.
-				 */
-				String & Name () noexcept;
-				/**
-				 *	Retrieves the name of this tag.
-				 *
-				 *	\return
-				 *		The name of this tag.
-				 */
-				const String & Name () const noexcept;
-				/**
-				 *	Gets the value of the named tag.
-				 *
-				 *	\tparam T
-				 *		The type of value to retrieve.
-				 *
-				 *	\return
-				 *		The value encapsulated by
-				 *		this tag.
-				 */
-				template <typename T>
-				T & Value ();
-				/**
-				 *	Gets the value of the named tag.
-				 *
-				 *	\tparam T
-				 *		The type of value to retrieve.
-				 *
-				 *	\return
-				 *		The value encapsulated by
-				 *		this tag.
-				 */
-				template <typename T>
-				const T & Value () const;
-				/**
-				 *	Retrieves the type of this tag.
-				 */
-				TagType Type () const noexcept;
-		
-		
-		};
-		
-		
-		template <typename T>
-		NamedTag::NamedTag (const String & name, T && data) : name(name), tag(std::forward<T>(data)) {	}
-		
-		
-		template <typename T>
-		NamedTag::NamedTag (String && name, T && data) : name(std::move(name)), tag(std::forward<T>(data)) {	}
-		
-		
-		template <typename T>
-		T & NamedTag::Value () {
-		
-			return tag.Value<T>();
-		
-		}
-		
-		
-		template <typename T>
-		const T & NamedTag::Value () const {
-		
-			return tag.Value<T>();
-		
-		}
-		
-		
+	
+	
 	}
-
-
+	
+	
+	/**
+	 *	\endcond
+	 */
+	
+	
+	/**
+	 *	Adds named tags to a TAG_Compound.
+	 *
+	 *	\param [in,out] compound
+	 *		The TAG_Compound to which tags
+	 *		shall be added.
+	 *	\param [in] args
+	 *		Any number of named tags which
+	 *		shall be added to the collection.
+	 *
+	 *	\return
+	 *		A reference to \em compound.
+	 */
+	template <typename... Args>
+	Compound & Add (Compound & compound, Args &&... args) {
+	
+		if (!compound) compound=Compound(new KeyValue());
+		
+		NBTImpl::Add(compound,std::forward<Args>(args)...);
+		
+		return compound;
+	
+	}
+	
+	
+	/**
+	 *	Creates a new TAG_Compound and initializes
+	 *	it with named tags.
+	 *
+	 *	\param [in] args
+	 *		Any number of named tags which shall
+	 *		be added to the collection.
+	 *
+	 *	\return
+	 *		A newly-created TAG_Compound with \em args
+	 *		added to it.
+	 */
+	template <typename... Args>
+	Compound Make (Args &&... args) {
+	
+		Compound retr;
+		
+		Add(retr,std::forward<Args>(args)...);
+		
+		return retr;
+	
+	}
+	
+	
+	/**
+	 *	Serializes NBT.
+	 *
+	 *	\param [in] tag
+	 *		The named tag which is the root
+	 *		of the NBT structure.
+	 *
+	 *	\return
+	 *		A buffer containing bytes which
+	 *		may be parsed to obtain \em tag.
+	 */
+	Vector<Byte> Serialize (const NamedTag & tag);
+	/**
+	 *	Serializes NBT.
+	 *
+	 *	\param [in,out] buffer
+	 *		The buffer to which bytes shall
+	 *		be appended.
+	 *	\param [in] tag
+	 *		The named tag which is the root
+	 *		of the NBT structure.
+	 */
+	void Serialize (Vector<Byte> & buffer, const NamedTag & tag);
+	
+	
+	/**
+	 *	Parses bytes into NBT.
+	 *
+	 *	\param [in,out] begin
+	 *		An iterator to the beginning
+	 *		of a buffer of bytes.  This
+	 *		iterator shall be advanced as
+	 *		bytes are consumed.
+	 *	\param [in] end
+	 *		An iterator to the end of a buffer
+	 *		of bytes.
+	 *	\param [in] max_depth
+	 *		The maximum recursive depth to
+	 *		the parser shall descend before
+	 *		throwing an exception.  Defaults
+	 *		to zero, which is infinite depth.
+	 *
+	 *	\return
+	 *		A named tag which contains the data
+	 *		serialized between \em begin and
+	 *		\em end.
+	 */
+	NamedTag Parse (const Byte * & begin, const Byte * end, Word max_depth=0);
+	
+	
+	/**
+	 *	Renders a named tag as a string.
+	 *
+	 *	\param [in] tag
+	 *		A named tag.
+	 *
+	 *	\return
+	 *		A string representation of the
+	 *		NBT structure which descends
+	 *		from \em tag.
+	 */
+	String ToString (const NamedTag & tag);
+	
+	
 }
  

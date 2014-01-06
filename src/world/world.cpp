@@ -1,4 +1,5 @@
 #include <world/world.hpp>
+#include <server.hpp>
 #include <singleton.hpp>
 
 
@@ -62,21 +63,23 @@ namespace MCPP {
 	
 	
 	void World::Install () {
+	
+		auto & server=Server::Get();
 		
 		//	Get settings
 		
 		//	Seed
-		auto seed=Server::Get().Data().GetSetting(
+		auto seed=server.Data().GetSetting(
 			seed_key
 		);
 		set_seed(seed);
-		if (seed.IsNull()) Server::Get().Data().SetSetting(
+		if (seed.IsNull()) server.Data().SetSetting(
 			seed_key,
 			String(this->seed)
 		);
 		
 		//	Time per maintenance cycle
-		auto maintenance_interval=Server::Get().Data().GetSetting(
+		auto maintenance_interval=server.Data().GetSetting(
 			maintenance_interval_key
 		);
 		if (
@@ -85,11 +88,11 @@ namespace MCPP {
 		) this->maintenance_interval=default_maintenance_interval;
 		
 		//	World type
-		auto type=Server::Get().Data().GetSetting(
+		auto type=server.Data().GetSetting(
 			type_key
 		);
 		this->type=type.IsNull() ? default_world_type : *type;
-		Server::Get().WriteLog(
+		server.WriteLog(
 			String::Format(
 				log_type,
 				this->type
@@ -99,10 +102,10 @@ namespace MCPP {
 		
 		//	Install shutdown handler to cleanup
 		//	any module code
-		Server::Get().OnShutdown.Add([this] () {	cleanup_events();	});
+		server.OnShutdown.Add([this] () {	cleanup_events();	});
 		
 		//	Begin maintenance
-		Server::Get().Pool().Enqueue(
+		server.Pool().Enqueue(
 			this->maintenance_interval,
 			[this] () {	maintenance();	}
 		);

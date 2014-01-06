@@ -12,6 +12,7 @@
 #include <exception>
 #include <memory>
 #include <unordered_map>
+#include <utility>
  
 
 /**
@@ -77,8 +78,8 @@ namespace JSON {
 			 */
 			Vector<
 				Variant<
-					String,
 					Double,
+					String,
 					Object,
 					Array,
 					bool
@@ -93,6 +94,16 @@ namespace JSON {
 	 *	Represents a JSON object.
 	 */
 	class Object {
+	
+	
+		private:
+		
+		
+			inline void add_impl () const noexcept {	}
+			
+			
+			template <typename T1, typename T2, typename... Args>
+			void add_impl (T1 &&, T2 &&, Args &&...);
 	
 	
 		public:
@@ -112,14 +123,30 @@ namespace JSON {
 				std::unordered_map<
 					String,
 					Variant<
-						String,
 						Double,
+						String,
 						Object,
 						Array,
 						bool
 					>
 				>
 			> Pairs;
+			
+			
+			/**
+			 *	Adds an arbitrary number of key/value
+			 *	pairs to the object.
+			 *
+			 *	\param [in] args
+			 *		An arbitrary number of arguments,
+			 *		where the first is a key, the
+			 *		second is a value, and so on.
+			 *
+			 *	\return
+			 *		A reference to this object.
+			 */
+			template <typename... Args>
+			Object & Add (Args &&... args);
 			
 			
 			/**
@@ -146,12 +173,41 @@ namespace JSON {
 	/**
 	 *	The type of a single JSON value.
 	 */
-	typedef Variant<String,Double,Object,Array,bool> Value;
+	typedef Variant<Double,String,Object,Array,bool> Value;
 	
 	
 	/**
 	 *	\cond
 	 */
+	 
+	 
+	template <typename T1, typename T2, typename... Args>
+	void Object::add_impl (T1 && key, T2 && value, Args &&... args) {
+	
+		Pairs->emplace(
+			String(std::forward<T1>(key)),
+			Value(std::forward<T2>(value))
+		);
+		
+		add_impl(std::forward<Args>(args)...);
+	
+	}
+	 
+	 
+	template <typename... Args>
+	Object & Object::Add (Args &&... args) {
+	
+		//	Create a new dictionary if
+		//	necessary
+		if (!Pairs) Construct();
+		
+		//	Call helper
+		add_impl(std::forward<Args>(args)...);
+		
+		//	Return self reference
+		return *this;
+	
+	}
 	 
 	 
 	String Serialize (const String & str);

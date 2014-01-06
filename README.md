@@ -37,7 +37,7 @@ As all the above libraries are available for Windows and Linux (zlib has to be c
 Compiler Support
 ----------------
 
-GCC 4.8.0 is used to build the server on Windows, GCC 4.8.1 on Linux.
+GCC 4.8.1 is used to build the server.
 
 RLeahyLib is hardcoded not to build on anything but GCC 4.8.0 or higher, but this is so the type system can depend on certain GCC-specific macros, and can likely be quickly adapted to suit a different compiler.
 

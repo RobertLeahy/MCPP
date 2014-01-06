@@ -6,31 +6,14 @@
 #pragma once
 
 
-namespace MCPP {
-
-
-	/**
-	 *	\cond
-	 */
-	 
-	 
-	class Server;
-	
-	
-	/**
-	 *	\endcond
-	 */
-
-
-}
-
-
 #include <rleahylib/rleahylib.hpp>
 #include <chat_provider.hpp>
 #include <command_interpreter.hpp>
 #include <data_provider.hpp>
 #include <event.hpp>
+#include <mod_loader.hpp>
 #include <network.hpp>
+#include <packet_router.hpp>
 #include <thread_pool.hpp>
 #include <typedefs.hpp>
 #include <atomic>
@@ -38,24 +21,78 @@ namespace MCPP {
 #include <functional>
 #include <type_traits>
 #include <unordered_set>
-#include <unordered_map>
 #include <utility>
 
 
-namespace MCPP {
+namespace RLeahyLib {
 
 
-	/**
-	 *	The direction information is travelling
-	 *	over the wire.
-	 */
-	enum class ProtocolDirection : Word {
+	inline bool operator == (const Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection> & a, const Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection> & b) noexcept {
 	
-		ClientToServer,	/**<	From the client to the server.	*/
-		ServerToClient,	/**<	From the server to the client.	*/
-		Both			/**<	Both	*/
+		return (
+			(a.Item<0>()==b.Item<0>()) &&
+			(a.Item<1>()==b.Item<1>()) &&
+			(a.Item<2>()==b.Item<2>())
+		);
+	
+	}
+
+
+}
+
+
+namespace std {
+
+
+	template <>
+	struct hash<Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection>> {
+	
+	
+		private:
+		
+		
+			template <typename T>
+			size_t get (T value) const noexcept {
+			
+				union {
+					size_t out;
+					typename std::decay<T>::type in;
+				};
+				
+				out=0;
+				in=value;
+				
+				return out;
+			
+			}
+	
+	
+		public:
+		
+		
+			size_t operator () (const Tuple<UInt32,MCPP::ProtocolState,MCPP::ProtocolDirection> & obj) const noexcept {
+			
+				size_t retr=23;
+				
+				retr*=31;
+				retr+=get(obj.Item<0>());
+				retr*=31;
+				retr+=get(obj.Item<1>());
+				retr*=31;
+				retr+=get(obj.Item<2>());
+				
+				return retr;
+			
+			}
+	
 	
 	};
+
+
+}
+
+
+namespace MCPP {
 
 
 	class Server {
@@ -96,7 +133,13 @@ namespace MCPP {
 			std::atomic<bool> debug;
 			std::atomic<bool> log_all_packets;
 			mutable RWLock logged_packets_lock;
-			std::unordered_map<Byte,ProtocolDirection> logged_packets;
+			std::unordered_set<
+				Tuple<
+					UInt32,
+					ProtocolState,
+					ProtocolDirection
+				>
+			> logged_packets;
 			//	Module verbosity
 			std::atomic<bool> verbose_all;
 			mutable RWLock verbose_lock;
@@ -112,7 +155,12 @@ namespace MCPP {
 			//	PRIVATE METHODS	//
 			//					//
 			inline void server_startup();
-			inline void load_mods();
+			void bind_to (IPAddress, UInt16);
+			void get_default_binds ();
+			LocalEndpoint get_endpoint (IPAddress, UInt16);
+			void get_bind (const String &);
+			void get_binds ();
+			inline void load_mods ();
 			inline void cleanup_events () noexcept;
 			inline void stop_impl ();
 			inline void panic_impl (std::exception_ptr except=std::exception_ptr()) noexcept;
@@ -138,8 +186,52 @@ namespace MCPP {
 			 *	Not thread safe.
 			 */
 			static void Destroy () noexcept;
+			/**
+			 *	The date and time the server was built
+			 *	in this format: \"MMM DD YYYY HH:MM:SS\".
+			 */
+			static const String BuildDate;
+			/**
+			 *	The compiler the server was built with.
+			 */
+			static const String CompiledWith;
+			/**
+			 *	The major version number associated with
+			 *	this version of Minecraft++.
+			 */
+			static const Word MajorVersion;
+			/**
+			 *	The minor version number associated with
+			 *	this version of Minecraft++.
+			 */
+			static const Word MinorVersion;
+			/**
+			 *	The patch number associated with this
+			 *	version of Minecraft++.
+			 */
+			static const Word Patch;
+			/**
+			 *	The proper name which identifies
+			 *	Minecraft++.
+			 */
+			static const String Name;
 			
 			
+			/**
+			 *	Wraps a callback, panicking if it throws.
+			 *
+			 *	\tparam T
+			 *		The type of callback to invoke.
+			 *	\tparam Args
+			 *		The types of the arguments to pass
+			 *		through to the callback.
+			 *
+			 *	\param [in] callback
+			 *		The callback to invoke.
+			 *	\param [in] args
+			 *		The arguments to forward through to
+			 *		\em callback.
+			 */
 			template <typename T, typename... Args>
 			static auto PanicOnThrow (T && callback, Args &&... args) noexcept(
 				noexcept(callback(std::forward<Args>(args)...))
@@ -169,6 +261,24 @@ namespace MCPP {
 				}
 			
 			}
+			/**
+			 *	Wraps a callback, panicking if it throws.
+			 *
+			 *	\tparam T
+			 *		The type of callback to invoke.
+			 *	\tparam Args
+			 *		The types of the arguments to pass
+			 *		through to the callback.
+			 *
+			 *	\param [in] callback
+			 *		The callback to invoke.
+			 *	\param [in] args
+			 *		The arguments to forward through to
+			 *		\em callback.
+			 *
+			 *	\return
+			 *		Whatever \em callback returned.
+			 */
 			template <typename T, typename... Args>
 			static auto PanicOnThrow (T && callback, Args &&... args) noexcept(
 				noexcept(callback(std::forward<Args>(args)...))
@@ -247,6 +357,14 @@ namespace MCPP {
 			 */
 			ModuleLoader & Loader ();
 			/**
+			 *	Gets the server's connection handler.
+			 *
+			 *	\return
+			 *		A reference to the server's connection
+			 *		handler.
+			 */
+			ConnectionHandler & Handler ();
+			/**
 			 *	A list of clients connected to the
 			 *	server.
 			 */
@@ -256,24 +374,6 @@ namespace MCPP {
 			 *	packets.
 			 */
 			PacketRouter Router;
-			/**
-			 *	Returns a string representing the date
-			 *	and time the server was built in this
-			 *	format: \"MMM DD YYYY HH:MM:SS\".
-			 *
-			 *	\return
-			 *		A string of the above format.
-			 */
-			const String & BuildDate () const noexcept;
-			/**
-			 *	Returns a string representing the compiler
-			 *	the server was built with.
-			 *
-			 *	\return
-			 *		A string representing the compiler used
-			 *		to build the server.
-			 */
-			const String & CompiledWith () const noexcept;
 			
 		
 			Server (const Server &) = delete;
@@ -396,21 +496,28 @@ namespace MCPP {
 			 *
 			 *	\param [in] packet_id
 			 *		The ID of the packet to log.
+			 *	\param [in] state
+			 *		The protocol state associated
+			 *		with the packet.
 			 *	\param [in] direction
-			 *		The direction in which the
-			 *		packet shall be logged, defaults
-			 *		to ProtocolDirection::Both.
+			 *		The direction associated with
+			 *		the packet.
 			 */
-			void SetDebugPacket (Byte packet_id, ProtocolDirection direction=ProtocolDirection::Both);
+			void SetDebugPacket (UInt32 packet_id, ProtocolState state, ProtocolDirection direction);
 			/**
 			 *	Disables the logging of a certain
 			 *	packet.
 			 *
 			 *	\param [in] packet_id
-			 *		The ID of the packet to stop
-			 *		logging.
+			 *		The ID of the packet to log.
+			 *	\param [in] state
+			 *		The protocol state associated
+			 *		with the packet.
+			 *	\param [in] direction
+			 *		The direction associated with
+			 *		the packet.
 			 */
-			void UnsetDebugPacket (Byte packet_id) noexcept;
+			void UnsetDebugPacket (UInt32 packet_id, ProtocolState state, ProtocolDirection direction) noexcept;
 			/**
 			 *	Enables or disables debug logging
 			 *	of all keys.
@@ -443,6 +550,9 @@ namespace MCPP {
 			 *
 			 *	\param [in] type
 			 *		The type of the packet.
+			 *	\param [in] state
+			 *		The protocol state associated
+			 *		with the packet.
 			 *	\param [in] direction
 			 *		The direction the packet is moving.
 			 *
@@ -450,7 +560,7 @@ namespace MCPP {
 			 *		\em true if the packet should be
 			 *		logged, \em false otherwise.
 			 */
-			bool LogPacket (Byte type, ProtocolDirection direction) const noexcept;
+			bool LogPacket (UInt32 type, ProtocolState state, ProtocolDirection direction) const noexcept;
 			/**
 			 *	Whether the module or component given
 			 *	should be verbose.
@@ -500,6 +610,16 @@ namespace MCPP {
 			 *		A reference to a chat provider.
 			 */
 			ChatProvider & GetChatProvider () const;
+			/**
+			 *	Retrieves a string which identifies the
+			 *	server software.
+			 *
+			 *	\return
+			 *		A string identifying the server
+			 *		software.
+			 */
+			String GetName ();
+			
 			
 			
 			//			//
@@ -517,7 +637,7 @@ namespace MCPP {
 			 *	cause the server to immediately close
 			 *	the connection.
 			 */
-			Event<bool (IPAddress, UInt16)> OnAccept;
+			Event<bool (IPAddress, UInt16, IPAddress, UInt16)> OnAccept;
 			/**
 			 *	Invoked whenever a connection is accepted
 			 *	into the server, passed the Connection
@@ -577,7 +697,7 @@ namespace MCPP {
 			 *	all data currently in that connection's
 			 *	buffer.
 			 */
-			ReceiveCallback OnReceive;
+			ReceiveType OnReceive;
 			/**
 			 *	Invoked when the server panics.
 			 */

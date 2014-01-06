@@ -1,4 +1,5 @@
 #include <world/world.hpp>
+#include <server.hpp>
 
 
 namespace MCPP {
@@ -13,7 +14,9 @@ namespace MCPP {
 	
 		try {
 		
-			bool is_verbose=Server::Get().IsVerbose(verbose);
+			auto & server=Server::Get();
+		
+			bool is_verbose=server.IsVerbose(verbose);
 			Word this_saved=0;
 			Word this_unloaded=0;
 		
@@ -91,7 +94,7 @@ namespace MCPP {
 						
 						//	TODO: Fire event
 						
-						if (is_verbose) Server::Get().WriteLog(
+						if (is_verbose) server.WriteLog(
 							String::Format(
 								unload,
 								column->ToString()
@@ -110,7 +113,7 @@ namespace MCPP {
 			++maintenances;
 			
 			//	Log if applicable
-			if (is_verbose) Server::Get().WriteLog(
+			if (is_verbose) server.WriteLog(
 				String::Format(
 					end_maintenance,
 					elapsed,
@@ -122,7 +125,7 @@ namespace MCPP {
 			
 			//	Prepare for the next maintenance
 			//	cycle
-			Server::Get().Pool().Enqueue(
+			server.Pool().Enqueue(
 				maintenance_interval,
 				[this] () {	maintenance();	}
 			);

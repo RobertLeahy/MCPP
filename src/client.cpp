@@ -5,16 +5,19 @@
 namespace MCPP {
 
 
-	static const String pa_banner("====PROTOCOL ANALYSIS====");
-	static const String send_pa_template("Server ==> {0}:{1} - Packet of type {2}");
-	static const String encrypt_banner("====ENCRYPTION ENABLED====");
 	static const String encrypt_desc("Connection with {0}:{1} encrypted");
-	static const String key_pa("Key:");
-	static const String iv_pa("Initialization Vector:");
-	static const String recv_pa_template("{0}:{1} ==> Server - Packet of type {2}");
-	static const String raw_send_template("Server ==> {0}:{1} - RAW SEND ({2} bytes)");
-	static const String encrypt_pa_key("encryption");
+	static const String key_label("Key:");
+	static const String iv_label("Initialization Vector:");
+	static const String raw_send_template("Server => {0}:{1} - {2} bytes");
+	static const String encrypt_key("encryption");
 	static const String raw_send_key("raw_send");
+	static const String parse_key("raw_recv");
+	static const String packet_sent("Server => {0}:{1} {2}");
+	static const String packet_recvd("{0}:{1} => Server {2}");
+	static const String buffer_recvd("{0}:{1} - Parsing buffer in state {2} - {3} bytes");
+	static const String buffer_decrypted("{0}:{1} - Decrypted {2} bytes");
+	static const String bytes_consumed("{0}:{1} - Parsing consumed {2} bytes");
+	static const String ciphertext_banner("Ciphertext:");
 	
 	
 	//	Formats a byte for display/logging
@@ -33,15 +36,13 @@ namespace MCPP {
 	}
 	
 	
-	//	Formats a buffer of bytes for
-	//	display/logging
-	static inline String buffer_format (const Vector<Byte> & buffer) {
+	static inline String buffer_format (const Byte * begin, const Byte * end) {
 	
 		String returnthis;
 	
 		//	Print each byte is hexadecimal
 		//	format
-		for (Word i=0;i<buffer.Count();++i) {
+		for (Word i=0;begin!=end;++i,++begin) {
 		
 			//	We don't need a space
 			//	or a newline before
@@ -57,20 +58,27 @@ namespace MCPP {
 			
 			}
 			
-			returnthis << byte_format(buffer[i]);
+			returnthis << byte_format(*begin);
 		
 		}
 		
 		return returnthis;
 	
 	}
+	
+	
+	//	Formats a buffer of bytes for
+	//	display/logging
+	static inline String buffer_format (const Vector<Byte> & buffer) {
+	
+		return buffer_format(buffer.begin(),buffer.end());
+	
+	}
 
 
 	Client::Client (SmartPointer<Connection> conn)
 		:	conn(std::move(conn)),
-			packet_in_progress(false),
-			packet_encrypted(false),
-			state(ClientState::Connected),
+			state(ProtocolState::Handshaking),
 			inactive(Timer::CreateAndStart()),
 			connected(Timer::CreateAndStart())
 	{
@@ -82,26 +90,22 @@ namespace MCPP {
 	
 	void Client::enable_encryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
 	
-		//	Protocol analysis
-		if (Server::Get().IsVerbose(encrypt_pa_key)) {
+		auto & server=Server::Get();
 		
-			String log(pa_banner);
-			log	<<	Newline
-				<<	String::Format(
-						encrypt_desc,
-						IP(),
-						Port()
-					)
-				<<	Newline
-				<<	key_pa
-				<<	Newline
-				<<	buffer_format(key)
-				<<	Newline
-				<<	iv_pa
-				<<	Newline
-				<<	buffer_format(iv);
+		//	Debug logging
+		if (server.IsVerbose(encrypt_key)) {
+		
+			String log(
+				String::Format(
+					encrypt_desc,
+					IP(),
+					Port()
+				)
+			);
+			log	<< Newline << key_label << buffer_format(key)
+				<< Newline << iv_label << buffer_format(iv);
 				
-			Server::Get().WriteLog(
+			server.WriteLog(
 				log,
 				Service::LogType::Debug
 			);
@@ -114,86 +118,27 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Client::send (const Packet & packet) {
-	
-		//	Protocol analysis
-		if (Server::Get().LogPacket(
-			packet.Type(),
-			ProtocolDirection::ServerToClient
-		)) {
-		
-			String log(pa_banner);
-			log	<<	Newline
-				<<	String::Format(
-						send_pa_template,
-						IP(),
-						Port(),
-						byte_format(packet.Type())
-					)
-				<<	Newline
-				<<	packet.ToString();
-				
-			Server::Get().WriteLog(
-				log,
-				Service::LogType::Debug
-			);
-		
-		}
-		
-		auto buffer=packet.ToBytes();
-		SmartPointer<SendHandle> retr;
-		
-		if (encryptor.IsNull()) {
-		
-			retr=conn->Send(std::move(buffer));
-		
-		} else {
-		
-			encryptor->BeginEncrypt();
-			
-			try {
-			
-				retr=conn->Send(
-					encryptor->Encrypt(
-						std::move(buffer)
-					)
-				);
-			
-			} catch (...) {
-			
-				encryptor->EndEncrypt();
-				
-				throw;
-			
-			}
-			
-			encryptor->EndEncrypt();
-		
-		}
-		
-		return retr;
-	
-	}
-	
-	
 	SmartPointer<SendHandle> Client::Send (Vector<Byte> buffer) {
 	
-		if (Server::Get().IsVerbose(raw_send_key)) {
+		auto & server=Server::Get();
 		
-			String log(pa_banner);
-			log	<<	Newline
-				<<	String::Format(
-						raw_send_template,
-						IP(),
-						Port(),
-						buffer.Count()
-					);
-					
-			Server::Get().WriteLog(
+		if (server.IsVerbose(raw_send_key)) {
+		
+			String log(
+				String::Format(
+					raw_send_template,
+					IP(),
+					Port(),
+					buffer.Count()
+				)
+			);
+			log << Newline << buffer_format(buffer);
+			
+			server.WriteLog(
 				log,
 				Service::LogType::Debug
 			);
-			
+		
 		}
 	
 		return read([&] () {
@@ -242,13 +187,6 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Client::Send (const Packet & packet) {
-	
-		return read([&] () {	return send(packet);	});
-	
-	}
-	
-	
 	void Client::Disconnect () noexcept {
 	
 		conn->Disconnect();
@@ -270,104 +208,149 @@ namespace MCPP {
 	}
 	
 	
-	bool Client::Receive (Vector<Byte> * buffer) {
-	
-		//	Check for null
-		if (buffer==nullptr) throw std::out_of_range(NullPointerError);
+	bool Client::Receive (Vector<Byte> & buffer) {
 		
 		//	This is activity
 		Active();
+		
+		auto state=GetState();
+		
+		auto & server=Server::Get();
+		
+		bool debug=server.IsVerbose(parse_key) && (buffer.Count()!=0);
+		
+		if (debug) {
+		
+			String log(
+				String::Format(
+					buffer_recvd,
+					IP(),
+					Port(),
+					ToString(state),
+					buffer.Count()
+				)
+			);
+			log << Newline << buffer_format(buffer);
+			
+			server.WriteLog(
+				log,
+				Service::LogType::Debug
+			);
+			
+		}
+		
+		//Word before=buffer.Count();
 		
 		//	Acquire lock so encryption
 		//	state doesn't change
 		return read([&] () {
 		
-			//	There's no encryption if...
-			if (
-				(
-					//	A packet is in progress and...
-					packet_in_progress &&
-					//	...that packet started out unencrypted
-					!packet_encrypted
-				//	or
-				) ||
-				//	If there's no encryption provider
-				encryptor.IsNull()
-			) {
-			
-				//	No encryption
-				packet_encrypted=false;
+			//	If no encryption, attempt to parse
+			//	and return at once
+			if (encryptor.IsNull()) {
+
+				Word before=buffer.Count();
 				
-				//	Preserve count so we can
-				//	determine whether the packet
-				//	started constructing itself
-				Word before=buffer->Count();
+				auto retr=parser.FromBytes(buffer,state,ProtocolDirection::Serverbound);
 				
-				bool complete=in_progress.FromBytes(*buffer);
+				if (debug) server.WriteLog(
+					String::Format(
+						bytes_consumed,
+						IP(),
+						Port(),
+						before-buffer.Count()
+					),
+					Service::LogType::Debug
+				);
 				
-				//	Flag packet as in progress
-				//	if necessary
-				if (
-					complete ||
-					before!=buffer->Count()
-				) packet_in_progress=true;
+				return retr;
 				
-				return complete;
-			
 			}
 			
-			//	Encryption
+			//	Encryption enabled
 			
-			//	Decrypt directly into decryption buffer
-			encryptor->Decrypt(buffer,&encryption_buffer);
+			Word before=encryption_buffer.Count();
 			
-			//	Attempt to extract a packet
-			return in_progress.FromBytes(encryption_buffer);
-		
+			//	Decrypt directly into the decryption
+			//	buffer
+			encryptor->Decrypt(&buffer,&encryption_buffer);
+			
+			if (debug) {
+				
+				String log(
+					String::Format(
+						buffer_decrypted,
+						IP(),
+						Port(),
+						encryption_buffer.Count()-before
+					)
+				);
+				log << Newline << buffer_format(
+					encryption_buffer.begin()+before,
+					encryption_buffer.end()
+				);
+				
+				server.WriteLog(
+					log,
+					Service::LogType::Debug
+				);
+				
+			}
+			
+			before=encryption_buffer.Count();
+			
+			//	Attempt to extract a packet from
+			//	the decryption buffer
+			auto retr=parser.FromBytes(encryption_buffer,state,ProtocolDirection::Serverbound);
+			
+			if (debug) server.WriteLog(
+				String::Format(
+					bytes_consumed,
+					IP(),
+					Port(),
+					before-encryption_buffer.Count()
+				),
+				Service::LogType::Debug
+			);
+			
+			return retr;
+			
 		});
 	
 	}
 	
 	
-	Packet Client::CompleteReceive () noexcept {
+	Packet & Client::GetPacket () noexcept {
 	
-		//	Protocol Analysis
-		if (Server::Get().LogPacket(
-			in_progress.Type(),
-			ProtocolDirection::ClientToServer
-		)) {
+		auto & retr=parser.Get();
 		
-			String log(pa_banner);
-			log << Newline << String::Format(
-				recv_pa_template,
-				conn->IP(),
-				conn->Port(),
-				byte_format(in_progress.Type())
-			) << Newline << in_progress.ToString();
-			
-			Server::Get().WriteLog(
-				log,
-				Service::LogType::Debug
-			);
+		auto & server=Server::Get();
 		
-		}
-	
-		//	Reset in progress flag
-		packet_in_progress=false;
-	
-		return std::move(in_progress);
+		auto state=GetState();
+		
+		if (server.LogPacket(retr.ID,state,ProtocolDirection::Serverbound)) server.WriteLog(
+			String::Format(
+				packet_recvd,
+				IP(),
+				Port(),
+				ToString(retr,state,ProtocolDirection::Serverbound)
+			),
+			Service::LogType::Debug
+		);
+		
+		return retr;
 	
 	}
 	
 	
-	void Client::SetState (ClientState state) noexcept {
+	void Client::SetState (ProtocolState state) noexcept {
 	
 		write([&] () {	this->state=state;	});
 	
 	}
 	
 	
-	ClientState Client::GetState () const noexcept {
+	ProtocolState Client::GetState () const noexcept {
 	
 		return read([&] () {	return state;	});
 	
@@ -454,6 +437,43 @@ namespace MCPP {
 	Word Client::Pending () const noexcept {
 	
 		return conn->Pending();
+	
+	}
+	
+	
+	void Client::log (const Packet & packet, ProtocolState state, ProtocolDirection direction, const Vector<Byte> & buffer, const Vector<Byte> & ciphertext) const {
+	
+		auto & server=Server::Get();
+	
+		if (server.LogPacket(packet.ID,state,direction)) server.WriteLog(
+			String::Format(
+				packet_sent,
+				IP(),
+				Port(),
+				ToString(packet,state,direction)
+			),
+			Service::LogType::Debug
+		);
+		
+		if (server.IsVerbose(raw_send_key)) {
+		
+			String log(
+				String::Format(
+					raw_send_template,
+					IP(),
+					Port(),
+					buffer.Count()
+				)
+			);
+			log << Newline << buffer_format(buffer);
+			if (ciphertext.Count()!=0) log << Newline << ciphertext_banner << Newline << buffer_format(ciphertext);
+			
+			server.WriteLog(
+				log,
+				Service::LogType::Debug
+			);
+		
+		}
 	
 	}
 

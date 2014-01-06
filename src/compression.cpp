@@ -36,17 +36,9 @@ namespace MCPP {
 			
 			try {
 			
-				//	Convert the number of bytes to
-				//	decompress safely to the target
-				//	integer type and store in stream
-				stream.avail_in=static_cast<decltype(stream.avail_in)>(
-					SafeInt<decltype(end-begin)>(end-begin)
-				);
-				//	The ZLib compression/decompression
-				//	functions do not modify the in buffer,
-				//	therefore it should technically be
-				//	const, but it's not so we'll do an
-				//	ugly const_cast here...
+				//	Wire input buffer into the stream
+				auto avail=end-begin;
+				stream.avail_in=static_cast<decltype(stream.avail_in)>(SafeInt<decltype(avail)>(avail));
 				stream.next_in=const_cast<decltype(stream.next_in)>(
 					reinterpret_cast<const std::remove_pointer<decltype(stream.next_in)>::type *>(
 						begin
@@ -75,7 +67,7 @@ namespace MCPP {
 					if (result==Z_STREAM_END) break;
 					
 					//	Was more buffer space required?
-					if (result==Z_BUF_ERROR) {
+					if ((result==Z_BUF_ERROR) && (stream.avail_out==0)) {
 					
 						buffer->SetCapacity();
 						
@@ -192,7 +184,13 @@ namespace MCPP {
 					if (result==Z_STREAM_END) break;
 					
 					//	Does the buffer need to be bigger?
-					if (result==Z_BUF_ERROR) {
+					if (
+						(result==Z_OK) ||
+						(
+							(result==Z_BUF_ERROR) &&
+							(stream.avail_out==0)
+						)
+					) {
 
 						buffer->SetCapacity();
 						

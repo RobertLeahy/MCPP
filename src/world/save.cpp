@@ -1,4 +1,5 @@
 #include <world/world.hpp>
+#include <server.hpp>
 #include <cstring>
 
 
@@ -41,10 +42,12 @@ namespace MCPP {
 		
 		column.Release();
 		
+		auto & server=Server::Get();
+		
 		//	Perform save
 		try {
 		
-			Server::Get().Data().SaveBinary(
+			server.Data().SaveBinary(
 				key(column),
 				buffer,
 				ColumnContainer::Size
@@ -54,7 +57,7 @@ namespace MCPP {
 		
 			try {
 		
-				Server::Get().WriteLog(
+				server.WriteLog(
 					String::Format(
 						save_failed,
 						column.ToString(),
@@ -68,7 +71,7 @@ namespace MCPP {
 			} catch (...) {	}
 			
 			//	PANIC
-			Server::Get().Panic();
+			server.Panic();
 			
 			throw;
 		
@@ -79,7 +82,7 @@ namespace MCPP {
 		++saved;
 		
 		//	Log if applicable
-		if (Server::Get().IsVerbose(verbose)) Server::Get().WriteLog(
+		if (server.IsVerbose(verbose)) server.WriteLog(
 			String::Format(
 				end_save,
 				column.ToString(),

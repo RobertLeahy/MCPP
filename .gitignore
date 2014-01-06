@@ -238,3 +238,5 @@ makefiles/
 deps/
 gcc48/
 Doxyfile
+gcc481/
+env.bat

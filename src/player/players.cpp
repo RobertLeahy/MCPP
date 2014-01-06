@@ -1,5 +1,6 @@
 #include <player/player.hpp>
 #include <hardware_concurrency.hpp>
+#include <server.hpp>
 #include <utility>
 
 
@@ -17,7 +18,7 @@ namespace MCPP {
 		:	view_distance(10),
 			cache_distance(11),
 			spawn_x(0),
-			spawn_y(256),
+			spawn_y(300),
 			spawn_z(0),
 			spawn_dimension(0),
 			interested_locked(false)
@@ -42,12 +43,25 @@ namespace MCPP {
 	static const String column_concurrency_log("No user-supplied value for \"{0}\" - {1} concurrent column operations will be allowed");
 	
 	
+	template <typename T, typename Callback>
+	static void install (Callback callback) {
+	
+		Server::Get().Router(
+			T::PacketID,
+			ProtocolState::Play
+		)=std::move(callback);
+	
+	}
+	
+	
 	void Players::Install () {
+	
+		auto & server=Server::Get();
 	
 		//	Determine the number of concurrent
 		//	column operations that should be
 		//	allowed
-		auto concurrency_str=Server::Get().Data().GetSetting(column_concurrency_key);
+		auto concurrency_str=server.Data().GetSetting(column_concurrency_key);
 		Word concurrency;
 		if (
 			concurrency_str.IsNull() ||
@@ -73,9 +87,9 @@ namespace MCPP {
 					//	this many workers (we don't
 					//	want to saturate the thread
 					//	pool)
-					(hw>Server::Get().Pool().Count())
+					(hw>server.Pool().Count())
 				)
-					?	Server::Get().Pool().Count()
+					?	server.Pool().Count()
 					:	hw
 			);
 			
@@ -89,7 +103,7 @@ namespace MCPP {
 			if (concurrency==0) concurrency=1;
 			
 			//	Log
-			Server::Get().WriteLog(
+			server.WriteLog(
 				String::Format(
 					column_concurrency_log,
 					column_concurrency_key,
@@ -107,39 +121,33 @@ namespace MCPP {
 		//	thread pool is not available during
 		//	construction
 		cm.Construct(
-			Server::Get().Pool(),
+			server.Pool(),
 			concurrency,
 			[] () {	Server::Get().Panic();	}
 		);
 	
 		//	Install event handlers
 		
-		Server::Get().OnConnect.Add([this] (SmartPointer<Client> client) {	on_connect(std::move(client));	});
+		server.OnConnect.Add([this] (SmartPointer<Client> client) {	on_connect(std::move(client));	});
 		
-		Server::Get().OnDisconnect.Add([this] (SmartPointer<Client> client, const String & reason) {	on_disconnect(std::move(client),reason);	});
+		server.OnDisconnect.Add([this] (SmartPointer<Client> client, const String & reason) {	on_disconnect(std::move(client),reason);	});
 		
-		Server::Get().OnLogin.Add([this] (SmartPointer<Client> client) {	on_login(std::move(client));	});
+		server.OnLogin.Add([this] (SmartPointer<Client> client) {	on_login(std::move(client));	});
 		
-		std::function<void (SmartPointer<Client>, Packet)> handler=[this] (SmartPointer<Client> client, Packet packet) {
+		auto handler=[this] (PacketEvent event) {	position_handler(std::move(event));	};
 		
-			position_handler(
-				std::move(client),
-				std::move(packet)
-			);
-		
-		};
-		
-		//	Handle packets 0x0A, 0x0B, 0x0C, and 0x0D
-		Server::Get().Router[0x0A]=handler;
-		Server::Get().Router[0x0B]=handler;
-		Server::Get().Router[0x0C]=handler;
-		Server::Get().Router[0x0D]=handler;
+		//	Handle incoming player-related
+		//	packets
+		install<Packets::Play::Serverbound::Player>(handler);
+		install<Packets::Play::Serverbound::PlayerPosition>(handler);
+		install<Packets::Play::Serverbound::PlayerLook>(handler);
+		install<Packets::Play::Serverbound::PlayerPositionAndLook>(handler);
 		
 		//	Set spawn when the server finishes
 		//	installing all mods (so we know
 		//	world container is available and
 		//	setup)
-		Server::Get().OnInstall.Add([this] (bool) mutable {
+		server.OnInstall.Add([this] (bool) mutable {
 		
 			//	We can ignore boolean parameter,
 			//	the time to fire before install

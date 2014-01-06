@@ -1,5 +1,6 @@
 #include <player/player.hpp>
 #include <entity_id/entity_id.hpp>
+#include <server.hpp>
 #include <utility>
 #include <limits>
 
@@ -70,39 +71,34 @@ namespace MCPP {
 		//	send
 		players_lock.Write([&] () {	players.find(client)->second=player;	});
 		
-		//	Send 0x01 -- Login Request
+		//	Send Join Game
 		
-		typedef PacketTypeMap<0x01> lr;
-		
-		Packet packet;
-		packet.SetType<lr>();
-		
-		packet.Retrieve<lr,0>()=player->ID;
-		packet.Retrieve<lr,1>()=World::Get().Type();
-		packet.Retrieve<lr,2>()=0;	//	TEMP
-		packet.Retrieve<lr,3>()=dimension;
-		packet.Retrieve<lr,4>()=0;	//	TEMP
-		packet.Retrieve<lr,5>()=0;	//	This is always 0
+		Packets::Play::Clientbound::JoinGame jg;
+		jg.EntityID=player->ID;
+		jg.GameMode=0;	//	Temp
+		jg.Dimension=dimension;
+		jg.Difficulty=0;	//	Temp
 		auto max_players=Server::Get().MaximumPlayers;
-		if (max_players==0) max_players=std::numeric_limits<decltype(max_players)>::max();
-		if (max_players>static_cast<decltype(max_players)>(std::numeric_limits<SByte>::max())) max_players=static_cast<decltype(max_players)>(std::numeric_limits<SByte>::max());
-		packet.Retrieve<lr,6>()=static_cast<SByte>(max_players);
+		typedef decltype(jg.MaxPlayers) max_players_t;
+		constexpr auto max=std::numeric_limits<max_players_t>::max();
+		jg.MaxPlayers=(
+			(max_players==0) ||
+			(max_players>max)
+		) ? max : static_cast<max_players_t>(max);
+		jg.LevelType=World::Get().Type();
 		
-		client->Send(packet);
+		client->Send(jg);
 		
-		//	Send 0x06 -- Spawn Position
+		//	Send Spawn Position
 		
-		typedef PacketTypeMap<0x06> sp;
+		Packets::Play::Clientbound::SpawnPosition sp;
+		sp.X=spawn_x;
+		sp.Y=spawn_y;
+		sp.Z=spawn_z;
 		
-		packet.SetType<sp>();
+		client->Send(sp);
 		
-		packet.Retrieve<sp,0>()=spawn_x;
-		packet.Retrieve<sp,1>()=spawn_y;
-		packet.Retrieve<sp,2>()=spawn_z;
-		
-		client->Send(packet);
-		
-		//	Send 0x0D -- Player Position and Look
+		//	Send Player Position and Look
 		client->Send(
 			player->Position.ToPacket()
 		);
@@ -116,25 +112,20 @@ namespace MCPP {
 	static const String protocol_error("Protocol error");
 	
 	
-	void Players::position_handler (SmartPointer<Client> client, Packet packet) {
+	void Players::position_handler (PacketEvent event) {
 	
-		auto player=get(client);
+		auto player=get(event.From);
 		
 		if (player.IsNull()) return;
 		
 		//	Update player's position
-		Tuple<Double,UInt64,UInt64> t;
-		player->Lock.Execute([&] () {	t=player->Position.FromPacket(packet);	});
+		auto t=player->Lock.Execute([&] () {	return player->Position.FromPacket(event.Data);	});
 		
 		//	If the player moved, update
 		//	their position
 		if (t.Item<0>()!=0) {
 		
-			Server::Get().Pool().Enqueue([=] () mutable {
-		
-				update_position(player);
-				
-			});
+			Server::Get().Pool().Enqueue([=] () mutable {	update_position(player);	});
 			
 		}
 	
