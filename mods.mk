@@ -14,7 +14,6 @@ include command.mk
 include info.mk
 include player.mk
 include world.mk
-include test.mk
 
 
 mods: \
