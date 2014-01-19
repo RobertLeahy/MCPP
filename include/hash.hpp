@@ -50,6 +50,75 @@ namespace std {
 	
 	
 	template <>
+	struct hash<UInt128> {
+	
+	
+		public:
+		
+		
+			size_t operator () (UInt128 i) const noexcept {
+			
+				constexpr size_t si=sizeof(i);
+				constexpr size_t ss=sizeof(size_t);
+			
+				//	Make sure sizes are compatible
+				static_assert(
+					(si<=ss) || ((si%ss)==0),
+					"Size of size_t is not greater than or equal to size of 128-bit unsigned integer, and does not "
+					"divide it evenly"
+				);
+				
+				constexpr size_t count=(si<=ss) ? 1 : (si/ss);
+				
+				union {
+					UInt128 in;
+					size_t out [count];
+				};
+				if (ss>si) out[0]=0;
+				in=i;
+				
+				if (count==1) return out[0];
+				
+				size_t retr=23;
+				for (auto & o : out) {
+				
+					retr*=31;
+					retr+=o;
+				
+				}
+				
+				return retr;
+			
+			}
+	
+	
+	};
+	
+	
+	template <>
+	struct hash<Int128> {
+	
+	
+		public:
+		
+		
+			size_t operator () (Int128 i) const noexcept {
+			
+				union {
+					Int128 in;
+					UInt128 out;
+				};
+				in=i;
+				
+				return hash<UInt128>{}(out);
+			
+			}
+	
+	
+	};
+	
+	
+	template <>
 	struct hash<IPAddress> {
 	
 	
@@ -58,41 +127,12 @@ namespace std {
 	
 			size_t operator () (IPAddress ip) const noexcept {
 			
-				//	Is this an IPv4 or IPv6
-				//	address?
-				if (ip.IsV6()) {
-				
-					//	This static assert ensures the operation
-					//	planned will work
-					static_assert(
-						(sizeof(UInt128)%sizeof(size_t))==0,
-						"Hash for IP addresses not compatible with integer sizes on this platform"
-					);
-					
-					union {
-						UInt128 raw_ip;
-						size_t split [sizeof(UInt128)/sizeof(size_t)];
-					};
-					
-					raw_ip=static_cast<UInt128>(ip);
-					
-					size_t retr=23;
-					
-					for (auto m : split) {
-					
-						retr*=31;
-						retr+=m;
-					
-					}
-					
-					return retr;
-				
-				}
-				
-			
-				//	Just return the IPv4 address
-				//	to use as the hash
-				return static_cast<size_t>(
+				//	Use the hash for UInt128 for IPv6
+				//	addresses, the hash for UInt32 for
+				//	IPv4 addresses
+				return ip.IsV6() ? hash<UInt128>{}(
+					static_cast<UInt128>(ip)
+				) : hash<UInt32>{}(
 					static_cast<UInt32>(ip)
 				);
 			
