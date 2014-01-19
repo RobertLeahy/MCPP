@@ -19,7 +19,7 @@ namespace MCPP {
 			auto conn=client->conn;
 			
 			map.emplace(
-				conn,
+				static_cast<Connection *>(conn),
 				std::move(client)
 			);
 			
