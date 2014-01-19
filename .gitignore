@@ -223,7 +223,7 @@ build_make_error.txt
 *.exe
 log_*.txt
 server.txt
-old_*/
+old*/
 json_chat/
 dl/
 simplex*.txt
@@ -236,7 +236,7 @@ terrain.txt
 *.ini
 makefiles/
 deps/
-gcc48/
+gcc*/
 Doxyfile
-gcc481/
 env.bat
+experimental/
