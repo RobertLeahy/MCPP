@@ -153,15 +153,37 @@ namespace std {
 	
 	
 	template <typename T>
-	struct hash<SmartPointer<T>> {
+	struct hash<Vector<T>> {
+	
+	
+		private:
+		
+		
+			typedef hash<typename std::decay<T>::type> hasher;
 	
 	
 		public:
 		
 		
-			size_t operator () (const SmartPointer<T> & sp) const noexcept {
+			size_t operator () (const Vector<T> & vec) const noexcept(
+				std::is_nothrow_constructible<hasher>::value &&
+				noexcept(
+					declval<hasher>()(declval<const T &>())
+				)
+			) {
 			
-				return hash<const T *>()(static_cast<const T *>(sp));
+				hasher h;
+				
+				size_t retr=(23*31)+vec.Count();
+				
+				for (const auto & i : vec) {
+				
+					retr*=31;
+					retr+=h(i);
+				
+				}
+				
+				return retr;
 			
 			}
 	
