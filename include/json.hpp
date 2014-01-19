@@ -151,7 +151,7 @@ namespace JSON {
 			
 			/**
 			 *	Creates a new unordered map
-			 *	pointer to by Pairs.
+			 *	pointed to by Pairs.
 			 */
 			void Construct ();
 			
