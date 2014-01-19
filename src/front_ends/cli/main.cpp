@@ -639,7 +639,7 @@ static const String help_string(
 );
 //	Arguments which will cause help to be
 //	displayed
-static const String help_args[]={
+static const String help_args []={
 	"help",
 	"?"
 };
