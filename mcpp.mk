@@ -3,6 +3,7 @@ all: mcpp
 
 MCPP_LIB:=$(LIB) \
 bin/data_provider.dll \
+bin/libcares-2.dll \
 bin/libcurl.dll \
 bin/libeay32.dll \
 bin/ssleay32.dll \
@@ -22,10 +23,10 @@ obj/client_list.o \
 obj/client_list_iterator.o \
 obj/compression.o \
 obj/concurrency_manager.o \
+obj/dns_handler.o \
 obj/format.o \
 obj/hardware_concurrency.o \
 obj/http_handler.o \
-obj/http_request.o \
 obj/ip_address_range.o \
 obj/json.o \
 obj/mod.o \
@@ -56,10 +57,10 @@ obj/rsa_key.o \
 obj/serializer.o \
 obj/server.o \
 obj/sha1.o \
+obj/socketpair.o \
 obj/url.o \
 obj/random.o \
 obj/thread_pool.o \
-obj/thread_pool_handle.o \
 obj/yggdrasil.o | \
 $(MCPP_LIB) \
 bin

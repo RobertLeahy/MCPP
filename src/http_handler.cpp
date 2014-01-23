@@ -1,132 +1,415 @@
 #include <http_handler.hpp>
-#include <new>
+#include <safeint.hpp>
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 #include <system_error>
-#include <utility>
+#ifdef ENVIRONMENT_WINDOWS
+#include <windows.h>
+#else
+#include <sys/time.h>
+#endif
 
 
 namespace MCPP {
 
 
-	//	Error messages
-	static const char * curl_error="cURL error";
+	//	Generates cURL exceptions
+	static std::runtime_error get_exception (CURLcode code) noexcept {
 	
+		return std::runtime_error(
+			curl_easy_strerror(code)
+		);
 	
-	//	Settings
-	
-	//	Maximum number of 3xx headers that a cURL
-	//	request may follow before failing
-	static const long max_redirs=5;
-	
-	
-	static size_t write_callback (char * ptr, size_t size, size_t nmemb, void * userdata) noexcept {
-
-		try {
-		
-			Word safe_size=Word(SafeWord(size)*SafeWord(nmemb));
-			
-			return reinterpret_cast<HTTPRequest *>(userdata)->Write(
-				reinterpret_cast<Byte *>(ptr),
-				safe_size
-			);
-		
-		} catch (...) {	}
-
-		return 0;
-		
 	}
 
 
-	static size_t header_callback (char * ptr, size_t size, size_t nmemb, void * userdata) noexcept {
+	//	Throws cURL errors
+	[[noreturn]]
+	static void raise (CURLcode code) {
+	
+		throw get_exception(code);
+	
+	}
+	
+	
+	//	Throws cURL multi errors
+	[[noreturn]]
+	static void raise_multi (CURLMcode code) {
+	
+		throw std::runtime_error(
+			curl_multi_strerror(code)
+		);
+	
+	}
+	
+	
+	//	Throws OS socket errors
+	[[noreturn]]
+	static void raise_os () {
+	
+		throw std::system_error(
+			std::error_code(
+				#ifdef ENVIRONMENT_WINDOWS
+				WSAGetLastError()
+				#else
+				errno
+				#endif
+				,
+				std::system_category()
+			)
+		);
+	
+	}
 
+
+	//	Kludge to RAII init/free cURL without risking
+	//	being thread unsafe
+	class cURLGuard {
+
+
+		private:
+		
+		
+			CURLcode result;
+
+
+		public:
+		
+		
+			cURLGuard () noexcept {
+				
+				//	Initialize cURL
+				result=curl_global_init(CURL_GLOBAL_ALL);
+			
+			}
+			
+			
+			~cURLGuard () noexcept {
+			
+				//	If cURL was initialized, kill it
+				if (result==0) curl_global_cleanup();
+			
+			}
+			
+			
+			//	Verifies that cURL is good to use
+			//
+			//	Throws if it's not
+			void Okay () const {
+			
+				if (result!=0) raise(result);
+			
+			}
+
+
+	};
+	
+	
+	//	This single instance of cURLGuard ensures
+	//	that cURL is started up
+	static const cURLGuard libcurl;
+	
+	
+	static const String content_type_header("content-type");
+	static const Regex charset(
+		"(?:^|\\s)charset\\=(\\S+)(?:$|\\s)",
+		RegexOptions().SetIgnoreCase()
+	);
+	
+	
+	String HTTPResponse::GetBody () const {
+	
+		SmartPointer<Encoding> encoder;
+		
+		//	Attempt to find a content type header
+		for (auto & header : Headers) if (header.Key.ToLower()==content_type_header) {
+		
+			//	Attempt to extract a character set
+			auto match=charset.Match(header.Value);
+			
+			//	Attempt to get an encoder for that
+			//	character set
+			if (match.Success()) {
+			
+				encoder=Encoding::Get(match[1].Value());
+				
+				if (!encoder.IsNull()) break;
+			
+			}
+		
+		}
+		
+		auto begin=Body.begin();
+		auto end=Body.end();
+		//	If no encoder could be found, fall back
+		//	to UTF-8
+		return (encoder.IsNull()) ? UTF8().Decode(begin,end) : encoder->Decode(begin,end);
+	
+	}
+	
+	
+	HTTPRequest::HTTPRequest () noexcept
+		:	Verb(HTTPVerb::GET),
+			RequireSSL(false),
+			FollowRedirects(true)
+	{	}
+	
+	
+	HTTPRequest::HTTPRequest (String url) noexcept : HTTPRequest() {
+	
+		URL=std::move(url);
+	
+	}
+	
+	
+	static const char * http_handler_error="HTTPHandler shut down";
+	
+	
+	const char * HTTPHandlerError::what () const noexcept {
+	
+		return http_handler_error;
+	
+	}
+	
+	
+	template <typename... Args>
+	void HTTPHandler::Request::set (CURLoption option, Args &&... args) {
+	
+		auto result=curl_easy_setopt(
+			handle,
+			option,
+			std::forward<Args>(args)...
+		);
+		if (result!=CURLE_OK) raise(result);
+	
+	}
+	
+	
+	std::size_t HTTPHandler::Request::header (void * ptr, std::size_t size, std::size_t nmemb, void * userdata) noexcept {
+	
+		return reinterpret_cast<Request *>(userdata)->Header(
+			ptr,
+			size*nmemb
+		);
+	
+	}
+	
+	
+	std::size_t HTTPHandler::Request::body (char * ptr, std::size_t size, std::size_t nmemb, void * userdata) noexcept {
+	
+		return reinterpret_cast<Request *>(userdata)->ResponseBody(
+			ptr,
+			size*nmemb
+		);
+	
+	}
+	
+	
+	static const String http_header_template("{0}:{1}");
+	static const char * slist_error("Error calling curl_slist_append");
+	
+	
+	static struct curl_slist * get_headers (const Vector<HTTPHeader> & headers) {
+	
+		struct curl_slist * list=nullptr;
+		
 		try {
 		
-			Word safe_size=Word(SafeWord(size)*SafeWord(nmemb));
+			for (const auto & header : headers) {
 			
-			//	Decode header
-			String header(UTF8().Decode(
-				reinterpret_cast<Byte *>(ptr),
-				reinterpret_cast<Byte *>(ptr)+safe_size
-			));
+				//	Get the C string
+				auto c_string=String::Format(
+					http_header_template,
+					header.Key,
+					header.Value
+				).ToCString();
+				
+				//	Add it
+				if ((list=curl_slist_append(
+					list,
+					c_string.begin()
+				))==nullptr) throw std::runtime_error(slist_error);
 			
-			//	Parse it
-			String key;
-			String value;
-			bool found=false;
-			for (const auto & gc : header) {
+			}
 			
-				if (found) {
+		} catch (...) {
+		
+			if (list!=nullptr) curl_slist_free_all(list);
+			
+			throw;
+		
+		}
+		
+		return list;
+	
+	}
+	
+	
+	static const String http_cookie_template("{0}={1}");
+	static const String http_cookie_separator(";");
+	
+	
+	static Vector<char> get_cookies (const Vector<HTTPCookie> & cookies) {
+	
+		String str;
+		
+		bool first=true;
+		for (const auto & cookie : cookies) {
+		
+			if (first) first=false;
+			else str << http_cookie_separator;
+			
+			str << String::Format(
+				http_cookie_template,
+				cookie.Key,
+				cookie.Value
+			);
+		
+		}
+		
+		return str.ToCString();
+	
+	}
+	
+	
+	static const char * curl_easy_init_error="Could not create a cURL easy handle";
+	
+	
+	HTTPHandler::Request::Request (HTTPRequest request_in)
+		:	promise(Promise<HTTPResponse>{}),
+			request(std::move(request_in)),
+			headers_curr(0)
+	{
+		
+		//	Encode the URL for cURL
+		url=request.URL.ToCString();
+		
+		//	Get a cURL handle
+		if ((handle=curl_easy_init())==nullptr) throw std::runtime_error(curl_easy_init_error);
+		
+		try {
+		
+			#ifdef LIBCURL_INSECURE
+			set(CURLOPT_SSL_VERIFYPEER,static_cast<long>(0));
+			#endif
+		
+			//
+			//	URL
+			//
+			set(CURLOPT_URL,url.begin());
+			
+			//
+			//	Verb & Body
+			//
+			switch (request.Verb) {
+			
+				//	Ignore -- no action is needed
+				case HTTPVerb::GET:
+				default:break;
 				
-					value << gc;
+				case HTTPVerb::POST:
 				
-				} else if (gc==':') {
+					//	Tell cURL that this is a POST
+					set(CURLOPT_POST,static_cast<long>(1));
+					
+					//	Tell cURL how long the data is going
+					//	to be
+					set(CURLOPT_POSTFIELDSIZE,safe_cast<long>(request.Body.Count()));
+					
+					//	Give cURL a pointer to the post field
+					set(CURLOPT_POSTFIELDS,request.Body.begin());
+					
+					break;
+					
+					
+				case HTTPVerb::HEAD:
 				
-					found=true;
+					set(CURLOPT_NOBODY,static_cast<long>(1));
+					
+					break;
+			
+			}
+			
+			//
+			//	Headers
+			//
+			auto headers=get_headers(request.Headers);
+			if (headers!=nullptr) set(CURLOPT_HTTPHEADER,headers);
+			
+			//
+			//	Referer
+			//
+			if (!request.Referer.IsNull()) {
+			
+				//	Encode
+				referer=request.Referer->ToCString();
 				
-				} else {
+				//	Pass to cURL
+				set(CURLOPT_REFERER,referer.begin());
+			
+			}
+			
+			//
+			//	User Agent String
+			//
+			if (!request.UserAgent.IsNull()) {
+			
+				//	Encode
+				uas=request.UserAgent->ToCString();
 				
-					key << gc;
+				//	Pass to cURL
+				set(CURLOPT_USERAGENT,uas.begin());
+			
+			}
+			
+			//
+			//	Cookies
+			//
+			cookies=get_cookies(request.Cookies);
+			if (cookies.Count()!=0) set(CURLOPT_COOKIE,cookies.begin());
+			
+			//
+			//	Protocols?  Require SSL?
+			//
+			long protos=CURLPROTO_HTTPS;
+			if (!request.RequireSSL) protos|=CURLPROTO_HTTP;
+			set(CURLOPT_PROTOCOLS,protos);
+			
+			//
+			//	Follow redirects?  How many?
+			//
+			if (request.FollowRedirects) {
+			
+				long follow_redirects=1;
+				set(CURLOPT_FOLLOWLOCATION,follow_redirects);
+				
+				if (!request.MaxRedirects.IsNull()) {
+				
+					auto max_redirects=safe_cast<long>(*request.MaxRedirects);
+					set(CURLOPT_MAXREDIRS,max_redirects);
 				
 				}
 			
 			}
 			
-			//	Trim
-			key.Trim();
-			value.Trim();
+			//
+			//	Write & Header Functions
+			//
 			
-			//	Only proceed if this is a "real"
-			//	header
-			if (found) {
+			set(CURLOPT_WRITEFUNCTION,&body);
+			set(CURLOPT_WRITEDATA,this);
 			
-				//	Dispatch callback
-				
-				if (reinterpret_cast<HTTPRequest *>(userdata)->Header(key,value)) return safe_size;
-				
-				return 0;
-			
-			}
-			
-			//	Succeed
-			return safe_size;
-		
-		} catch (...) {	}
-		
-		//	Fail
-		return 0;
-
-	}
-
-
-	static size_t read_callback (void * ptr, size_t size, size_t nmemb, void * userdata) noexcept {
-
-		try {
-		
-			Word safe_size=Word(SafeWord(size)*SafeWord(nmemb));
-			
-			return reinterpret_cast<HTTPRequest *>(userdata)->Read(
-				reinterpret_cast<Byte *>(ptr),
-				safe_size
-			);
-		
-		} catch (...) {	}
-		
-		//	Fail
-		return 0;
-
-	}
-	
-	
-	void HTTPHandler::worker_thread (void * ptr) {
-	
-		try {
-	
-			reinterpret_cast<HTTPHandler *>(ptr)->worker_thread_impl();
+			set(CURLOPT_HEADERFUNCTION,&header);
+			set(CURLOPT_HEADERDATA,this);
 			
 		} catch (...) {
 		
-			//	TODO: Panic code?
-		
+			//	Make sure the easy handle gets
+			//	destroyed
+			curl_easy_cleanup(handle);
+			
 			throw;
 		
 		}
@@ -134,272 +417,484 @@ namespace MCPP {
 	}
 	
 	
-	//	Time worker will sleep if there's
-	//	nothing to do or it's waiting for
-	//	something
-	static const Word worker_timeout=50;
+	HTTPHandler::Request::~Request () noexcept {
 	
-	
-	void HTTPHandler::worker_thread_impl () {
-	
-		fd_set read_fds;
-		fd_set write_fds;
-		fd_set exc_fds;
-		int max_fd;
-		CURLMcode result;
-		struct timeval select_timeout;
-		select_timeout.tv_sec=worker_timeout/1000;
-		select_timeout.tv_usec=(worker_timeout%1000)*1000;
-		bool wait=false;
-	
-		for (;;) {
+		//	Cleanup handle
+		curl_easy_cleanup(handle);
 		
-			//	Zero out socket sets
-			FD_ZERO(&read_fds);
-			FD_ZERO(&write_fds);
-			FD_ZERO(&exc_fds);
+		//	If promise isn't already dead,
+		//	kill it.
+		if (!promise.IsNull()) promise->Fail(
+			std::make_exception_ptr(
+				HTTPHandlerError{}
+			)
+		);
+	
+	}
+	
+	
+	void HTTPHandler::Request::Complete (CURLcode code) noexcept {
+	
+		//	If an exception has been thrown
+		//	internally, complete with that
+		if (ex) {
 		
-			mutex.Acquire();
+			promise->Fail(std::move(ex));
+			promise.Destroy();
 			
-			try {
+			return;
+		
+		}
+		
+		//	If code passed in indicates failure,
+		//	complete with that
+		if (code!=CURLE_OK) {
+		
+			promise->Fail(
+				std::make_exception_ptr(
+					get_exception(code)
+				)
+			);
+			promise.Destroy();
 			
-				//	Don't sleep on the condvar
-				//	unless there's nothing to do
-				while (
-					!stop &&
-					(
-						wait ||
-						(requests.size()==0)
-					)
-				) {
+			return;
+		
+		}
+	
+		try {
+			
+			//	Get the status code
+			long status;
+			auto result=curl_easy_getinfo(
+				handle,
+				CURLINFO_RESPONSE_CODE,
+				&status
+			);
+			if (result!=CURLE_OK) raise(result);
+			response.Status=safe_cast<Word>(status);
+		
+		} catch (...) {
+		
+			//	Complete the promise
+			promise->Fail(std::current_exception());
+			promise.Destroy();
+			
+			return;
+		
+		}
+		
+		//	Complete the promise
+		promise->Complete(std::move(response));
+		promise.Destroy();
+	
+	}
+	
+	
+	static const char header_delimiter=':';
+	static const Regex banner("^HTTP\\/(\\d+)\\.(\\d+)\\s+(?:\\d+)\\s+(.+)$");
+	
+	
+	static const char * too_many_header_bytes="Headers were longer than specified maximum";
+	static const char * malformed_version="Server sent malformed HTTP version";
+	
+	
+	Word HTTPHandler::Request::Header (const void * ptr, Word len) noexcept {
+	
+		//	Ignore zero length headers
+		if (len==0) return 0;
+	
+		try {
+		
+			auto begin=reinterpret_cast<const Byte *>(ptr);
+			auto end=reinterpret_cast<const Byte *>(ptr)+len;
+			//	Find the first header delimiter
+			auto end_key=std::find(begin,end,header_delimiter);
+			auto begin_value=(end_key==end) ? end : (end_key+1);
+			
+			//	UTF8 decoder
+			UTF8 decoder;
+			
+			//	Decode
+			auto key=decoder.Decode(begin,end_key).Trim();
+			auto value=decoder.Decode(begin_value,end).Trim();
+			
+			//	If this is the beginning of a new
+			//	request, clear all other headers
+			//	as they're irrelevant
+			bool ignore=false;
+			if (value.Size()==0) {
+			
+				auto match=banner.Match(key);
 				
-					condvar.Sleep(mutex,worker_timeout);
+				if (match.Success()) {
 				
-					//	Reset wait flag
-					wait=false;
-				
-				}
-				
-				//	Stop if necessary
-				if (stop) {
-				
-					mutex.Release();
+					ignore=true;
 					
-					return;
+					headers_curr=0;
+					response.Headers.Clear();
+					
+					if (!(
+						match[1].Value().ToInteger(&response.MajorVersion) &&
+						match[2].Value().ToInteger(&response.MinorVersion)
+					)) throw std::runtime_error(malformed_version);
+					
+					response.Response=match[3].Value();
 				
 				}
+			
+			}
+			
+			//	If this header is ignored, or
+			//	empty, ignore it
+			if (!(
+				ignore ||
+				(
+					(value.Size()==0) &&
+					(key.Size()==0)
+				)
+			)) {
+			
+				//	Check length if applicable
+				if (!request.MaxHeaderBytes.IsNull()) {
 				
-				//	Populate FD sets
-				if ((result=curl_multi_fdset(
-					multi,
-					&read_fds,
-					&write_fds,
-					&exc_fds,
-					&max_fd
-				))!=CURLM_OK) throw std::runtime_error(
-					curl_multi_strerror(
-						result
-					)
+					headers_curr=Word(SafeWord(headers_curr)+SafeWord(len));
+					//	If too long, throw
+					if (headers_curr>*request.MaxHeaderBytes) throw std::runtime_error(
+						too_many_header_bytes
+					);
+				
+				}
+			
+				response.Headers.Add(
+					HTTPHeader{
+						std::move(key),
+						std::move(value)
+					}
 				);
 				
-			} catch (...) {
-			
-				mutex.Release();
-				
-				throw;
-			
 			}
+		
+		} catch (...) {
+		
+			//	Store exception for pass through
+			ex=std::current_exception();
 			
-			mutex.Release();
-			
-			int num_socks;
-			
-			//	Bypass wait if cURL returned
-			//	-1 for max_fd
-			if (max_fd==-1) {
-			
-				//	Wait since we can't poll
-				//	whatever libcurl wants
-				//	to wait on
-				Thread::Sleep(worker_timeout);
-			
-				goto call_curl;
-				
-			}
-			
-			//	Wait on FD sets
-			num_socks=select(
-				max_fd,
-				&read_fds,
-				&write_fds,
-				&exc_fds,
-				&select_timeout
-			);
-			
-			//	ERROR
-			if (num_socks<0) throw std::system_error(
-				std::error_code(
-					#ifdef ENVIRONMENT_WINDOWS
-					WSAGetLastError()
-					#else
-					errno
-					#endif
-					,
-					std::system_category()
+			//	Return something different than
+			//	what we were given to signal an
+			//	error to cURL
+			//
+			//	We can safely return zero -- certain
+			//	that it will be different from everything
+			//	because we just ignore zero lengths
+			return 0;
+		
+		}
+		
+		//	Return exactly what we were given to
+		//	signal success to cURL
+		return len;
+	
+	}
+	
+	
+	static const char * too_many_body_bytes="Body was longer than specified maximum";
+	
+	
+	Word HTTPHandler::Request::ResponseBody (const void * ptr, Word len) noexcept {
+	
+		//	If there's nothing, ignore
+		if (len==0) return 0;
+	
+		try {
+		
+			//	Determine how much capacity we're going to need
+			Word after=static_cast<Word>(
+				MakeSafe(len)+MakeSafe(
+					response.Body.Count()
 				)
 			);
 			
-			call_curl:
+			//	Check to make sure this isn't more than
+			//	the maximum
+			if (
+				!request.MaxBodyBytes.IsNull() &&
+				(after>*request.MaxBodyBytes)
+			) throw std::runtime_error(too_many_body_bytes);
+			
+			//	Resize if necessary
+			if (response.Body.Capacity()<after) response.Body.SetCapacity(after);
+			
+			//	Copy all the data
+			std::memcpy(
+				response.Body.end(),
+				ptr,
+				len
+			);
+			
+			//	Set count
+			response.Body.SetCount(after);
 		
-			mutex.Acquire();
-			
-			try {
+		} catch (...) {
 		
-				//	Call cURL until it has nothing
-				//	more to do
-				int running_handles;
-				do {
-
-					result=curl_multi_perform(
-						multi,
-						&running_handles
-					);
-					
-				} while (result==CURLM_CALL_MULTI_PERFORM);
-				
-				//	Error?
-				if (result!=CURLM_OK) throw std::runtime_error(
-					curl_multi_strerror(
-						result
-					)
-				);
-				
-				//	Convert the number of running handles
-				//	to the same type as the count of
-				//	open requests (the size of the map)
-				decltype(requests.size()) running_handles_safe=static_cast<decltype(requests.size())>(
-					SafeInt<int>(running_handles)
-				);
-				
-				//	See if any requests finished
-				if (running_handles_safe!=requests.size()) {
-				
-					//	At least one request finished,
-					//	handle it
-					CURLMsg * msg;
-					int msgs;	//	Ignored
-					while ((msg=curl_multi_info_read(multi,&msgs))!=nullptr) {
-					
-						//	Finished!
-						if (msg->msg==CURLMSG_DONE) {
-						
-							//	Lookup this handle
-							HTTPRequest * request=requests[msg->easy_handle].get();
-							
-							//	Dispatch callback as appropriate
-							if (msg->data.result!=CURLE_OK) {
-							
-								//	FAIL
-								
-								request->Done(
-									0,
-									String(
-										curl_easy_strerror(
-											msg->data.result
-										)
-									)
-								);
-								
-							} else {
-							
-								//	Lookup HTTP status code
-								long status_code;
-								CURLcode result=curl_easy_getinfo(
-									msg->easy_handle,
-									CURLINFO_RESPONSE_CODE,
-									&status_code
-								);
-								
-								if (result!=CURLE_OK) throw std::runtime_error(
-									curl_easy_strerror(
-										result
-									)
-								);
-								
-								Word safe_status_code=Word(SafeInt<long>(status_code));
-								
-								//	Dispatch
-								request->Done(safe_status_code);
-							
-							}
-							
-							//	Save handle so it isn't lost when
-							//	cURL cleans up the request
-							auto easy_handle=msg->easy_handle;
-							
-							//	Remove handle
-							if ((result=curl_multi_remove_handle(
-								multi,
-								msg->easy_handle
-							))!=CURLM_OK) throw std::runtime_error(
-								curl_multi_strerror(
-									result
-								)
-							);
-							
-							//	Kill the handle
-							requests.erase(easy_handle);
-						
-						}
-					
-					}
-				
-				}
-				
-			} catch (...) {
+			//	Store exception for pass through
+			ex=std::current_exception();
 			
-				mutex.Release();
-				
-				throw;
+			//	Return something different than
+			//	what we were given to signal an error
+			//	to cURL
+			//
+			//	We can safely return zero because
+			//	zero lengths are simply ignored
+			return 0;
+		
+		}
+		
+		//	Return exactly what we were given to
+		//	signal success to cURL
+		return len;
+	
+	}
+	
+	
+	Tuple<CURL *,Promise<HTTPResponse>> HTTPHandler::Request::Get () const noexcept {
+	
+		return Tuple<CURL *,Promise<HTTPResponse>>(
+			handle,
+			*promise
+		);
+	
+	}
+	
+	
+	void HTTPHandler::do_panic () const noexcept {
+	
+		if (panic) try {
+		
+			panic(std::current_exception());
+		
+		} catch (...) {	}
+		
+		//	If the panic callback returned, or
+		//	there wasn't one, there's not a lot
+		//	that we can do -- we're only calling
+		//	this because the state is corrupted,
+		//	traumatically unexpected, et cetera
+		std::abort();
+	
+	}
+	
+	
+	bool HTTPHandler::should_stop () {
+	
+		for (;;) {
+		
+			auto msg=control.Receive<bool>();
 			
-			}
+			if (msg.IsNull()) return false;
 			
-			mutex.Release();
+			if (*msg) return true;
 		
 		}
 	
 	}
-
-
-	HTTPHandler::HTTPHandler (Word max_bytes) : stop(false), max_bytes(max_bytes) {
 	
-		//	Initialize handle and set settings
-		if (
-			(curl_global_init(CURL_GLOBAL_ALL)!=0) ||
-			((multi=curl_multi_init())==nullptr)
-		) throw std::runtime_error(curl_error);
-		
-		#ifdef CURLMOPT_PIPELINING
-		CURLMcode result;
-		if ((result=curl_multi_setopt(
-			multi,
-			CURLMOPT_PIPELINING,
-			static_cast<long>(0)
-		))!=CURLM_OK) throw std::runtime_error(
-			curl_multi_strerror(
-				result
-			)
-		);
-		#endif
-		
+	
+	void HTTPHandler::worker_func () noexcept {
+	
 		try {
 		
-			//	Launch worker
-			thread=Thread(worker_thread,this);
+			worker();
+			
+		} catch (...) {
+		
+			do_panic();
+		
+		}
+	
+	}
+	
+	
+	//	Default timeout when libcurl doesn't
+	//	supply one -- 5 seconds
+	//
+	//	libcurl documentation says "a few
+	//	seconds"
+	static const long default_timeout=5000;
+	
+	
+	void HTTPHandler::worker () {
+	
+		//	FD sets, nfds, and timeout for select
+		fd_set readable;
+		fd_set writeable;
+		fd_set exceptional;
+		int nfds;
+		long timeout;
+	
+		//	Loop forever, or until told
+		//	to stop
+		for (;;) {
+		
+			//	Zero FD sets
+			FD_ZERO(&readable);
+			FD_ZERO(&writeable);
+			FD_ZERO(&exceptional);
+			
+			//	Lock and check
+			if (lock.Execute([&] () mutable {
+			
+				//	Wait for there to be something to do
+				while (!stop && (requests.size()==0)) wait.Sleep(lock);
+				
+				//	Were we commanded to stop?
+				if (stop) return true;
+				
+				//	Get FD sets and timeout from libcurl
+				auto result=curl_multi_fdset(
+					handle,
+					&readable,
+					&writeable,
+					&exceptional,
+					&nfds
+				);
+				if (result!=CURLM_OK) raise_multi(result);
+				result=curl_multi_timeout(
+					handle,
+					&timeout
+				);
+				if (result!=CURLM_OK) raise_multi(result);
+				
+				return false;
+			
+			})) break;
+			
+			//	How we proceed depends on the timeout
+			//	value.  If it's 0 we proceed at once
+			if (timeout!=0) {
+			
+				//	If the timeout is -1, we choose
+				//	some other reasonable timeout
+				if (timeout==-1) timeout=default_timeout;
+				
+				//	Get a struct timeval that
+				//	corresponds to the number of
+				//	milliseconds returned by libcurl
+				struct timeval tv;
+				tv.tv_sec=timeout/1000;
+				tv.tv_usec=(timeout%1000)*1000;
+				
+				//	Wait also on the control socket
+				nfds=control.Add(readable,nfds);
+				
+				//	Select
+				if (select(
+					nfds,
+					&readable,
+					&writeable,
+					&exceptional,
+					&tv
+				)==
+				#ifdef ENVIRONMENT_WINDOWS
+				SOCKET_ERROR
+				#else
+				-1
+				#endif
+				) raise_os();
+			
+			}
+			
+			//	If the control socket became readable,
+			//	and a shutdown command was given, shutdown
+			if (control.Is(readable) && should_stop()) break;
+			
+			//	Invoke libcurl
+			lock.Execute([&] () mutable {
+			
+				//	Loop until cURL no longer wants to be
+				//	called
+				for (;;) {
+				
+					int running;	//	Ignored
+					auto result=curl_multi_perform(
+						handle,
+						&running
+					);
+					//	If cURL wants to be called again, LOOP
+					if (result==CURLM_CALL_MULTI_PERFORM) continue;
+					//	If all's good, break out of the loop
+					if (result==CURLM_OK) break;
+					//	Otherwise an error occurred, throw
+					raise_multi(result);
+				
+				}
+				
+				//	Pop all messages off cURL's stack
+				for (;;) {
+				
+					int msgs;	//	Ignored
+					auto msg=curl_multi_info_read(
+						handle,
+						&msgs
+					);
+					//	End when no more messages to read
+					if (msg==nullptr) break;
+					//	CURLMSG_DONE is the only message defined
+					//	as of this writing, but more may be added
+					//	in the future...
+					if (msg->msg!=CURLMSG_DONE) continue;
+					
+					//	Lookup this particular easy handle and
+					//	extract the request
+					auto iter=requests.find(msg->easy_handle);
+					auto request=std::move(iter->second);
+					requests.erase(iter);
+					//	Save the result of the completion
+					auto code=msg->data.result;
+					//	Remove from multi handle
+					auto result=curl_multi_remove_handle(
+						handle,
+						msg->easy_handle
+					);
+					if (result!=CURLM_OK) raise_multi(result);
+					
+					//	Complete request
+					request->Complete(code);
+				
+				}
+			
+			});
+		
+		}
+	
+	}
+	
+	
+	static const char * curl_multi_init_error="Could not create a cURL multi handle";
+	
+	
+	HTTPHandler::HTTPHandler (PanicType panic) : stop(false), panic(std::move(panic)) {
+	
+		//	Make sure libcurl was initialized
+		//	properly
+		libcurl.Okay();
+	
+		//	Attempt to create a multi handle
+		if ((handle=curl_multi_init())==nullptr) throw std::runtime_error(
+			curl_multi_init_error
+		);
+		
+		//	We're managing a multi handle now
+		try {
+		
+			//	Start our worker
+			thread=Thread([this] () mutable {	worker_func();	});
 		
 		} catch (...) {
 		
-			curl_multi_cleanup(multi);
+			auto result=curl_multi_cleanup(handle);
+			//	Not really much sane we can do about
+			//	this
+			if (result!=CURLM_OK) std::abort();
 			
 			throw;
 		
@@ -410,296 +905,93 @@ namespace MCPP {
 	
 	HTTPHandler::~HTTPHandler () noexcept {
 	
-		//	Stop
-		
-		Stop();
-		
-		//	Cleanup
-		
-		//	Remove all easy handles
-		//	from the multi handle
-		for (const auto & pair : requests) {
-		
-			curl_multi_remove_handle(
-				multi,
-				const_cast<CURL *>(
-					pair.first
-				)
-			);
-		
-		}
-		
-		//	Clear the list of
-		//	requests so that all
-		//	easy handles are cleaned
-		//	up
-		requests.clear();
-		
-		//	Clean up the multi handle
-		curl_multi_cleanup(multi);
-	
-	}
-	
-	
-	void HTTPHandler::Stop () noexcept {
-	
-		//	Order worker to stop
-		mutex.Acquire();
-		stop=true;
-		condvar.WakeAll();
-		mutex.Release();
-		
-		//	Wait for working to stop
-		thread.Join();
-	
-	}
-	
-	
-	static inline void common_opts (CURL * curl, const std::unique_ptr<HTTPRequest> & request) {
-		
-		//	Apply settings
-		CURLcode result;
-		if (
-			//	Set URL
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_URL,
-				reinterpret_cast<const char *>(
-					static_cast<const Byte *>(
-						request->URL()
-					)
-				)
-			))!=CURLE_OK) ||
-			//	Only use HTTP and HTTPS
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_PROTOCOLS,
-				static_cast<long>(
-					CURLPROTO_HTTP|CURLPROTO_HTTPS
-				)
-			))!=CURLE_OK) ||
-			//	Call the write callback
-			//	to handle incoming data
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_WRITEFUNCTION,
-				&write_callback
-			))!=CURLE_OK) ||
-			//	Pass the HTTPRequest object
-			//	through to the callback
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_WRITEDATA,
-				request.get()
-			))!=CURLE_OK) ||
-			//	Call the header callback
-			//	to handle headers
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_HEADERFUNCTION,
-				&header_callback
-			))!=CURLE_OK) ||
-			//	Pass the HTTPRequest object
-			//	through to the callback
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_WRITEHEADER,
-				request.get()
-			))!=CURLE_OK) ||
-			//	Call the read callback to
-			//	handle POSTs and such
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_READFUNCTION,
-				&read_callback
-			))!=CURLE_OK) ||
-			//	Pass the HTTPRequest object
-			//	through to the callback
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_READDATA,
-				request.get()
-			))!=CURLE_OK) ||
-			//	Set maximum number of redirects
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_MAXREDIRS,
-				max_redirs
-			))!=CURLE_OK)
-			//	If DEBUG is defined, verbose
-			//#ifdef DEBUG
-			/*|| ((result=curl_easy_setopt(
-				curl,
-				CURLOPT_VERBOSE,
-				static_cast<long>(1)
-			))!=CURLE_OK)*/
-			//#endif
-			//	Figure out a way to solve the
-			//	problem this "addresses"
-			|| ((result=curl_easy_setopt(
-				curl,
-				CURLOPT_SSL_VERIFYPEER,
-				static_cast<long>(0)
-			))!=CURLE_OK)
-		) throw std::runtime_error(curl_easy_strerror(result));
-	
-	}
-	
-	
-	void HTTPHandler::Get (const String & url, HTTPStatusStringDone callback) {
-	
-		//	Setup request
-		CURL * curl=curl_easy_init();
-		
-		if (curl==nullptr) throw std::runtime_error(curl_error);
-		
-		//	Create HTTPRequest object
-		std::unique_ptr<HTTPRequest> request;
 		try {
 		
-			request=std::unique_ptr<HTTPRequest>(new HTTPRequest(
-				curl,
-				max_bytes,
-				url,
-				std::move(callback)
-			));
+			//	Kill the worker
 			
+			control.Send(true);
+			lock.Execute([&] () mutable {
+			
+				stop=true;
+				
+				wait.WakeAll();
+			
+			});
+			thread.Join();
+			
+			//	Remove all easy handles
+			for (auto & pair : requests) {
+			
+				auto result=curl_multi_remove_handle(
+					handle,
+					pair.first
+				);
+				if (result!=CURLM_OK) raise_multi(result);
+			
+			}
+			
+			//	Kill the multi handle
+			auto result=curl_multi_cleanup(handle);
+			if (result!=CURLM_OK) raise_multi(result);
+		
 		} catch (...) {
 		
-			curl_easy_cleanup(curl);
-			
-			throw;
+			//	Nothing we can do to save
+			//	ourselves
+			std::abort();
 		
 		}
-		
-		//	Set options
-		common_opts(curl,request);
-		
-		//	Add to the list of pending/active
-		//	requests
-		mutex.Execute([&] () {
-		
-			CURLMcode result;
-		
-			//	Add to handle
-			if ((result=curl_multi_add_handle(multi,curl))!=CURLM_OK) throw std::runtime_error(
-				curl_multi_strerror(
-					result
-				)
-			);
-			
-			//	Add to list
-			requests.emplace(
-				curl,
-				std::move(request)
-			);
-			
-			//	Wake up worker to handle
-			//	request
-			condvar.WakeAll();
-		
-		});
 	
 	}
 	
 	
-	static const String content_type_template("Content-Type: {0}");
-	static const char * content_type_error="Could not set Content-Type header";
+	Promise<HTTPResponse> HTTPHandler::Execute (HTTPRequest request) {
 	
-	
-	void HTTPHandler::Post (const String & url, const String & content_type, const String & body, HTTPStatusStringDone callback) {
-	
-		//	Encode the content-type
-		auto ct=String::Format(
-			content_type_template,
-			content_type
-		).ToCString();
-		struct curl_slist * headers=curl_slist_append(
-			nullptr,
-			static_cast<char *>(ct)
-		);
-		if (headers==nullptr) throw std::runtime_error(content_type_error);
+		//	Create the request
+		auto ptr=std::unique_ptr<Request>(new Request(std::move(request)));
 		
-		CURL * curl;
-		std::unique_ptr<HTTPRequest> request;
-		try {
+		//	Get the data
+		auto t=ptr->Get();
 		
-			curl=curl_easy_init();
+		//	Add to map and multi handle
+		lock.Execute([&] () mutable {
+		
+			//	Add to map
+			auto pair=requests.emplace(
+				t.Item<0>(),
+				std::move(ptr)
+			);
 			
-			if (curl==nullptr) throw std::runtime_error(curl_error);
-			
-			//	Create HTTPRequest object
+			//	If anything goes awry, we need
+			//	to remove the request
 			try {
 			
-				request=std::unique_ptr<HTTPRequest>(new HTTPRequest(
-					curl,
-					max_bytes,
-					url,
-					body,
-					headers,
-					std::move(callback)
-				));
+				//	Attempt to command worker to
+				//	wake up
+				control.Send(false);
+			
+				//	Attempt to add to multi handle
+				auto result=curl_multi_add_handle(
+					handle,
+					t.Item<0>()
+				);
+				if (result!=CURLM_OK) raise_multi(result);
+				
+				//	Done adding, wake up worker
+				wait.WakeAll();
 			
 			} catch (...) {
 			
-				curl_easy_cleanup(curl);
+				requests.erase(pair.first);
 				
 				throw;
 			
 			}
-			
-		} catch (...) {
-		
-			curl_slist_free_all(headers);
-			
-			throw;
-		
-		}
-		
-		//	Set options
-		common_opts(curl,request);
-		CURLcode result;
-		if (!(
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_HTTPHEADER,
-				headers
-			))==CURLE_OK) &&
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_POST,
-				static_cast<long>(1)
-			))==CURLE_OK) &&
-			((result=curl_easy_setopt(
-				curl,
-				CURLOPT_POSTFIELDSIZE_LARGE,
-				static_cast<curl_off_t>(SafeWord(request->Body().Count()))
-			))==CURLE_OK)
-		)) throw std::runtime_error(
-			curl_easy_strerror(result)
-		);
-		
-		//	Add to list of pending/active
-		//	requests
-		mutex.Execute([&] () {
-		
-			//	Add to multi handle
-			CURLMcode result=curl_multi_add_handle(multi,curl);
-			if (result!=CURLM_OK) throw std::runtime_error(
-				curl_multi_strerror(result)
-			);
-			
-			//	Add to list
-			requests.emplace(
-				curl,
-				std::move(request)
-			);
-			
-			//	Wake up worker to handle
-			//	request
-			condvar.WakeAll();
 		
 		});
+		
+		//	Return the promise
+		return std::move(t.Item<1>());
 	
 	}
 

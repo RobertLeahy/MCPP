@@ -23,16 +23,16 @@ namespace MCPP {
 	static const String name("Authentication API");
 	
 	
-	static bool debug () {
+	/*static bool debug () {
 	
 		return Server::Get().IsVerbose(debug_key);
 	
-	}
+	}*/
 
 
 	Authentication::Authentication () : id_len_generator(15,20), id_generator('!','~') {
 	
-		ygg.SetDebug(
+		/*ygg.SetDebug(
 			[this] (Yggdrasil::Request request) mutable {
 			
 				if (debug()) Server::Get().WriteLog(
@@ -87,7 +87,7 @@ namespace MCPP {
 				}
 			
 			}
-		);
+		);*/
 	
 	}
 	

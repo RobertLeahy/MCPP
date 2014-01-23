@@ -7,10 +7,14 @@
 
 
 #include <rleahylib/rleahylib.hpp>
+#include <promise.hpp>
+#include <safeint.hpp>
+#include <atomic>
+#include <exception>
 #include <functional>
-#include <type_traits>
 #include <limits>
-#include <new>
+#include <memory>
+#include <type_traits>
 #include <utility>
 
 
@@ -18,205 +22,17 @@ namespace MCPP {
 
 
 	/**
-	 *	\cond
+	 *	Thrown from a promise that could not be fulfilled
+	 *	because the thread pool running the task shutdown.
 	 */
-	 
-	 
-	class ThreadPool;
+	class ThreadPoolError : public std::exception {
 	
-	
-	/**
-	 *	\endcond
-	 */
-	 
-	 
-	/**
-	 *
-	 */
-	enum class ThreadPoolStatus : Word {
-	
-		Waiting,	/**<	The task was scheduled for a future time which has not yet arrived.*/
-		Queued,		/**<	The task is ready to run waiting for a thread in the pool to be available.	*/
-		Running,	/**<	The task is running on a thread in the thread pool.	*/
-		Success,	/**<	The task has completed successfully.	*/
-		Error		/**<	The task has completed unsuccessfully.	*/
-	
-	};
-	 
-	 
-	/**
-	 *	A handle upon which a thread pool
-	 *	task may be waited, and from which
-	 *	the result of that task may be
-	 *	retrieved.
-	 */
-	class ThreadPoolHandle {
-	
-	
-		friend class ThreadPool;
-	
-	
-		private:
-		
-		
-			//	The lock which protects
-			//	the non-atomic elements of
-			//	the handle
-			mutable Mutex lock;
-			//	A condvar upon which observers
-			//	may wait for state changes
-			mutable CondVar wait;
-			//	A timer to be used in tracking
-			//	the amount of time this task's
-			//	various stages take
-			mutable Timer timer;
-			//	A pointer to the result, or
-			//	the null pointer if the task
-			//	has not yet completed
-			void * result;
-			//	The function which shall be called
-			//	to clean up the result pointer
-			std::function<void (void *)> cleanup;
-			//	The amount of time the thread spent
-			//	queued and ready to run
-			std::atomic<UInt64> queued;
-			//	The amount of time the thread spent
-			//	actually running
-			std::atomic<UInt64> running;
-			//	The status of the task this
-			//	handle represents
-			std::atomic<Word> status;
-			
 		
 		public:
 		
 		
-			/**
-			 *	\cond
-			 */
-			 
-			 
-			ThreadPoolHandle () noexcept;
-			
-			
-			/**
-			 *	\endcond
-			 */
+			virtual const char * what () const noexcept override;
 		
-		
-			/**
-			 *	Cleans up the thread pool handle.
-			 */
-			~ThreadPoolHandle () noexcept;
-			
-			
-			/**
-			 *	Retrieves the status of the underlying
-			 *	task.
-			 *
-			 *	\return
-			 *		The status of the task.  If this
-			 *		status is not ThreadPoolStatus::Success
-			 *		or ThreadPoolStatus::Error it is
-			 *		liable to change at anytime, perhaps
-			 *		even before this function returns.
-			 */
-			ThreadPoolStatus Status () const noexcept;
-			/**
-			 *	Determines whether the task has completed
-			 *	or not.
-			 *
-			 *	\return
-			 *		\em true if the task is finished,
-			 *		\em false otherwise.
-			 */
-			bool Completed () const noexcept;
-			/**
-			 *	Determines whether the task has finished
-			 *	successfully or not.
-			 *
-			 *	\return
-			 *		\em true if the task finished successfully,
-			 *		\em false otherwise.
-			 */
-			bool Success () const noexcept;
-			/**
-			 *	Determines the number of nanoseconds the
-			 *	task spent or has spent queued.
-			 *
-			 *	\return
-			 *		The amount of time the thread has been
-			 *		or was queued in nanoseconds.
-			 */
-			UInt64 Queued () const noexcept;
-			/**
-			 *	Determines the number of nanoseconds the
-			 *	task spent or has spent running.
-			 *
-			 *	\return
-			 *		The amount of time the thread has been
-			 *		or was running in nanoseconds.
-			 */
-			UInt64 Running () const noexcept;
-			/**
-			 *	Waits until the task completes.
-			 *
-			 *	When this function returns the task
-			 *	is guaranteed to have either succeeded
-			 *	or failed.
-			 */
-			void Wait () const noexcept;
-			/**
-			 *	Fetches the result of the task.
-			 *
-			 *	Calling this function when the task has
-			 *	not completed will cause it to wait
-			 *	until the task has completed.
-			 *
-			 *	If the task failed this shall return
-			 *	\em nullptr.
-			 *
-			 *	\tparam T
-			 *		The type the caller expects the
-			 *		result to be.
-			 *
-			 *	\return
-			 *		A pointer to the result.
-			 */
-			template <typename T>
-			T * Result () noexcept {
-			
-				Wait();
-				
-				return reinterpret_cast<T *>(result);
-			
-			}
-			/**
-			 *	Fetches the result of the task.
-			 *
-			 *	Calling this function when the task has
-			 *	not completed will cause it to wait
-			 *	until the task has completed.
-			 *
-			 *	If the task failed this shall return
-			 *	\em nullptr.
-			 *
-			 *	\tparam T
-			 *		The type the caller expects the
-			 *		result to be.
-			 *
-			 *	\return
-			 *		A pointer to the result.
-			 */
-			template <typename T>
-			const T * Result () const noexcept {
-			
-				Wait();
-				
-				return reinterpret_cast<const T *>(result);
-			
-			}
-	
 	
 	};
 	
@@ -230,19 +46,6 @@ namespace MCPP {
 	
 	
 		public:
-		
-		
-			/**
-			 *	\cond
-			 */
-		
-		
-			ThreadPoolWorkerInfo (UInt64, UInt64, UInt64) noexcept;
-			
-			
-			/**
-			 *	\endcond
-			 */
 		
 		
 			/**
@@ -309,11 +112,11 @@ namespace MCPP {
 	
 	
 	};
-	
-	
+
+
 	/**
-	 *	A pool of threads which may be used
-	 *	to execute asynchronous tasks.
+	 *	Manages a pool of worker threads, using them to
+	 *	execute asynchronous tasks.
 	 */
 	class ThreadPool {
 	
@@ -321,238 +124,191 @@ namespace MCPP {
 		private:
 		
 		
-			//	A function which will be invoked
-			//	if something goes seriously wrong
-			//	in the worker threads
-			std::function<void ()> panic;
+			class Worker {
 			
 			
-			//	When the pool must shut down, this
-			//	flag will be set.
-			//
-			//	Then each of the threads shall be woken
-			//	up, see the flag set, and end in turn.
-			bool stop;
+				public:
+				
+				
+					std::atomic<UInt64> Running;
+					std::atomic<UInt64> TaskCount;
+					std::atomic<UInt64> Failed;
+					Thread T;
+					
+					
+					Worker () noexcept;
 			
 			
-			//	During startup the threads must wait
-			//	to begin until we're sure all threads
-			//	have started.
-			//
-			//	To establish this, they watch this flag
-			bool startup_complete;
-			
-			
-			//	After they initially start up threads
-			//	perform their initialization functions
-			//	and increment this count as they do so
-			Word init_count;
-			
-			
-			//	This timer counts the number of nanoseconds
-			//	since the pool was started
-			//
-			//	It is guarded by the queue lock
-			mutable Timer timer;
+			};
 			
 			
 			//	Workers
-			
-			//	The pool
-			Vector<
-				Tuple<
-					//	The number of nanoseconds
-					//	this particular thread has
-					//	spent running
-					std::atomic<UInt64>,
-					//	The number of tasks this
-					//	particular thread has executed
-					std::atomic<UInt64>,
-					//	The number of tasks this
-					//	particular thread has executed
-					//	which have failed
-					std::atomic<UInt64>,
-					//	The thread itself
-					Thread
-				>
-			> workers;
-			
-			//	The number of workers currently running
+			Vector<Worker> workers;
 			std::atomic<Word> running;
 			
-			//	Queued tasks
-			//
-			//	A vector was chosen as the queue
-			//	is expected to be relatively short,
-			//	and since it does not have the overhead
-			//	of constant memory allocations/deallocations
-			Vector<
-				Tuple<
-					//	The task's handle
-					SmartPointer<ThreadPoolHandle>,
-					//	The task
-					std::function<void ()>
-				>
-			> queue;
-			//	Lock which ensures
-			//	mutually exclusive
-			//	access to the queue
-			mutable Mutex queue_lock;
-			//	The condvar on which
-			//	workers wait while they
-			//	have no task to execute
-			CondVar queue_wait;
 			
+			class Task {
+			
+			
+				public:
+				
+				
+					virtual ~Task () noexcept;
+					virtual bool operator () () noexcept = 0;
+			
+			
+			};
+			
+			
+			template <typename T>
+			class WrappedTask : public Task {
+			
+			
+				public:
+				
+				
+					typedef std::function<T ()> Type;
+			
+			
+				private:
+				
+				
+					Promise<T> promise;
+					Nullable<Type> callback;
+					
+					
+				public:
+				
+				
+					WrappedTask (Type callback) noexcept : callback(std::move(callback)) {	}
+					
+					
+					~WrappedTask () noexcept {
+					
+						if (!callback.IsNull()) promise.Fail(std::make_exception_ptr(ThreadPoolError{}));
+					
+					}
+					
+					
+					virtual bool operator () () noexcept override {
+					
+						bool retr=true;
+						try {
+						
+							promise.Execute([&] () mutable {	return (*callback)();	});
+							
+						} catch (...) {
+						
+							retr=false;
+						
+						}
+						
+						callback.Destroy();
+						
+						return retr;
+					
+					}
+					
+					
+					Promise<T> Get () const noexcept {
+					
+						return promise;
+					
+					}
+			
+			
+			};
+			
+			
+			//	Task queue
+			Vector<std::unique_ptr<Task>> queue;
+			mutable Mutex lock;
+			mutable CondVar wait;
+			
+			
+			class ScheduledTask {
+			
+			
+				public:
+				
+				
+					UInt64 When;
+					std::unique_ptr<Task> What;
+			
+			
+			};
+			
+			
+			//	Scheduler thread
+			Thread scheduler;
 			//	Scheduled tasks
-			Vector<
-				Tuple<
-					//	The task's handle
-					SmartPointer<ThreadPoolHandle>,
-					//	When the task is to be
-					//	executed
-					UInt64,
-					//	The task
-					std::function<void ()>
-				>
-			> scheduled;
+			Vector<ScheduledTask> scheduled;
+			mutable Mutex scheduled_lock;
+			mutable CondVar scheduled_wait;
+			mutable Timer timer;
+			
+			
+			//	Coordinates startup and shutdown
+			Word started;
+			bool stop;
+			bool scheduler_stop;
+			std::exception_ptr ex;
 			
 			
 			//	Cleanup and init functions
-			
 			std::function<void ()> init;
 			std::function<void ()> cleanup;
 			
 			
-			//	Worker function
+			//	Panic function
+			std::function<void (std::exception_ptr)> panic;
 			
-			void worker_func (Word) noexcept;
 			
-			
-			//	Wraps callbacks which
-			//	return void
 			template <typename T, typename... Args>
-			static auto wrap (
-				SmartPointer<ThreadPoolHandle> & handle,
-				T && func,
-				Args &&... args
-			) -> typename std::enable_if<
-				std::is_same<
-					decltype(func(std::forward<Args>(args)...)),
-					void
-				>::value,
-				std::function<void ()>
-			>::type {
+			static auto wrap (T && callback, Args &&... args) -> Tuple<
+				std::unique_ptr<Task>,
+				Promise<decltype(
+					callback(std::forward<Args>(args)...)
+				)>
+			> {
 			
-				return std::bind(
-					std::forward<T>(func),
-					std::forward<Args>(args)...
-				);
-			
-			}
-			
-			
-			template <typename return_type, typename T, typename... Args>
-			static inline std::function<void ()> wrap_impl (
-				SmartPointer<ThreadPoolHandle> & handle,
-				T && func,
-				Args &&... args
-			) {
-			
-				//	Cleanup function
-				handle->cleanup=[] (void * ptr) {
+				typedef decltype(callback(std::forward<Args>(args)...)) type;
 				
-					if (ptr!=nullptr) {
-					
-						//	Destroy the object
-						reinterpret_cast<return_type *>(ptr)->~return_type();
-						
-						//	Clean up the memory
-						Memory::Free(ptr);
-					
-					}
-				
-				};
-				
-				//	Build a function that wraps that
-				#pragma GCC diagnostic push
-				#pragma GCC diagnostic ignored "-Wpedantic"
-				return [
-					//	If we capture the smart pointer
-					//	itself then we'll have a
-					//	circular reference so it'll
-					//	never get cleaned up
-					ptr=&(handle->result),
-					//	Create an invocable target
-					//	that takes no arguments
-					bound=std::bind(
-						std::forward<T>(func),
-						std::forward<Args>(args)...
+				auto ptr=std::unique_ptr<Task>(
+					new WrappedTask<type>(
+						std::bind(
+							std::forward<T>(callback),
+							std::forward<Args>(args)...
+						)
 					)
-				] () {
-				
-					//	Create somewhere for the
-					//	object returned to live
-					*ptr=Memory::Allocate<return_type>();
-					
-					//	Place the returned object there.
-					//
-					//	This will invoke move semantics
-					//	so this will work even for objects
-					//	which cannot be copied, also this
-					//	avoids default construction and
-					//	move assignment, so literally the
-					//	only requirement is move constructibility,
-					//	which is required to return from
-					//	a function anyway.
-					try {
-					
-						new (*ptr) return_type (bound());
-						
-					} catch (...) {
-					
-						Memory::Free(*ptr);
-						
-						//	Prevent cleanup code from
-						//	dangerously firing
-						*ptr=nullptr;
-						
-						throw;
-					
-					}
-				
-				};
-				#pragma GCC diagnostic pop
-			
-			}
-			
-			
-			//	Wraps callbacks which return
-			//	not-void
-			template <typename T, typename... Args>
-			static auto wrap (
-				SmartPointer<ThreadPoolHandle> & handle,
-				T && func,
-				Args &&... args
-			) -> typename std::enable_if<
-				!std::is_same<
-					decltype(func(std::forward<Args>(args)...)),
-					void
-				>::value,
-				std::function<void ()>
-			>::type {
-			
-				//	GCC segfaults if I typedef this, and GCC
-				//	doesn't allow parameter packs to be captured
-				//	in a lambda, so here's a workaround...
-				return wrap_impl<
-					decltype(func(std::forward<Args>(args)...))
-				>(
-					handle,
-					std::forward<T>(func),
-					std::forward<Args>(args)...
 				);
 				
+				auto promise=reinterpret_cast<WrappedTask<type> *>(ptr.get())->Get();
+				
+				return Tuple<std::unique_ptr<Task>,Promise<type>>(
+					std::move(ptr),
+					std::move(promise)
+				);
+			
 			}
+			
+			
+			[[noreturn]]
+			void do_panic () noexcept;
+			void do_cleanup () noexcept;
+			bool thread_startup () noexcept;
+			bool should_startup () const noexcept;
+			
+			
+			//	Worker functions
+			void worker_func (Word) noexcept;
+			bool worker_startup () noexcept;
+			void worker (Worker &);
+			
+			
+			//	Scheduler functions
+			void scheduler_func () noexcept;
+			void scheduler_inner ();
 			
 			
 		public:
@@ -566,176 +322,155 @@ namespace MCPP {
 		
 		
 			/**
-			 *	Creates a new thread pool.
+			 *	Creates and starts a new thread pool.
 			 *
 			 *	\param [in] num_workers
-			 *		The number of worker threads the
-			 *		pool shall spawn.
+			 *		The number of worker threads the thread
+			 *		pool shall create and maintain.
 			 *	\param [in] panic
-			 *		A function which shall be called
-			 *		if something goes wrong in one of
-			 *		the worker threads.
+			 *		A callback the thread pool shall invoke
+			 *		if something goes wrong in one of its
+			 *		worker threads.  Optional.  Defaults to
+			 *		std::abort.
+			 *	\param [in] init
+			 *		A function each worker thread shall invoke
+			 *		before it begins work.
+			 *	\param [in] cleanup
+			 *		A function each worker thread shall invoke
+			 *		before it shuts down.
 			 */
 			ThreadPool (
 				Word num_workers,
-				std::function<void ()> panic=std::function<void ()>(),
+				std::function<void (std::exception_ptr)> panic=std::function<void (std::exception_ptr)>(),
 				std::function<void ()> init=std::function<void ()>(),
 				std::function<void ()> cleanup=std::function<void ()>()
 			);
 			/**
-			 *	Cleans up the thread pool, stopping all
-			 *	workers.
+			 *	Stops and cleans up a thread pool.
 			 */
 			~ThreadPool () noexcept;
-			
-			
+		
+		
 			/**
-			 *	Enqueues a task for execution in the thread
-			 *	pool.
+			 *	Dispatches a task to run as soon as possible in
+			 *	the thread pool.
 			 *
-			 *	\tparam T
-			 *		The type of the callback to be executed.
-			 *	\tparam Args
-			 *		The types of the arguments to be passed
-			 *		to the callback of type \em T.
-			 *
-			 *	\param [in] func
-			 *		A callback of type \em T which shall be
-			 *		invoked in a thread pool worker thread.
-			 *	\param [in,out] args
-			 *		The arguments which shall be passed to
-			 *		\em func when it is invoked.
+			 *	\param [in] callback
+			 *		A callback which shall be invoked by a
+			 *		thread pool worker thread.
+			 *	\param [in] args
+			 *		Arguments which shall be forwarded through
+			 *		to \em callback.
 			 *
 			 *	\return
-			 *		A handle which may be used to monitor
-			 *		the task and to retrieve its result.
+			 *		A promise of the result of invoking \em callback
+			 *		with \em args.
 			 */
 			template <typename T, typename... Args>
-			auto Enqueue (T && func, Args &&... args) -> typename std::enable_if<
+			auto Enqueue (T && callback, Args &&... args) -> typename std::enable_if<
 				!std::numeric_limits<
 					typename std::decay<T>::type
 				>::is_integer,
-				SmartPointer<ThreadPoolHandle>
+				Promise<decltype(
+					callback(std::forward<Args>(args)...)
+				)>
 			>::type {
 			
-				//	Create a handle
-				auto handle=SmartPointer<ThreadPoolHandle>::Make();
-				
-				//	Initialize
-				handle->status=static_cast<Word>(ThreadPoolStatus::Queued);
-				handle->timer=Timer::CreateAndStart();
-				
-				//	Add to queue
-				queue_lock.Acquire();
-				
-				try {
-				
-					queue.EmplaceBack(
-						handle,
-						wrap(
-							handle,
-							std::forward<T>(func),
-							std::forward<Args>(args)...
-						)
-					);
-					
-					//	Wake up a worker
-					queue_wait.Wake();
-				
-				} catch (...) {
-				
-					queue_lock.Release();
-					
-					throw;
-				
-				}
-				
-				queue_lock.Release();
-				
-				return handle;
-			
-			}
-			
-			
-			template <typename T, typename... Args>
-			SmartPointer<ThreadPoolHandle> Enqueue (Word milliseconds, T && func, Args &&... args) {
-			
-				//	If it's less than a millisecond away
-				//	just enqueue it
-				if (milliseconds==0) return Enqueue(
-					std::forward<T>(func),
+				auto t=wrap(
+					std::forward<T>(callback),
 					std::forward<Args>(args)...
 				);
-			
-				//	Create a handle
-				auto handle=SmartPointer<ThreadPoolHandle>::Make();
 				
-				//	Initialize
-				handle->status=static_cast<Word>(ThreadPoolStatus::Waiting);
+				lock.Execute([&] () mutable {
 				
-				//	Add to scheduled tasks
-				queue_lock.Acquire();
-				
-				try {
-				
-					//	When shall we schedule this
-					//	callback for?
-					UInt64 when=timer.ElapsedNanoseconds()+(static_cast<UInt64>(milliseconds)*1000000);
-					//	Find insertion point
-					Word i;
-					for (i=0;i<scheduled.Count();++i) if (when<scheduled[i].Item<1>()) break;
-				
-					//	Insert
-					scheduled.Emplace(
-						i,
-						handle,
-						when,
-						wrap(
-							handle,
-							std::forward<T>(func),
-							std::forward<Args>(args)...
+					queue.Add(
+						std::move(
+							t.template Item<0>()
 						)
 					);
 					
-					//	Wake up workers so they
-					//	adjust their sleep times
-					//	as necessary
-					queue_wait.WakeAll();
-				
-				} catch (...) {
-				
-					queue_lock.Release();
+					wait.Wake();
 					
-					throw;
+				});
 				
-				}
-				
-				queue_lock.Release();
-				
-				return handle;
+				return std::move(t.template Item<1>());
 			
 			}
 			
 			
 			/**
-			 *	Retrieves information about this thread
-			 *	pool.
+			 *	Dispatches a task to run in the thread pool after some
+			 *	delay.
+			 *
+			 *	\param [in] when
+			 *		The number of milliseconds that shall be waited from
+			 *		this point in time until \em callback is executed in
+			 *		the thread pool.
+			 *	\param [in] callback
+			 *		A callback which shall be invoked by a thread pool
+			 *		worker thread.
+			 *	\param [in] args
+			 *		Arguments which shall be forwarded through to
+			 *		\em callback.
 			 *
 			 *	\return
-			 *		A ThreadPoolInfo object populated with
-			 *		information about this thread pool that
-			 *		was current as of the invocation.
+			 *		A promise of the result of invoking \em callback with
+			 *		\em args.
+			 */
+			template <typename T, typename... Args>
+			auto Enqueue (Word when, T && callback, Args &&... args) -> Promise<decltype(
+				callback(std::forward<Args>(args)...)
+			)> {
+			
+				auto t=wrap(
+					std::forward<T>(callback),
+					std::forward<Args>(args)...
+				);
+				
+				scheduled_lock.Execute([&] () mutable {
+					
+					UInt64 w=static_cast<UInt64>(
+						SafeInt<UInt64>(timer.ElapsedMilliseconds())+
+						SafeInt<UInt64>(SafeWord(when))
+					);
+					
+					Word i=0;
+					for (;i<scheduled.Count();++i) if (w<scheduled[i].When) break;
+					scheduled.Emplace(
+						i,
+						ScheduledTask{
+							w,
+							std::move(
+								t.template Item<0>()
+							)
+						}
+					);
+					
+					scheduled_wait.WakeAll();
+				
+				});
+				
+				return std::move(t.template Item<1>());
+			
+			}
+			
+			
+			/**
+			 *	Gets information and statistics about the thread pool.
+			 *
+			 *	\return
+			 *		A structure containing information and statistics
+			 *		about the thread pool.
 			 */
 			ThreadPoolInfo GetInfo () const;
 			
 			
 			/**
-			 *	Determines how many workers are in the
-			 *	thread pool.
+			 *	Determines how many workers the thread pool is maintaining.
 			 *
 			 *	\return
-			 *		The number of worker threads managed
-			 *		by the thread pool.
+			 *		The number of worker threads managed by this thread
+			 *		pool.
 			 */
 			Word Count () const noexcept;
 	

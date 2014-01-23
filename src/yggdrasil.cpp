@@ -1,557 +1,542 @@
-#include <json.hpp>
 #include <sha1.hpp>
 #include <url.hpp>
 #include <yggdrasil.hpp>
+#include <limits>
+#include <stdexcept>
 #include <utility>
-
-
-using namespace MCPP;
-
-
-static const String content_type("application/json");
-static const String url("https://authserver.mojang.com/");
-static const String client_url("http://session.minecraft.net/game/joinserver.jsp?user={0}&sessionId={1}&serverId={2}");
-static const String client_good("OK");
-static const String server_url("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={0}&serverId={1}");
-static const String token_template("token:{0}:{1}");
-static const String auth_ep("authenticate");
-static const String refresh_ep("refresh");
-static const String validate_ep("validate");
-static const String signout_ep("signout");
-static const String invalidate_ep("invalidate");
-static const Word max_recurse=5;
-static const Word max_payload=1024;
 
 
 namespace Yggdrasil {
 
 
-	Client::Client () : handler(max_payload) {	}
+	Error::Error (Word status, String type, String message, Nullable<String> cause) noexcept
+		:	Status(status),
+			Type(std::move(type)),
+			Message(std::move(message)),
+			Cause(std::move(cause))
+	{	}
 	
 	
-	void Client::send_post (String url, String body, std::function<void (Word, String)> callback) {
+	static const char * ygg_error="Yggdrasil error";
+	const char * Error::what () const noexcept {
 	
-		Request event{
-			true,
-			std::move(url),
-			std::move(body)
-		};
-		
-		if (request) try {
-		
-			request(event);
-		
-		} catch (...) {	}
-		
-		Timer timer(Timer::CreateAndStart());
-		
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		handler.Post(
-			event.URL,
-			content_type,
-			*event.Body,
-			[this,callback=std::move(callback),url=event.URL,timer] (Word status, String response) mutable {
-			
-				auto elapsed=timer.ElapsedNanoseconds();
-			
-				Response event{
-					status,
-					std::move(url),
-					std::move(response),
-					elapsed
-				};
-				
-				if (this->response) try {
-				
-					this->response(event);
-				
-				} catch (...) {	}
-				
-				callback(
-					status,
-					std::move(event.Body)
-				);
-			
-			}
-		);
-		#pragma GCC diagnostic pop
-	
-	}
-	
-	
-	void Client::send_get (String url, std::function<void (Word, String)> callback) {
-	
-		Request event{
-			false,
-			std::move(url),
-			Nullable<String>()
-		};
-		
-		if (request) try {
-		
-			request(event);
-		
-		} catch (...) {	}
-		
-		Timer timer(Timer::CreateAndStart());
-		
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		handler.Get(
-			event.URL,
-			[this,callback=std::move(callback),url=event.URL,timer] (Word status, String response) mutable {
-			
-				auto elapsed=timer.ElapsedNanoseconds();
-			
-				Response event{
-					status,
-					std::move(url),
-					std::move(response),
-					elapsed
-				};
-				
-				if (this->response) try {
-				
-					this->response(event);
-				
-				} catch (...) {	}
-				
-				callback(
-					status,
-					std::move(event.Body)
-				);
-			
-			}
-		);
-		#pragma GCC diagnostic pop
+		return ygg_error;
 	
 	}
 
 
+	//	Throws an error appropriate for a malformed
+	//	response
+	static const char * malformed_response="Malformed response";
 	[[noreturn]]
-	static void raise () {
+	static void malformed () {
 	
-		throw 0;
-	
-	}
-	
-	
-	static void check_obj (const JSON::Object & obj) {
-	
-		if (!obj.Pairs) raise();
+		throw std::runtime_error(malformed_response);
 	
 	}
 	
 	
+	//	Gets a value from a JSON object.
+	//
+	//	Makes no requirements about the value's presence
+	//	or type.
 	template <typename T>
-	T get (const String & key, const JSON::Object & obj) {
+	Nullable<T> get_opt_value (JSON::Object & obj, const String & key) {
 	
-		auto iter=obj.Pairs->find(key);
-		if (
-			(iter==obj.Pairs->end()) ||
-			(!iter->second.Is<T>())
-		) raise();
+		Nullable<T> retr;
+	
+		if (obj.IsNull()) return retr;
 		
-		return std::move(iter->second.Get<T>());
+		auto & pairs=*obj.Pairs;
+		
+		auto iter=pairs.find(key);
+		if (iter==pairs.end()) return retr;
+		
+		auto & value=iter->second;
+		
+		if (!value.Is<T>()) return retr;
+		
+		retr.Construct(
+			std::move(value.Get<T>())
+		);
+		
+		return retr;
 	
 	}
 	
 	
 	template <>
-	JSON::Object get<JSON::Object> (const String & key, const JSON::Object & obj) {
+	Nullable<Word> get_opt_value<Word> (JSON::Object & obj, const String & key) {
 	
-		auto iter=obj.Pairs->find(key);
-		if (
-			(iter==obj.Pairs->end()) ||
-			(!iter->second.Is<JSON::Object>())
-		) raise();
+		auto dbl=get_opt_value<Double>(obj,key);
 		
-		auto & retr=iter->second.Get<JSON::Object>();
+		Nullable<Word> retr;
 		
-		check_obj(retr);
+		if (dbl.IsNull()) return retr;
 		
-		return std::move(retr);
-	
-	}
-
-
-	static JSON::Object parse (const String & json) {
-	
-		auto retr=JSON::Parse(json,max_recurse);
+		auto wrd=static_cast<Word>(*dbl);
 		
-		if (!retr.Is<JSON::Object>()) raise();
+		if (static_cast<Double>(wrd)!=dbl) return retr;
 		
-		auto & obj=retr.Get<JSON::Object>();
+		retr.Construct(wrd);
 		
-		check_obj(obj);
-		
-		return std::move(obj);
+		return retr;
 	
 	}
 	
 	
-	static Error parse_error (Word status, const String & json) {
+	//	Gets a value from a JSON object.
+	//
+	//	Requires that the key be not only defined, but
+	//	but of the appropriate type.
+	template <typename T>
+	T get_value (JSON::Object & obj, const String & key) {
 	
-		auto obj=parse(json);
+		auto retr=get_opt_value<T>(obj,key);
 		
-		Error retr;
-		retr.Status=status;
-		retr.Error=get<String>("error",obj);
-		retr.ErrorMessage=get<String>("errorMessage",obj);
+		if (retr.IsNull()) malformed();
 		
-		auto cause=obj.Pairs->find("cause");
-		if (cause!=obj.Pairs->end()) {
+		return std::move(*retr);
+	
+	}
+	
+	
+	//	Unpacks a JSON object from a JSON value
+	static JSON::Object unpack (JSON::Value value) {
+	
+		if (!value.Is<JSON::Object>()) malformed();
 		
-			if (!cause->second.Is<String>()) raise();
+		return std::move(value.Get<JSON::Object>());
+	
+	}
+	
+	
+	//	Extracts a JSON object from an HTTP response
+	static const Word max_json_depth=5;
+	static JSON::Object get_json (const MCPP::HTTPResponse & response) {
+	
+		return unpack(
+			JSON::Parse(
+				response.GetBody(),
+				max_json_depth
+			)
+		);
+	
+	}
+	
+	
+	//	If a response is a Yggdrasil error, throws,
+	//	otherwise returns
+	static const String error_key("error");
+	static const String error_message_key("errorMessage");
+	static const String cause_key("cause");
+	static void check (const MCPP::HTTPResponse & response) {
+	
+		//	2xx is not a Yggdrasil error
+		if ((response.Status/100)==2) return;
+		
+		//	It's a Yggdrasil error, parse
+		//	and throw
+		auto obj=get_json(response);
+		throw Error(
+			response.Status,
+			get_value<String>(
+				obj,
+				error_key
+			),
+			get_value<String>(
+				obj,
+				error_message_key
+			),
+			get_opt_value<String>(
+				obj,
+				cause_key
+			)
+		);
+	
+	}
+	
+	
+	//	Converts an integer type to a double
+	static const char * int_to_dbl_error="Integer value not representable as a double";
+	template <typename T>
+	T to_dbl (T in) {
+	
+		auto dbl=static_cast<Double>(in);
+		
+		if (static_cast<T>(dbl)!=in) throw std::domain_error(int_to_dbl_error);
+		
+		return dbl;
+	
+	}
+	
+	
+	//	Gets an HTTP request
+	static const Word max_header_bytes=1024;
+	static const Word max_body_bytes=65536;
+	static MCPP::HTTPRequest get_request () {
+	
+		MCPP::HTTPRequest retr;
+		retr.RequireSSL=true;
+		retr.MaxHeaderBytes=max_header_bytes;
+		retr.MaxBodyBytes=max_body_bytes;
+		retr.FollowRedirects=false;
+		
+		return retr;
+	
+	}
+	
+	
+	static const String content_type_key("Content-Type");
+	static const String content_type_value("application/json");
+	static MCPP::HTTPRequest get_request (const JSON::Value & value) {
+	
+		auto retr=get_request();
+		retr.Body=UTF8().Encode(
+			JSON::Serialize(value)
+		);
+		retr.Verb=MCPP::HTTPVerb::POST;
+		retr.Headers.Add({
+			content_type_key,
+			content_type_value
+		});
+		
+		return retr;
+	
+	}
+	
+	
+	static const String url("https://authserver.mojang.com/{0}");
+	static MCPP::HTTPRequest get_request (const String & endpoint, const JSON::Value & value) {
+	
+		auto retr=get_request(value);
+		retr.URL=String::Format(
+			url,
+			endpoint
+		);
+		
+		return retr;
+	
+	}
+	
+	
+	static const String agent_name_key("name");
+	static const String agent_version_key("version");
+	JSON::Object Agent::ToJSON () {
+	
+		JSON::Object retr;
+		retr.Add(
+			agent_name_key,
+			std::move(Name),
+			agent_version_key,
+			to_dbl(Version)
+		);
+		
+		return retr;
+	
+	}
+	
+	
+	static const String profile_id_key("id");
+	static const String profile_name_key("name");
+	Profile::Profile (JSON::Object obj)
+		:	ID(get_value<String>(obj,profile_id_key)),
+			Name(get_value<String>(obj,profile_name_key))
+	{	}
+	
+	
+	JSON::Object Profile::ToJSON () {
+	
+		JSON::Object retr;
+		retr.Add(
+			profile_id_key,
+			std::move(ID),
+			profile_name_key,
+			std::move(Name)
+		);
+		
+		return retr;
+	
+	}
+	
+	
+	static const String auth_a_token_key("accessToken");
+	static const String auth_c_token_key("clientToken");
+	static const String auth_profiles_key("availableProfiles");
+	static const String auth_profile_key("selectedProfile");
+	AuthenticateResult::AuthenticateResult (JSON::Object obj)
+		:	AccessToken(get_value<String>(obj,auth_a_token_key)),
+			ClientToken(get_value<String>(obj,auth_c_token_key))
+	{
+	
+		auto avail=get_opt_value<JSON::Array>(obj,auth_profiles_key);
+		if (!avail.IsNull()) {
+		
+			AvailableProfiles.Construct(
+				avail->Values.Count()
+			);
 			
-			retr.Cause.Construct(
-				std::move(cause->second.Get<String>())
+			for (auto & p : avail->Values) AvailableProfiles->EmplaceBack(
+				unpack(std::move(p))
 			);
 		
 		}
 		
-		return retr;
+		auto selected=get_opt_value<JSON::Object>(obj,auth_profile_key);
+		if (!selected.IsNull()) SelectedProfile.Construct(
+			std::move(*selected)
+		);
 	
 	}
 	
 	
-	static Profile get_profile (const JSON::Object & obj) {
+	static const String refresh_a_token_key("accessToken");
+	static const String refresh_c_token_key("clientToken");
+	static const String refresh_profile_key("selectedProfile");
+	RefreshResult::RefreshResult (JSON::Object obj)
+		:	AccessToken(get_value<String>(obj,refresh_a_token_key)),
+			ClientToken(get_value<String>(obj,refresh_c_token_key))
+	{
 	
-		Profile retr;
-		retr.ID=get<String>("id",obj);
-		retr.Name=get<String>("name",obj);
-		
-		return retr;
+		auto profile=get_opt_value<JSON::Object>(obj,refresh_profile_key);
+		if (!profile.IsNull()) profile.Construct(std::move(*profile));
 	
 	}
 	
 	
-	static AuthenticateResult parse_authenticate (const String & json) {
+	//	Dispatches HTTP requests
+	template <typename T, typename Callback, typename... Args>
+	typename std::enable_if<
+		!std::is_same<
+			typename std::decay<Callback>::type,
+			JSON::Object
+		>::value,
+		Promise<T>
+	>::type Client::dispatch (MCPP::HTTPRequest request, Callback && callback, Args &&... args) {
 	
-		auto obj=parse(json);
+		return http.Execute(std::move(request)).Then(
+			std::forward<Callback>(callback),
+			std::forward<Args>(args)...
+		);
+	
+	}
+	
+	
+	template <typename T>
+	Promise<T> Client::dispatch (MCPP::HTTPRequest request) {
+	
+		return dispatch<T>(
+			std::move(request),
+			[] (Promise<MCPP::HTTPResponse> p) {
 		
-		AuthenticateResult retr;
-		retr.AccessToken=get<String>("accessToken",obj);
-		retr.ClientToken=get<String>("clientToken",obj);
-		
-		auto profiles=obj.Pairs->find("availableProfiles");
-		if (profiles!=obj.Pairs->end()) {
-		
-			if (!profiles->second.Is<JSON::Array>()) raise();
-			
-			auto & arr=profiles->second.Get<JSON::Array>().Values;
-			
-			retr.AvailableProfiles.Construct(arr.Count());
-			
-			for (auto & value : arr) {
-			
-				if (!value.Is<JSON::Object>()) raise();
+				auto response=p.Get();
+				check(response);
 				
-				auto & obj=value.Get<JSON::Object>();
+				return T(get_json(response));
 				
-				check_obj(obj);
-				
-				retr.AvailableProfiles->Add(get_profile(obj));
+			}
+		);
+	
+	}
+	
+	
+	template <>
+	Promise<void> Client::dispatch (MCPP::HTTPRequest request) {
+	
+		return dispatch<void>(
+			std::move(request),
+			[] (Promise<MCPP::HTTPResponse> p) {
+			
+				auto response=p.Get();
+				check(response);
 			
 			}
-		
-		}
-		
-		auto selected=obj.Pairs->find("selectedProfile");
-		if (selected!=obj.Pairs->end()) {
-		
-			if (!selected->second.Is<JSON::Object>()) raise();
-			
-			retr.SelectedProfile.Construct(
-				get_profile(selected->second.Get<JSON::Object>())
-			);
-		
-		}
-		
-		return retr;
+		);
 	
 	}
-
-
-	void Client::Authenticate (
+	
+	
+	template <typename T>
+	Promise<T> Client::dispatch (const String & endpoint, const JSON::Value & value) {
+	
+		return dispatch<T>(get_request(endpoint,value));
+	
+	}
+	
+	
+	static const String auth_username_key("username");
+	static const String auth_password_key("password");
+	static const String auth_client_token_key("clientToken");
+	static const String auth_agent_key("agent");
+	static const String auth_endpoint("authenticate");
+	Promise<AuthenticateResult> Client::Authenticate (
 		String username,
 		String password,
-		AuthenticateCallback callback,
 		Nullable<String> client_token,
 		Nullable<Agent> agent
 	) {
 	
 		//	Create JSON request
-		
-		JSON::Object root;
-		
-		//	Add username and password
-		root.Add(
-			"username",std::move(username),
-			"password",std::move(password)
+		JSON::Object obj;
+		obj.Add(
+			auth_username_key,
+			std::move(username),
+			auth_password_key,
+			std::move(password)
+		);
+		if (!client_token.IsNull()) obj.Add(
+			auth_client_token_key,
+			std::move(*client_token)
+		);
+		if (!agent.IsNull()) obj.Add(
+			auth_agent_key,
+			agent->ToJSON()
 		);
 		
-		//	Add agent (if supplied)
-		if (!agent.IsNull()) {
-		
-			JSON::Object a;
-			a.Add(
-				"name",std::move(agent->Name),
-				"version",agent->Version
-			);
-			
-			root.Add("agent",std::move(a));
-		
-		}
-		
-		//	Add client taken (if supplied)
-		if (!client_token.IsNull()) root.Add(
-			"clientToken",std::move(*client_token)
+		//	Dispatch request
+		return dispatch<AuthenticateResult>(
+			auth_endpoint,
+			std::move(obj)
 		);
-		
-		//	Make request
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		send_post(
-			url+auth_ep,
-			JSON::Serialize(std::move(root)),
-			[callback=std::move(callback)] (Word status, String response) {
-			
-				AuthenticateType result;
-			
-				//	Attempt to parse JSON if it's
-				//	not a complete failure
-				if (status!=0) try {
-				
-					if (status==200) result=parse_authenticate(response);
-					else result=parse_error(status,response);
-				
-				} catch (...) {	}
-				
-				callback(std::move(result));
-				
-			}
-		);
-		#pragma GCC diagnostic pop
 	
 	}
 	
 	
-	static RefreshResult parse_refresh (const String & json) {
-	
-		auto obj=parse(json);
-		
-		return RefreshResult{
-			get<String>("accessToken",obj),
-			get<String>("clientToken",obj),
-			get_profile(obj)
-		};
-	
-	}
-	
-	
-	void Client::Refresh (
+	static const String refresh_token_key("accessToken");
+	static const String refresh_client_token_key("clientToken");
+	static const String refresh_endpoint("refresh");
+	Promise<RefreshResult> Client::Refresh (
 		String access_token,
 		String client_token,
-		RefreshCallback callback,
-		Nullable<Profile> selected_profile
+		Nullable<Profile> profile
 	) {
 	
 		//	Create JSON request
-		
-		JSON::Object root;
-		
-		//	Add tokens
-		root.Add(
-			"accessToken",std::move(access_token),
-			"clientToken",std::move(client_token)
+		JSON::Object obj;
+		obj.Add(
+			refresh_token_key,
+			std::move(access_token),
+			refresh_client_token_key,
+			std::move(client_token)
+		);
+		if (!profile.IsNull()) obj.Add(
+			refresh_profile_key,
+			profile->ToJSON()
 		);
 		
-		//	Optionally add the selected
-		//	profile
-		if (!selected_profile.IsNull()) {
-		
-			JSON::Object sp;
-			sp.Add(
-				"id",std::move(selected_profile->ID),
-				"name",std::move(selected_profile->Name)
-			);
-			
-			root.Add(
-				"selectedProfile",std::move(sp)
-			);
-		
-		}
-		
-		//	Make request
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		send_post(
-			url+refresh_ep,
-			JSON::Serialize(std::move(root)),
-			[callback=std::move(callback)] (Word status, String response) {
-			
-				RefreshType result;
-				
-				//	Attempt to parse JSON if the
-				//	request didn't completely fail
-				if (status!=0) try {
-				
-					if (status==200) result=parse_refresh(response);
-					else result=parse_error(status,response);
-				
-				} catch (...) {	}
-				
-				callback(std::move(result));
-			
-			}
+		//	Dispatch request
+		return dispatch<RefreshResult>(
+			refresh_endpoint,
+			std::move(obj)
 		);
-		#pragma GCC diagnostic pop
 	
 	}
 	
 	
-	void Client::Validate (String access_token, ValidateCallback callback) {
+	static const String validate_token_key("accessToken");
+	static const String validate_endpoint("validate");
+	//	How stupid is this?  I'm doing string comparisons
+	//	on error messages intended to be INFORMATIVE
+	//	to see if some absolutely expected condition
+	//	occurred.  Someone needs to give Mojang a lesson
+	//	on exceptions/errors and how to use them.  An
+	//	invalid token is NOT an error when calling an
+	//	endpoint whose raison d'etre is TO CHECK WHETHER
+	//	THINGS ARE VALID OR NOT.
+	static const String invalid_token_type("ForbiddenOperationException");
+	static const String invalid_token_message("Invalid token");
+	Promise<bool> Client::Validate (String access_token) {
 	
 		//	Create JSON request
-		
-		JSON::Object root;
-		
-		root.Add(
-			"accessToken",std::move(access_token)
+		JSON::Object obj;
+		obj.Add(
+			validate_token_key,
+			std::move(access_token)
 		);
 		
-		//	Make request
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		send_post(
-			url+validate_ep,
-			JSON::Serialize(std::move(root)),
-			[callback=std::move(callback)] (Word status, String response) {
+		//	Dispatch request
+		return http.Execute(
+			get_request(
+				validate_endpoint,
+				std::move(obj)
+			)
+		).Then([] (Promise<MCPP::HTTPResponse> p) {
+		
+			auto response=p.Get();
+			try {
 			
-				BooleanType result;
+				check(response);
+			
+			//	We need to catch the ERROR to see whether
+			//	it's JUST RETURNING FALSE ARE YOU KIDDING
+			//	ME?
+			} catch (const Error & e) {
+			
+				if (
+					(e.Type==invalid_token_type) &&
+					(e.Message==invalid_token_message)
+				) return false;
 				
-				//	Attempt to process response if
-				//	the request didn't hard fail
-				if (status!=0) try {
-				
-					if (status==200) {
-					
-						if (response.Size()==0) result=true;
-					
-					} else {
-					
-						result=parse_error(status,response);
-					
-					}
-				
-				} catch (...) {	}
-				
-				callback(std::move(result));
+				throw;
 			
 			}
-		);
-		#pragma GCC diagnostic pop
+			
+			return true;
+		
+		});
 	
 	}
 	
 	
-	void Client::Signout (String username, String password, SignoutCallback callback) {
+	static const String signout_username_key("username");
+	static const String signout_password_key("password");
+	static const String signout_endpoint("signout");
+	Promise<void> Client::Signout (String username, String password) {
 	
 		//	Create JSON request
-		
-		JSON::Object root;
-		
-		root.Add(
-			"username",std::move(username),
-			"password",std::move(password)
+		JSON::Object obj;
+		obj.Add(
+			signout_username_key,
+			std::move(username),
+			signout_password_key,
+			std::move(password)
 		);
 		
-		//	Make request
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		send_post(
-			url+signout_ep,
-			JSON::Serialize(std::move(root)),
-			[callback=std::move(callback)] (Word status, String response) {
-			
-				BooleanType result;
-				
-				//	Attempt to process response if
-				//	the request didn't hard fail
-				if (status!=0) try {
-				
-					if (status==200) {
-					
-						if (response.Size()==0) result=true;
-					
-					} else {
-					
-						result=parse_error(status,response);
-					
-					}
-				
-				} catch (...) {	}
-				
-				callback(std::move(result));
-			
-			}
+		//	Dispatch
+		return dispatch<void>(
+			signout_endpoint,
+			std::move(obj)
 		);
-		#pragma GCC diagnostic pop
 	
 	}
 	
 	
-	void Client::Invalidate (String access_token, String client_token, InvalidateCallback callback) {
+	static const String invalidate_token_key("accessToken");
+	static const String invalidate_client_token_key("clientToken");
+	static const String invalidate_endpoint("invalidate");
+	Promise<void> Client::Invalidate (String access_token, String client_token) {
 	
 		//	Create JSON request
-		
-		JSON::Object root;
-		
-		root.Add(
-			"accessToken",std::move(access_token),
-			"clientToken",std::move(client_token)
+		JSON::Object obj;
+		obj.Add(
+			invalidate_token_key,
+			std::move(access_token),
+			invalidate_client_token_key,
+			std::move(client_token)
 		);
 		
-		//	Make request
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		send_post(
-			url+invalidate_ep,
-			JSON::Serialize(std::move(root)),
-			[callback=std::move(callback)] (Word status, String response) {
-			
-				BooleanType result;
-				
-				//	Attempt to process response if
-				//	the request didn't hard fail
-				if (status!=0) try {
-				
-					if (status==200) {
-					
-						if (response.Size()==0) result=true;
-					
-					} else {
-					
-						result=parse_error(status,response);
-					
-					}
-				
-				} catch (...) {	}
-				
-				callback(std::move(result));
-			
-			}
+		//	Dispatch
+		return dispatch<void>(
+			invalidate_endpoint,
+			std::move(obj)
 		);
-		#pragma GCC diagnostic pop
 	
 	}
 	
 	
 	static String get_hash (const String & server_id, const Vector<Byte> & secret, const Vector<Byte> & public_key) {
 	
-		SHA1 hash;
+		MCPP::SHA1 hash;
 		hash.Update(ASCII().Encode(server_id));
 		hash.Update(secret);
 		hash.Update(public_key);
@@ -561,114 +546,88 @@ namespace Yggdrasil {
 	}
 	
 	
-	static String get_token (const String & access_token, const String & profile_id) {
-	
-		return String::Format(
-			token_template,
-			access_token,
-			profile_id
-		);
-	
-	}
+	static const String session_url("https://sessionserver.mojang.com/session/minecraft/{0}");
 	
 	
-	void Client::ClientSession (
-		const String & username,
-		const String & access_token,
-		const String & profile_id,
-		const String & server_id,
+	static const String session_token_key("accessToken");
+	static const String session_profile_key("selectedProfile");
+	static const String session_server_id_key("serverId");
+	static const String client_session_endpoint("join");
+	Promise<void> Client::ClientSession (
+		String access_token,
+		String profile_id,
+		String server_id,
 		const Vector<Byte> & secret,
-		const Vector<Byte> & public_key,
-		ClientSessionCallback callback
+		const Vector<Byte> & public_key
 	) {
-	
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		send_get(
-			String::Format(
-				client_url,
-				URL::Encode(username),
-				URL::Encode(get_token(access_token,profile_id)),
-				URL::Encode(get_hash(server_id,secret,public_key))
-			),
-			[callback=std::move(callback)] (Word status, String response) {
-			
-				bool result=false;
-			
-				try {
-				
-					if ((status==200) && (response==client_good)) result=true;
-				
-				} catch (...) {	}
-				
-				callback(result);
-			
-			}
-		);
-		#pragma GCC diagnostic pop
-	
-	}
-	
-	
-	void Client::ServerSession (
-		const String & username,
-		const String & server_id,
-		const Vector<Byte> & secret,
-		const Vector<Byte> & public_key,
-		ServerSessionCallback callback
-	) {
-	
-		#pragma GCC diagnostic push
-		#pragma GCC diagnostic ignored "-Wpedantic"
-		send_get(
-			String::Format(
-				server_url,
-				URL::Encode(username),
-				URL::Encode(get_hash(server_id,secret,public_key))
-			),
-			[callback=std::move(callback)] (Word status, String response) {
-			
-				Nullable<String> result;
-				
-				try {
-				
-					if (status==200) {
-					
-						//	Parse JSON
-						auto obj=parse(response);
-						
-						//	Ensure JSON structure is valid and
-						//	extract user's UUID
-						if (obj.Pairs) {
-						
-							auto iter=obj.Pairs->find("id");
-							
-							if (
-								(iter!=obj.Pairs->end()) &&
-								(iter->second.Is<String>())
-							) result.Construct(
-								std::move(iter->second.Get<String>())
-							);
-						
-						}
-					
-					}
-				
-				} catch (...) {	}
-				
-				callback(std::move(result));
-			
-			}
-		);
-		#pragma GCC diagnostic pop
-	
-	}
-	
-	
-	void Client::SetDebug (RequestCallback request, ResponseCallback response) {
 		
-		this->request=std::move(request);
-		this->response=std::move(response);
+		//	Create JSON request
+		JSON::Object obj;
+		obj.Add(
+			session_token_key,
+			std::move(access_token),
+			session_profile_key,
+			std::move(profile_id),
+			session_server_id_key,
+			get_hash(server_id,secret,public_key)
+		);
+		
+		//	We have to use a custom URL
+		auto request=get_request(std::move(obj));
+		request.URL=String::Format(
+			session_url,
+			client_session_endpoint
+		);
+		
+		//	Dispatch
+		return dispatch<void>(std::move(request));
+	
+	}
+	
+	
+	static const String session_id_key("id");
+	static const String server_endpoint("hasJoined?username={0}&serverId={1}");
+	static const char * session_fail("Session verification failed");
+	Promise<String> Client::ServerSession (
+		const String & username,
+		const String & server_id,
+		const Vector<Byte> & secret,
+		const Vector<Byte> & public_key
+	) {
+	
+		//	Building a custom GET request
+		auto request=get_request();
+		request.URL=String::Format(
+			session_url,
+			String::Format(
+				server_endpoint,
+				MCPP::URL::Encode(username),
+				MCPP::URL::Encode(
+					get_hash(server_id,secret,public_key)
+				)
+			)
+		);
+		
+		//	Dispatch
+		return http.Execute(
+			std::move(request)
+		).Then([] (Promise<MCPP::HTTPResponse> p) {
+		
+			auto response=p.Get();
+			check(response);
+			
+			//	If the server returned nothing,
+			//	that's its way of letting us now
+			//	we failed
+			if (response.Body.Count()==0) throw std::runtime_error(session_fail);
+			
+			auto obj=get_json(response);
+			return get_value<String>(
+				obj,
+				session_id_key
+			);
+		
+		});
 	
 	}
 

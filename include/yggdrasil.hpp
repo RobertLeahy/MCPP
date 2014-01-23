@@ -8,111 +8,23 @@
 
 #include <rleahylib/rleahylib.hpp>
 #include <http_handler.hpp>
-#include <variant.hpp>
-#include <functional>
+#include <json.hpp>
+#include <promise.hpp>
+#include <exception>
+#include <type_traits>
 
 
 namespace Yggdrasil {
 
 
-	/**
-	 *	\cond
-	 */
-	 
-	 
-	template <typename... Args>
-	using Variant=MCPP::Variant<Args...>;
-	 
-	 
-	/**
-	 *	\endcond
-	 */
-
-
-	/**
-	 *	Information about a profile.
-	 */
-	class Profile {
-	
-	
-		public:
-		
-		
-			/**
-			 *	The profile's ID.
-			 */
-			String ID;
-			/**
-			 *	The profile's name.
-			 */
-			String Name;
-	
-	
-	};
+	template <typename T>
+	using Promise=MCPP::Promise<T>;
 	
 	
 	/**
-	 *	The result of a successful authentication.
-	 */
-	class AuthenticateResult {
-	
-	
-		public:
-		
-		
-			/**
-			 *	The access token.
-			 */
-			String AccessToken;
-			/**
-			 *	The client token.
-			 */
-			String ClientToken;
-			/**
-			 *	An optional collection of profiles
-			 *	associated with the authenticated
-			 *	account.
-			 */
-			Nullable<Vector<Profile>> AvailableProfiles;
-			/**
-			 *	An optional profile selected during
-			 *	the authentication process.
-			 */
-			Nullable<Profile> SelectedProfile;
-	
-	
-	};
-	
-	
-	/**
-	 *	The result of successfully refreshing an
-	 *	access token.
-	 */
-	class RefreshResult {
-	
-	
-		public:
-		
-		
-			/**
-			 *	The access token.
-			 */
-			String AccessToken;
-			/**
-			 *	The client token.
-			 */
-			String ClientToken;
-			/**
-			 *	The selected profile.
-			 */
-			Profile SelectedProfile;
-	
-	
-	};
-	
-	
-	/**
-	 *	Represents an agent.
+	 *	Sent during the authentication process to tell
+	 *	Mojang which kind of agent is logging in on
+	 *	the user's behalf.
 	 */
 	class Agent {
 	
@@ -121,112 +33,210 @@ namespace Yggdrasil {
 		
 		
 			/**
-			 *	The name of the agent.
+			 *	The name of this agent.
+			 *
+			 *	Only known valid value is \"Minecraft\".
 			 */
 			String Name;
 			/**
-			 *	The agent's version.
+			 *	The version of this agent.
+			 *
+			 *	Only known valid value is 1.
 			 */
 			Word Version;
-	
+			
+			
+			/**
+			 *	\cond
+			 */
+			
+			
+			JSON::Object ToJSON ();
+			
+			
+			/**
+			 *	\endcond
+			 */
+		
 	
 	};
 	
 	
 	/**
-	 *	Encapsulates an error returned by
-	 *	the Yggdrasil API.
+	 *	A profile associated with a user's account.
+	 *
+	 *	Received from Mojang when authentication is
+	 *	successful.
 	 */
-	class Error {
+	class Profile {
 	
 	
 		public:
 		
 		
 			/**
-			 *	The HTTP status code associated
-			 *	with this error.
+			 *	\cond
+			 */
+		
+		
+			Profile (JSON::Object);
+			JSON::Object ToJSON ();
+			
+			
+			/**
+			 *	\endcond
+			 */
+		
+		
+			/**
+			 *	The ID of this profile.
+			 */
+			String ID;
+			/**
+			 *	The name of this profile.
+			 */
+			String Name;
+	
+	
+	};
+	
+	
+	/**
+	 *	The result of authenticating through Yggdrasil.
+	 */
+	class AuthenticateResult {
+	
+	
+		public:
+		
+		
+			/**
+			 *	\cond
+			 */
+		
+		
+			AuthenticateResult (JSON::Object);
+			
+			
+			/**
+			 *	\endcond
+			 */
+		
+		
+			/**
+			 *	The access token.
+			 */
+			String AccessToken;
+			/**
+			 *	The client token.  This is the same
+			 *	token that was sent, if one was sent.
+			 */
+			String ClientToken;
+			/**
+			 *	A list of the user's available profiles,
+			 *	if received from Mojang.
+			 */
+			Nullable<Vector<Profile>> AvailableProfiles;
+			/**
+			 *	The profile that has been selected, if
+			 *	any.
+			 */
+			Nullable<Profile> SelectedProfile;
+	
+	
+	};
+	
+	
+	/**
+	 *	A Yggdrasil API error.
+	 */
+	class Error : public std::exception {
+	
+	
+		public:
+		
+		
+			/**
+			 *	\cond
+			 */
+		
+		
+			Error (Word, String, String, Nullable<String>) noexcept;
+			
+			
+			/**
+			 *	\endcond
+			 */
+		
+		
+			/**
+			 *	The HTTP status code that Yggdrasil returned.
 			 */
 			Word Status;
 			/**
-			 *	A string which describes this error.
+			 *	The type of error that was encountered.  Maps
+			 *	exactly to the name of a Java class which extends
+			 *	Exception.
 			 */
-			String Error;
+			String Type;
 			/**
-			 *	A human readable string which describes
-			 *	this error.
+			 *	A descriptive message describing the error.
 			 */
-			String ErrorMessage;
+			String Message;
 			/**
-			 *	An optional string which identifies
-			 *	the cause of this error.
+			 *	The cause of the error, if received.
 			 */
 			Nullable<String> Cause;
+			
+			
+			virtual const char * what () const noexcept override;
 	
 	
 	};
-	 
-	 
-	class Request {
+	
+	
+	/**
+	 *	The result of refreshing an access token.
+	 */
+	class RefreshResult {
 	
 	
 		public:
 		
 		
-			bool Post;
-			String URL;
-			Nullable<String> Body;
+			/**
+			 *	\cond
+			 */
+		
+		
+			RefreshResult (JSON::Object);
+			
+			
+			/**
+			 *	\endcond
+			 */
+			
+			
+			/**
+			 *	The access token which was refreshed.
+			 */
+			String AccessToken;
+			/**
+			 *	The associated client token.
+			 */
+			String ClientToken;
+			/**
+			 *	The selected profile, if any.
+			 */
+			Nullable<Profile> SelectedProfile;
 	
 	
 	};
-	
-	
-	class Response {
-	
-	
-		public:
-		
-		
-			Word Status;
-			String URL;
-			String Body;
-			UInt64 Elapsed;
-	
-	
-	};
-	
-	
-	/**
-	 *	\cond
-	 */
-	 
-	 
-	template <typename T>
-	using Type=Variant<T,Error>;
-	
-	
-	/**
-	 *	\endcond
-	 */
-	
-	
-	typedef Type<AuthenticateResult> AuthenticateType;
-	typedef Type<RefreshResult> RefreshType;
-	typedef Type<bool> BooleanType;
-	typedef std::function<void (AuthenticateType)> AuthenticateCallback;
-	typedef std::function<void (RefreshType)> RefreshCallback;
-	typedef std::function<void (BooleanType)> ValidateCallback;
-	typedef std::function<void (BooleanType)> SignoutCallback;
-	typedef std::function<void (BooleanType)> InvalidateCallback;
-	typedef std::function<void (bool)> ClientSessionCallback;
-	typedef std::function<void (Nullable<String>)> ServerSessionCallback;
-	typedef std::function<void (const Request &)> RequestCallback;
-	typedef std::function<void (const Response &)> ResponseCallback;
 
 
 	/**
-	 *	Makes requests of the Yggdrasil and Minecraft
-	 *	session APIs.
+	 *	Processes asynchronous requests to the Yggdrasil
+	 *	HTTP API.
 	 */
 	class Client {
 	
@@ -234,185 +244,173 @@ namespace Yggdrasil {
 		private:
 		
 		
-			MCPP::HTTPHandler handler;
-			RequestCallback request;
-			ResponseCallback response;
+			MCPP::HTTPHandler http;
 			
 			
-			void send_post (String, String, std::function<void (Word, String)>);
-			void send_get (String, std::function<void (Word, String)>);
+			template <typename T, typename Callback, typename... Args>
+			typename std::enable_if<
+				!std::is_same<
+					typename std::decay<Callback>::type,
+					JSON::Object
+				>::value,
+				Promise<T>
+			>::type dispatch (MCPP::HTTPRequest, Callback &&, Args &&...);
+			template <typename T>
+			Promise<T> dispatch (MCPP::HTTPRequest);
+			template <typename T>
+			Promise<T> dispatch (const String &, const JSON::Value &);
 			
 			
 		public:
-		
-		
+			
+			
 			/**
-			 *	Creates a new Yggdrasil client.
-			 */
-			Client ();
-		
-		
-			/**
-			 *	Authenticates a user with Yggdrasil.
+			 *	Authenticates a username and password through
+			 *	Yggdrasil.
 			 *
 			 *	\param [in] username
-			 *		The username.
+			 *		The username to authenticate.
 			 *	\param [in] password
-			 *		The password.
-			 *	\param [in] callback
-			 *		The function which shall be asynchronously
-			 *		invoked when the request completes.
+			 *		The password to authenticate.
 			 *	\param [in] client_token
-			 *		The client token to supply for the request.
-			 *		Defaults to null.
+			 *		Defaults to null.  The client token that the
+			 *		caller wishes to supply to the Yggdrasil API,
+			 *		if any.
 			 *	\param [in] agent
-			 *		The agent making this request.  Defaults to
-			 *		null.
+			 *		Defaults to null.  The agent that the caller
+			 *		wishes to supply to the Yggdrasil API, if
+			 *		any.
+			 *
+			 *	\return
+			 *		A promise of the future result of the
+			 *		authentication request.
 			 */
-			void Authenticate (
+			Promise<AuthenticateResult> Authenticate (
 				String username,
 				String password,
-				AuthenticateCallback callback,
-				Nullable<String> client_token=Nullable<String>(),
-				Nullable<Agent> agent=Nullable<Agent>()
+				Nullable<String> client_token=Nullable<String>{},
+				Nullable<Agent> agent=Nullable<Agent>{}
 			);
 			
 			
 			/**
-			 *	Refreshes a Yggdrasil session.
+			 *	Refreshes an access token through Yggdrasil.
 			 *
 			 *	\param [in] access_token
-			 *		The access token to refresh.
+			 *		The access token previously obtained from
+			 *		Yggdrasil that shall be refreshed.
 			 *	\param [in] client_token
-			 *		The client token to refresh.
-			 *	\param [in] callback
-			 *		The function which shall be asynchronously
-			 *		invoked when the request completes.
-			 *	\param [in] selected_profile
-			 *		The profile to supply for this request.
-			 *		Defaults to null.
+			 *		The client token used to initially obtain
+			 *		\em access_token.
+			 *	\param [in] profile
+			 *		Defaults to null.  The profile that was
+			 *		selected when \em access_token was initially
+			 *		obtained.
+			 *
+			 *	\return
+			 *		A promise of the future result of the refresh
+			 *		request.
 			 */
-			void Refresh (
+			Promise<RefreshResult> Refresh (
 				String access_token,
 				String client_token,
-				RefreshCallback callback,
-				Nullable<Profile> selected_profile=Nullable<Profile>()
+				Nullable<Profile> profile=Nullable<Profile>{}
 			);
 			
 			
 			/**
-			 *	Checks to see if an access token is
-			 *	valid.
+			 *	Queries Yggdrasil to determine if an access
+			 *	token is valid.
 			 *
 			 *	\param [in] access_token
-			 *		The access token to check.
-			 *	\param [in] callback
-			 *		The function which shall be asynchronously
-			 *		invoked when the request completes.
+			 *		The access token to query.
+			 *
+			 *	\return
+			 *		A promise of the future result of whether
+			 *		\em access_token is valid or not.
 			 */
-			void Validate (String access_token, ValidateCallback callback);
+			Promise<bool> Validate (String access_token);
 			
 			
 			/**
-			 *	Signs a user out, invalidating all access
-			 *	tokens associated with them.
+			 *	Signs a user out through Yggdrasil.
 			 *
 			 *	\param [in] username
 			 *		The username.
 			 *	\param [in] password
 			 *		The password.
-			 *	\param [in] callback
-			 *		The function which shall be asynchronously
-			 *		invoked when the request completes.
+			 *
+			 *	\return
+			 *		A promise of the result of the operation.
 			 */
-			void Signout (String username, String password, SignoutCallback callback);
+			Promise<void> Signout (String username, String password);
 			
 			
 			/**
-			 *	Invalidates an access token.
+			 *	Invalidates a token.
 			 *
 			 *	\param [in] access_token
-			 *		The access token.
+			 *		The access token to invalidate.
 			 *	\param [in] client_token
-			 *		The client token.
-			 *	\param [in] callback
-			 *		The function which shall be asynchronously
-			 *		invoked when the request completes.
+			 *		The client token used to initially obtain
+			 *		\em access_token.
+			 *
+			 *	\return
+			 *		A promise of the result of the invalidation.
 			 */
-			void Invalidate (String access_token, String client_token, InvalidateCallback callback);
+			Promise<void> Invalidate (String access_token, String client_token);
 			
 			
 			/**
-			 *	Creates a session for a client logging into
-			 *	a server.
+			 *	Begins a Minecraft game session login.
 			 *
-			 *	\param [in] username
-			 *		The username.
 			 *	\param [in] access_token
-			 *		The access token.
+			 *		The client's access token.
 			 *	\param [in] profile_id
-			 *		The profile ID.
+			 *		The ID of the client's currently selected
+			 *		profile.
 			 *	\param [in] server_id
-			 *		The server ID string supplied by the
-			 *		server.  Must be ASCII representable.
+			 *		The server ID the server sent.
 			 *	\param [in] secret
 			 *		The shared secret.
 			 *	\param [in] public_key
-			 *		The ASN.1 DER-encoded representation
-			 *		of the server's public key.
-			 *	\param [in] callback
-			 *		The callback which shall be asynchronously
-			 *		invoked when the request completes.
+			 *		The server's PublicKeyInfo structure.
+			 *
+			 *	\return
+			 *		A promise of the result.
 			 */
-			void ClientSession (
-				const String & username,
-				const String & access_token,
-				const String & profile_id,
-				const String & server_id,
+			Promise<void> ClientSession (
+				String access_token,
+				String profile_id,
+				String server_id,
 				const Vector<Byte> & secret,
-				const Vector<Byte> & public_key,
-				ClientSessionCallback callback
+				const Vector<Byte> & public_key
 			);
 			
 			
 			/**
-			 *	Validates a user logging into a server.
+			 *	Completes a Minecraft game session login.
 			 *
 			 *	\param [in] username
-			 *		The username of the user logging in.
+			 *		The username the client sent.
 			 *	\param [in] server_id
-			 *		The server ID string.
+			 *		The server ID string sent to the client.
 			 *	\param [in] secret
-			 *		The shared secret.
-			 *	\param [in] secret
-			 *		The ASN.1 DER-encoded representation
-			 *		of the server's public key.
-			 *	\param [in] callback
-			 *		The callback which shall be asynchronously
-			 *		invoked when the request completes.
+			 *		The shared secret the client sent.
+			 *	\param [in] pulic_key
+			 *		The PublicKeyInfo used to complete the
+			 *		encryption handshake with the client.
+			 *
+			 *	\return
+			 *		A promise of the client's UUID from
+			 *		Mojang.
 			 */
-			void ServerSession (
+			Promise<String> ServerSession (
 				const String & username,
 				const String & server_id,
 				const Vector<Byte> & secret,
-				const Vector<Byte> & public_key,
-				ServerSessionCallback callback
+				const Vector<Byte> & public_key
 			);
-			
-			
-			/**
-			 *	Set debugging functions which will be invoked
-			 *	before each request is made, and after its
-			 *	response is received or it fails.
-			 *
-			 *	\param [in] request
-			 *		The callback to invoke when a request is
-			 *		sent.
-			 *	\param [in] response
-			 *		The callback to invoke when a response is
-			 *		received or a request fails.
-			 */
-			void SetDebug (RequestCallback request=RequestCallback(), ResponseCallback response=ResponseCallback());
 	
 	
 	};
