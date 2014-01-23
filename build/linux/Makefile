@@ -2,12 +2,13 @@ SUFFIXES+=.mk
 
 
 OPTIMIZATION:=-O0 -g -fno-inline -fno-elide-constructors -DDEBUG -fsanitize=address -fno-omit-frame-pointer
-#OPTIMIZATION=-O3 -march=native
+#OPTIMIZATION=-O3
 #-static-libgcc -static-libstdc++
 OPTS_SHARED:=-Wall -Wpedantic -Werror -fno-rtti -std=gnu++11 -I include -Dlinux -fPIC
-GPP:=g++ $(OPTS_SHARED) $(OPTIMIZATION)
+GPP:=g++-4.8 $(OPTS_SHARED) $(OPTIMIZATION)
 comma:=,
 LINK=-Wl,-rpath,'$$ORIGIN' -Wl,-rpath-link,bin -Wl,-rpath-link,bin/mods $(if $(1),-Wl$(comma)-soname$(comma)$(notdir $(1)))
+MKDIR=mkdir -p $(dir $(1))
 
 
 #	DEFAULT
@@ -37,13 +38,13 @@ cleandeps:
 #	DIRECTORIES
 
 bin:
-	./mkdir_nofail.sh bin
+	-@mkdir bin
 
 bin/mods:
-	./mkdir_nofail.sh bin/mods
+	-@mkdir -p bin/mods
 	
-bin/data_providers: | bin
-	./mkdir_nofail.sh bin/data_providers
+bin/data_providers:
+	-@mkdir -p bin/data_providers
 	
 	
 NODEPS:=clean cleanall cleandeps
@@ -51,7 +52,7 @@ NODEPS:=clean cleanall cleandeps
 	
 ifeq (0,$(words $(findstring $(MAKECMDGOALS),$(NODEPS))))
 
-	-include $(patsubst %.cpp,%.mk,$(shell find src/ -name "*.cpp"))
+	-include $(patsubst src/%.cpp,makefiles/%.mk,$(shell find src/ -name "*.cpp"))
 
 endif
 
@@ -61,15 +62,12 @@ endif
 
 LIB:=bin/rleahylib.so
 OBJ:=obj/new_delete.o
-	
-	
-makefiles/%.mk:
-	./mkdir_nofail.sh $(dir $@)
-	$(GPP) -MM -MT "$(patsubst makefiles/%.mk,obj/%.o,$@) $@" $(patsubst makefiles/%.mk,src/%.cpp,$@) -MF $@
-	
-	
+
+
 obj/%.o:
-	./mkdir_nofail.sh $(dir $@)
+	$(call MKDIR,$(patsubst obj/%.o,makefiles/%.mk,$@))
+	$(GPP) -MM -MT "$@" $(patsubst obj/%.o,src/%.cpp,$@) -MF $(patsubst obj/%.o,makefiles/%.mk,$@)
+	$(call MKDIR,$@)
 	$(GPP) -c -o $@ $(patsubst obj/%.o,src/%.cpp,$@)
 	
 	
