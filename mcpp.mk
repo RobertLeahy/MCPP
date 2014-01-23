@@ -3,6 +3,7 @@ all: mcpp
 
 MCPP_LIB:=$(LIB) \
 bin/data_provider.dll \
+bin/libcares-2.dll \
 bin/libcurl.dll \
 bin/libeay32.dll \
 bin/ssleay32.dll \
@@ -22,6 +23,7 @@ obj/client_list.o \
 obj/client_list_iterator.o \
 obj/compression.o \
 obj/concurrency_manager.o \
+obj/dns_handler.o \
 obj/format.o \
 obj/hardware_concurrency.o \
 obj/http_handler.o \

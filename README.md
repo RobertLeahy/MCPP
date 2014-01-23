@@ -23,6 +23,7 @@ Interactive (i.e. non-service/-daemon) front-end:
 Dependencies
 ------------
 
+- [c-ares](http://c-ares.haxx.se/)
 - [cURL](http://curl.haxx.se/)
 - [MySQL](http://dev.mysql.com/doc/refman/5.6/en/c-api.html)
 - [OpenSSL](http://www.openssl.org/)
