@@ -7,8 +7,11 @@
 
 
 #include <rleahylib/rleahylib.hpp>
+#include <promise.hpp>
+#include <socketpair.hpp>
 #include <curl/curl.h>
-#include <functional>
+#include <cstddef>
+#include <exception>
 #include <memory>
 #include <unordered_map>
 
@@ -17,238 +20,376 @@ namespace MCPP {
 
 
 	/**
-	 *	The type of callback that shall be invoked
-	 *	when an HTTP request completes.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	HTTP status code of the HTTP request,
-	 *		or zero if the request failed.
+	 *	A single HTTP request or response
+	 *	header.
 	 */
-	typedef std::function<void (Word)> HTTPStatusDone;
-	/**
-	 *	The type of callback that shall be invoked
-	 *	when an HTTP request completes.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	HTTP status code of the HTTP request,
-	 *		or zero if the request failed.
-	 *	1.	Content of the HTTP request.  Ignore this
-	 *		parameter if the status code is zero.
-	 */
-	typedef std::function<void (Word, String)> HTTPStatusStringDone;
-	/**
-	 *	The type of callback that shall be invoked
-	 *	when an HTTP request has incoming data
-	 *	pending.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	A buffer of bytes containing the pending
-	 *		incoming data.
-	 *	1.	The number of bytes in the buffer.
-	 *
-	 *	<B>Return Value:</B>
-	 *
-	 *	The number of bytes actually processed.  Returning
-	 *	a value other than the number of bytes in the input
-	 *	buffer is an error condition.
-	 */
-	typedef std::function<Word (const Byte *, Word)> HTTPWrite;
-	/**
-	 *	The type of callback that shall be invoked
-	 *	when an HTTP request is awaiting outgoing data.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	A buffer from which data shall be read.
-	 *	1.	The size of the buffer.
-	 *
-	 *	<B>Return Value:</B>
-	 *
-	 *	The number of bytes queued to be sent over the HTTP
-	 *	connection.  Zero signals end of file and the callback
-	 *	shall not be invoked again.
-	 */
-	typedef std::function<Word (Byte *, Word)> HTTPRead;
-	/**
-	 *	The type of callback that shall be invoked for each
-	 *	header in the HTTP response.
-	 *
-	 *	<B>Parameters:</B>
-	 *
-	 *	0.	The name of the header.
-	 *	1.	The value of the header.
-	 */
-	typedef std::function<void (const String &, const String &)> HTTPHeader;
-
-
-	/**
-	 *	\cond
-	 */
-	 
-	 
-	class HTTPRequest {
-	
-	
-		private:
-		
-		
-			std::unique_ptr<Encoding> encoding;
-			HTTPStatusDone status_done;
-			HTTPStatusStringDone status_string_done;
-			HTTPWrite write;
-			HTTPRead read;
-			HTTPHeader header;
-			Word outgoing_pos;
-			Vector<Byte> outgoing;
-			Vector<Byte> buffer;
-			Word max_bytes;
-			CURL * handle;
-			Vector<Byte> url;
-			struct curl_slist * headers;
+	class HTTPHeader {
 	
 	
 		public:
 		
 		
-			HTTPRequest () = delete;
-			HTTPRequest (const HTTPRequest &) = delete;
-			HTTPRequest (HTTPRequest &&) = delete;
-			HTTPRequest & operator = (const HTTPRequest &) = delete;
-			HTTPRequest & operator = (HTTPRequest &) = delete;
-		
-		
-			HTTPRequest (CURL * handle, Word max_bytes, const String & url, HTTPStatusStringDone status_string_done);
-			HTTPRequest (CURL * handle, Word max_bytes, const String & url, const String & body, struct curl_slist * headers, HTTPStatusStringDone status_string_done);
-			~HTTPRequest () noexcept;
-		
-		
-			Word Write (const Byte * ptr, Word size) noexcept;
-			Word Read (Byte * ptr, Word size) noexcept;
-			void Done (Word status_code, Nullable<String> err=Nullable<String>()) noexcept;
-			bool Header (const String & key, const String & value) noexcept;
-			const Vector<Byte> & URL () const noexcept;
-			const Vector<Byte> & Body () const noexcept;
+			/**
+			 *	The key associated with this
+			 *	header.
+			 */
+			String Key;
+			/**
+			 *	The value associated with this
+			 *	header.
+			 */
+			String Value;
 	
 	
 	};
-	 
-	 
+	
+	
 	/**
-	 *	\endcond
+	 *	A single HTTP cookie.
 	 */
+	class HTTPCookie {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The key associated with this
+			 *	cookie.
+			 */
+			String Key;
+			/**
+			 *	The value associated with this
+			 *	cookie.
+			 */
+			String Value;
+	
+	
+	};
+	
+	
+	/**
+	 *	The response to an HTTP request.
+	 */
+	class HTTPResponse {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The numerical status code associated
+			 *	with this response.
+			 */
+			Word Status;
+			/**
+			 *	HTTP major version number.
+			 */
+			Word MajorVersion;
+			/**
+			 *	HTTP minor version number.
+			 */
+			Word MinorVersion;
+			/**
+			 *	Server's response.
+			 */
+			String Response;
+			/**
+			 *	The headers that were sent in the
+			 *	response.
+			 */
+			Vector<HTTPHeader> Headers;
+			/**
+			 *	Raw bytes representing the body of the
+			 *	response.
+			 */
+			Vector<Byte> Body;
+			
+			
+			/**
+			 *	Attempts to retrieve the body of the
+			 *	response as a string.
+			 *
+			 *	Scans the headers looking for a character
+			 *	set.  If a character set cannot be found,
+			 *	falls back to UTF-8.
+			 *
+			 *	\return
+			 *		A string representing the body of this
+			 *		response.
+			 */
+			String GetBody () const;
+	
+	
+	};
+	
+	
+	/**
+	 *	HTTP verbs.
+	 */
+	enum class HTTPVerb {
+	
+		GET,
+		POST,
+		HEAD
+	
+	};
+	
+	
+	/**
+	 *	An HTTP request.
+	 */
+	class HTTPRequest {
+	
+		
+		public:
+		
+		
+			/**
+			 *	Creates a new GET request.
+			 */
+			HTTPRequest () noexcept;
+		
+		
+			/**
+			 *	Creates a new GET request with default
+			 *	settings for the specified URL.
+			 *
+			 *	\param [in] url
+			 *		The URL to which to send this request.
+			 */
+			HTTPRequest (String url) noexcept;
+		
+		
+			/**
+			 *	The URL to which this request shall be
+			 *	sent.
+			 */
+			String URL;
+			/**
+			 *	The HTTP verb that shall be invoked.
+			 */
+			HTTPVerb Verb;
+			/**
+			 *	A collection of headers to send.
+			 */
+			Vector<HTTPHeader> Headers;
+			/**
+			 *	The body of the request.  Only relevant
+			 *	for verbs with a body.
+			 */
+			Vector<Byte> Body;
+			
+			
+			/**
+			 *	The referer.
+			 */
+			Nullable<String> Referer;
+			/**
+			 *	The user agent string.
+			 */
+			Nullable<String> UserAgent;
+			/**
+			 *	A collection of cookies to be sent.
+			 */
+			Vector<HTTPCookie> Cookies;
+			
+			
+			/**
+			 *	Whether this request requires SSL or
+			 *	TLS.
+			 */
+			bool RequireSSL;
+			/**
+			 *	The maximum number of bytes which will
+			 *	be accepted as part of the header before
+			 *	the request will be terminated.
+			 */
+			Nullable<Word> MaxHeaderBytes;
+			/**
+			 *	The maximum number of bytes which will be
+			 *	accepted as part of the body before the
+			 *	request will be terminated.
+			 */
+			Nullable<Word> MaxBodyBytes;
+			/**
+			 *	Whether redirects should be followed.
+			 */
+			bool FollowRedirects;
+			/**
+			 *	If redirects are to be followed, how many
+			 *	should be followed.  Null means an
+			 *	unlimited number.
+			 */
+			Nullable<Word> MaxRedirects;
+		
+	
+	};
+	
+	
+	/**
+	 *	An exception thrown to indicate that the HTTPHandler
+	 *	shut down during the execution of a request.
+	 */
+	class HTTPHandlerError : public std::exception {
+	
+	
+		public:
+		
+		
+			virtual const char * what () const noexcept override;
+	
+	
+	};
 
 
 	/**
-	 *	Provides a facility for asynchronously
-	 *	making and handling HTTP and HTTP
-	 *	requests.
+	 *	Provides asynchronous HTTP handling mechanisms.
 	 */
 	class HTTPHandler {
 	
 	
+		public:
+		
+		
+			typedef std::function<void (std::exception_ptr)> PanicType;
+	
+	
 		private:
 		
 		
-			//	Worker
+			class Request {
+			
+			
+				private:
+				
+				
+					CURL * handle;
+				
+				
+					Nullable<Promise<HTTPResponse>> promise;
+					
+					
+					HTTPResponse response;
+					
+					
+					//	The original request
+					HTTPRequest request;
+					
+					
+					//	Encoded strings for legacy cURL
+					Vector<char> url;
+					Vector<char> referer;
+					Vector<char> uas;
+					Vector<char> cookies;
+					
+					
+					//	Values that are actually relevant
+					//	to the consumer
+					Vector<Byte> request_body;
+					Word headers_curr;
+					std::exception_ptr ex;
+					
+					
+					template <typename... Args>
+					void set (CURLoption, Args &&...);
+					
+					
+					static std::size_t header (void *, std::size_t, std::size_t, void *) noexcept;
+					static std::size_t body (char *, std::size_t, std::size_t, void *) noexcept;
+			
+			
+				public:
+				
+				
+					Request (HTTPRequest);
+					~Request () noexcept;
+				
+				
+					void Complete (CURLcode) noexcept;
+					
+					
+					Word Header (const void *, Word) noexcept;
+					Word ResponseBody (const void *, Word) noexcept;
+					
+					
+					Tuple<CURL *,Promise<HTTPResponse>> Get () const noexcept;
+				
+			
+			};
+		
+		
+			//	Control
+			ControlSocket control;
+			
+			
+			//	Multi handle
+			CURLM * handle;
+		
+		
+			//	Worker thread
 			Thread thread;
 			
 			
-			//	Worker control
-			
-			//	Tells worker to stop
+			//	Pending requests and shutdown
+			//	synchronization
+			mutable Mutex lock;
+			mutable CondVar wait;
 			bool stop;
-			//	Locks the list
-			Mutex mutex;
-			//	Wakes the worker up
-			//	if the worker was previously
-			//	doing nothing
-			CondVar condvar;
+			std::unordered_map<
+				CURL *,
+				std::unique_ptr<Request>
+			> requests;
 			
 			
-			//	Request list
-			std::unordered_map<CURL *,std::unique_ptr<HTTPRequest>> requests;
+			//	Called on panic
+			PanicType panic;
 			
 			
-			//	cURL multi handle
-			CURLM * multi;
+			//	Panics
+			[[noreturn]]
+			void do_panic () const noexcept;
 			
 			
-			//	Maximum number of buffered bytes
-			Word max_bytes;
+			//	Determines -- based on control socket --
+			//	whether worker should stop
+			bool should_stop ();
 			
 			
 			//	Worker functions
-			static void worker_thread (void *);
-			void worker_thread_impl ();
+			void worker_func () noexcept;
+			void worker ();
 		
 		
 		public:
 		
 		
-			HTTPHandler (const HTTPHandler &) = delete;
-			HTTPHandler (HTTPHandler &&) = delete;
-			HTTPHandler & operator = (const HTTPHandler &) = delete;
-			HTTPHandler & operator = (HTTPHandler &&) = delete;
-		
-		
 			/**
-			 *	Starts up the HTTP handler.
+			 *	Creates and starts a new HTTPHandler.
 			 *
-			 *	\param [in] max_bytes
-			 *		The number of bytes the handler
-			 *		shall be willing to buffer on a
-			 *		given connection before it
-			 *		terminates the connection.  Set
-			 *		to zero for unlimited.  Defaults
-			 *		to zero.
+			 *	\param [in] panic
+			 *		A callback which will be invoked when
+			 *		and if something goes wrong internal
+			 *		to the handler.  Optional.  Default is
+			 *		to call std::abort.
 			 */
-			HTTPHandler (Word max_bytes=0);
+			HTTPHandler (PanicType panic=PanicType{});
 			/**
-			 *	Shuts down the HTTP handler.
+			 *	Shuts down and destroys an HTTPHandler.
 			 */
 			~HTTPHandler () noexcept;
 			
 			
 			/**
-			 *	Stops the handler, stalling all
-			 *	connections and preventing any
-			 *	further connections from being
-			 *	formed, but keeping its resources
-			 *	intact.
+			 *	Asynchronously performs an HTTP request.
 			 *
-			 *	Returns when the handler's internal
-			 *	worker thread has ended.
-			 */
-			void Stop () noexcept;
-			
-			
-			
-			/**
-			 *	Executes an HTTP GET request.
+			 *	\param [in] request
+			 *		The request to perform.
 			 *
-			 *	\param [in] url
-			 *		The URL to submit the request to,
-			 *		complete with query string.
-			 *	\param [in] callback
-			 *		A callback that shall be invoked
-			 *		when the request completes.
+			 *	\return
+			 *		A promise of a future HTTP response.
 			 */
-			void Get (
-				const String & url,
-				HTTPStatusStringDone callback
-			);
-			/**
-			 *
-			 */
-			void Post(
-				const String & url,
-				const String & content_type,
-				const String & body,
-				HTTPStatusStringDone callback
-			);
+			Promise<HTTPResponse> Execute (HTTPRequest request);
 	
 	
 	};

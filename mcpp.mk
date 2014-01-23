@@ -27,7 +27,6 @@ obj/dns_handler.o \
 obj/format.o \
 obj/hardware_concurrency.o \
 obj/http_handler.o \
-obj/http_request.o \
 obj/ip_address_range.o \
 obj/json.o \
 obj/mod.o \
