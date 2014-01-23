@@ -960,17 +960,22 @@ namespace MCPP {
 		//	from the data source
 		auto num_threads=data->GetSetting(num_threads_setting,default_num_threads);
 		
+		//	Panic callback for components
+		MCPP::PanicType panic(
+			[this] (std::exception_ptr ex) mutable {	Panic(std::move(ex));	}
+		);
+		
 		//	Fire up the thread pool
 		pool.Construct(
 			num_threads,
-			[this] () mutable {	Panic();	}
+			panic
 		);
 		
 		//	Fire up connection handler
 		connections.Construct(
 			*pool,
 			Nullable<Word>(),
-			[this] (std::exception_ptr ex) mutable {	Panic(std::move(ex));	}
+			std::move(panic)
 		);
 		
 		//	Install mods
