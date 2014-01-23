@@ -18,6 +18,7 @@ include world.mk
 
 mods: \
 bin/mods/mcpp_auth.dll \
+bin/mods/mcpp_auth_vanilla.dll \
 bin/mods/mcpp_ban.dll \
 bin/mods/mcpp_blacklist.dll \
 bin/mods/mcpp_brand.dll \

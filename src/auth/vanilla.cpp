@@ -267,35 +267,47 @@ class VanillaAuth : public Module {
 					event.From->GetUsername(),
 					data->ServerID,
 					data->Secret,
-					key.PublicKey(),
-					[=,client=event.From] (Nullable<String> result) mutable {
+					key.PublicKey()
+				).Then([=,client=event.From] (Promise<String> p) mutable {
+				
+					try {
 					
+						auto data=get(client);
+						
+						//	If client no longer exists, bail
+						//	out
+						if (data.IsNull()) return;
+						
+						//	Check what we got
+						String uuid;	//	Future use
 						try {
-							
-							auto data=get(client);
-							
-							//	If client no longer exists, bail
-							//	out
-							if (data.IsNull()) return;
-							
-							if (result.IsNull()) client->Disconnect(authentication_failed);
-							else authenticate(client,data);
+						
+							uuid=p.Get();
 						
 						} catch (...) {
 						
-							//	This shouldn't happen, but
-							//	if it does we don't have anything
-							//	higher up in the stack to
-							//	deal with this for us
+							client->Disconnect(authentication_failed);
 							
-							client->Disconnect(auth_callback_error);
-							
-							throw;
+							return;
 						
 						}
+						
+						authenticate(client,data);
+					
+					} catch (...) {
+					
+						//	This shouldn't happen, but if it
+						//	does we don't have anything higher up
+						//	in the stack to deal with this for
+						//	us
+						
+						client->Disconnect(auth_callback_error);
+						
+						throw;
 					
 					}
-				);
+				
+				});
 				#pragma GCC diagnostic pop
 				
 				return Status::Success;
