@@ -809,15 +809,6 @@ namespace MCPP {
 			 */
 			Word Received () const noexcept;
 			/**
-			 *	Retrieves the number of sends pending on
-			 *	this connection.
-			 *
-			 *	\return
-			 *		The number of send operations pending on
-			 *		this connection.
-			 */
-			Word Pending () const noexcept;
-			/**
 			 *	Disconnects this connection for no reason.
 			 *
 			 *	This function completing is not a guarantee
