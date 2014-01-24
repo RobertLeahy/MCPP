@@ -331,7 +331,7 @@ namespace MCPP {
 			 *	handle returned by Send before calling
 			 *	this function.
 			 */
-			void Disconnect () noexcept;
+			void Disconnect ();
 			/**
 			 *	Disconnects the client.
 			 *
@@ -345,7 +345,7 @@ namespace MCPP {
 			 *		The reason the client is being disconnected,
 			 *		defaults to the empty string.
 			 */
-			void Disconnect (const String & reason) noexcept;
+			void Disconnect (const String & reason);
 			/**
 			 *	Disconnects the client.
 			 *
@@ -358,7 +358,7 @@ namespace MCPP {
 			 *	\param [in] reason
 			 *		The reason the client is being disconnected.
 			 */
-			void Disconnect (String && reason) noexcept;
+			void Disconnect (String && reason);
 			
 			
 			/**

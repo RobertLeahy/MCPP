@@ -166,21 +166,21 @@ namespace MCPP {
 	}
 	
 	
-	void Client::Disconnect () noexcept {
+	void Client::Disconnect () {
 	
 		conn->Disconnect();
 	
 	}
 	
 	
-	void Client::Disconnect (const String & reason) noexcept {
+	void Client::Disconnect (const String & reason) {
 	
 		conn->Disconnect(reason);
 	
 	}
 	
 	
-	void Client::Disconnect (String && reason) noexcept {
+	void Client::Disconnect (String && reason) {
 	
 		conn->Disconnect(std::move(reason));
 	
