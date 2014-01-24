@@ -53,6 +53,7 @@ obj/network/windows/send_handle.o \
 obj/noise.o \
 obj/packet.o \
 obj/packet_router.o \
+obj/recursive_mutex.o \
 obj/rsa_key.o \
 obj/serializer.o \
 obj/server.o \
