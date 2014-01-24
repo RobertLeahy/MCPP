@@ -141,7 +141,7 @@ namespace MCPP {
 		
 		}
 	
-		return read([&] () {
+		return lock.Execute([&] () {
 		
 			SmartPointer<SendHandle> retr;
 			
@@ -182,7 +182,7 @@ namespace MCPP {
 	
 	void Client::EnableEncryption (const Vector<Byte> & key, const Vector<Byte> & iv) {
 	
-		write([&] () {	enable_encryption(key,iv);	});
+		lock.Execute([&] () {	enable_encryption(key,iv);	});
 	
 	}
 	
@@ -243,7 +243,7 @@ namespace MCPP {
 		
 		//	Acquire lock so encryption
 		//	state doesn't change
-		return read([&] () {
+		return lock.Execute([&] () {
 		
 			//	If no encryption, attempt to parse
 			//	and return at once
@@ -345,14 +345,14 @@ namespace MCPP {
 	
 	void Client::SetState (ProtocolState state) noexcept {
 	
-		write([&] () {	this->state=state;	});
+		return lock.Execute([&] () {	this->state=state;	});
 	
 	}
 	
 	
 	ProtocolState Client::GetState () const noexcept {
 	
-		return read([&] () {	return state;	});
+		return lock.Execute([&] () {	return state;	});
 	
 	}
 	
@@ -474,6 +474,30 @@ namespace MCPP {
 			);
 		
 		}
+	
+	}
+	
+	
+	void Client::atomic_perform (const AtomicType &, const Tuple<Vector<Byte>,Vector<Byte>> & t) {
+	
+		enable_encryption(
+			t.Item<0>(),
+			t.Item<1>()
+		);
+	
+	}
+	
+	
+	void Client::atomic_perform (const AtomicType &, ProtocolState state) noexcept {
+	
+		this->state=state;
+	
+	}
+	
+	
+	void Client::atomic_perform (AtomicType & sends, Vector<Byte> buffer) {
+	
+		sends.Add(Send(std::move(buffer)));
 	
 	}
 
