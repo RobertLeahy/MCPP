@@ -237,8 +237,7 @@ namespace MCPP {
 				lock.Acquire();
 				auto guard=AtExit([&] () {	lock.Release();	});
 				
-				Vector<SmartPointer<SendHandle>> retr;
-				
+				AtomicType retr;
 				atomic(retr,std::forward<Args>(args)...);
 				
 				return retr;

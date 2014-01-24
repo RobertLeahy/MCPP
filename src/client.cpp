@@ -142,38 +142,17 @@ namespace MCPP {
 		}
 	
 		return lock.Execute([&] () {
-		
-			SmartPointer<SendHandle> retr;
 			
-			if (encryptor.IsNull()) {
+			if (encryptor.IsNull()) return conn->Send(std::move(buffer));
+							
+			encryptor->BeginEncrypt();
+			auto guard=AtExit([&] () {	encryptor->EndEncrypt();	});
 			
-				retr=conn->Send(std::move(buffer));
-			
-			} else {
-			
-				encryptor->BeginEncrypt();
-				
-				try {
-				
-					retr=conn->Send(
-						encryptor->Encrypt(
-							std::move(buffer)
-						)
-					);
-				
-				} catch (...) {
-				
-					encryptor->EndEncrypt();
-					
-					throw;
-				
-				}
-				
-				encryptor->EndEncrypt();
-			
-			}
-			
-			return retr;
+			return conn->Send(
+				encryptor->Encrypt(
+					std::move(buffer)
+				)
+			);
 			
 		});
 	
