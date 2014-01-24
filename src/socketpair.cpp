@@ -3,7 +3,9 @@
 #include <stdexcept>
 #include <system_error>
 #ifndef ENVIRONMENT_WINDOWS
+#include <fcntl.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 
