@@ -102,8 +102,16 @@ namespace MCPP {
 				) client->Disconnect(buffer_too_long);
 			
 			} catch (...) {
+				
+				try {
 			
-				event.Conn->Disconnect(error_processing_recv);
+					event.Conn->Disconnect(error_processing_recv);
+					
+				} catch (...) {
+				
+					Panic(std::current_exception());
+					
+				}
 				
 				throw;
 			
@@ -434,8 +442,6 @@ namespace MCPP {
 		if (OnPanic) try {
 		
 			OnPanic(except);
-			
-			return;
 		
 		} catch (...) {	}
 		
