@@ -7,11 +7,13 @@
 #include <stdexcept>
 #include <system_error>
 #include <utility>
-#include <nameser.h>
 #ifdef ENVIRONMENT_WINDOWS
+#include <nameser.h>
 #include <windows.h>
 #else
+#include <arpa/nameser.h>
 #include <fcntl.h>
+#include <netdb.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #endif
@@ -658,6 +660,17 @@ namespace MCPP {
 	}
 	
 	
+	template <typename T>
+	void fix_endianness (Byte (& arr) [sizeof(T)]) noexcept {
+	
+		if (!Endianness::IsBigEndian<T>()) std::reverse(
+			std::begin(arr),
+			std::end(arr)
+		);
+		
+	}
+	
+	
 	DNSHandler::AQuery::AQuery () noexcept : Query(ns_t_a) {	}
 	
 	
@@ -704,14 +717,24 @@ namespace MCPP {
 			//	Convert each ares_addrttl structure
 			//	to a DNSRecord
 			Vector<DNSRecord> results(vec.Count());
-			for (auto & addrttl : vec) results.Add(
-				DNSRecord{
-					static_cast<UInt32>(
-						ntohl(addrttl.ipaddr.S_un.S_addr)
-					),
-					static_cast<Word>(addrttl.ttl)
-				}
-			);
+			for (auto & addrttl : vec) {
+			
+				union {
+					decltype(addrttl.ipaddr) in;
+					UInt32 out;
+					Byte buffer [sizeof(UInt32)];
+				};
+				in=addrttl.ipaddr;
+				fix_endianness<UInt32>(buffer);
+				
+				results.Add(
+					DNSRecord{
+						out,
+						static_cast<Word>(addrttl.ttl)
+					}
+				);
+				
+			};
 			
 			return results;
 		
@@ -768,31 +791,17 @@ namespace MCPP {
 			Vector<DNSRecord> results(vec.Count());
 			for (auto & addrttl : vec) {
 				
-				//	Reverse the endianness if necessary
-				static_assert(
-					std::extent<decltype(addrttl.ip6addr.u.Byte)>::value==sizeof(UInt128),
-					"in6_addr::u::Byte incorrectly-sized"
-				);
-				
 				union {
-					UInt128 ip6;
-					Byte ip6_buffer [sizeof(UInt128)];
+					decltype(addrttl.ip6addr) in;
+					UInt128 out;
+					Byte buffer [sizeof(UInt128)];
 				};
-				
-				if (Endianness::IsBigEndian<UInt128>()) std::memcpy(
-					ip6_buffer,
-					addrttl.ip6addr.u.Byte,
-					sizeof(UInt128)
-				);
-				else for (
-					Word i=0;
-					i<sizeof(UInt128);
-					++i
-				) ip6_buffer[i]=addrttl.ip6addr.u.Byte[sizeof(UInt128)-1-i];
+				in=addrttl.ip6addr;
+				fix_endianness<UInt128>(buffer);
 				
 				results.Add(
 					DNSRecord{
-						ip6,
+						out,
 						static_cast<Word>(addrttl.ttl)
 					}
 				);
@@ -992,7 +1001,9 @@ namespace MCPP {
 				struct in6_addr addr_6;
 				struct in_addr addr;
 				UInt128 addr_6_int;
-				Byte addr_6_arr [sizeof(UInt128)];
+				UInt32 addr_int;
+				Byte addr_6_buffer [sizeof(UInt128)];
+				Byte addr_buffer [sizeof(UInt32)];
 			};
 			int family;
 			int addrlen;
@@ -1002,21 +1013,16 @@ namespace MCPP {
 				family=AF_INET;
 				addrlen=sizeof(addr_6);
 				
-				//	Load IPv6 address into union
 				addr_6_int=static_cast<UInt128>(ip);
-				//	Reverse endianness if necessary
-				if (!Endianness::IsBigEndian<UInt128>()) std::reverse(
-					std::begin(addr_6_arr),
-					std::end(addr_6_arr)
-				);
+				fix_endianness<UInt128>(addr_6_buffer);
 			
 			} else {
 			
 				family=AF_INET6;
 				addrlen=sizeof(addr);
 				
-				//	Load IPv4 address into union
-				addr.S_un.S_addr=htonl(static_cast<UInt32>(ip));
+				addr_int=static_cast<UInt32>(ip);
+				fix_endianness<UInt32>(addr_buffer);
 			
 			}
 			
