@@ -10,6 +10,8 @@
 #include <aes_128_cfb_8.hpp>
 #include <network.hpp>
 #include <packet.hpp>
+#include <recursive_mutex.hpp>
+#include <scope_guard.hpp>
 #include <atomic>
 #include <functional>
 #include <type_traits>
@@ -18,123 +20,6 @@
 
 
 namespace MCPP {
-
-
-	/**
-	 *	\cond
-	 */
-	
-	
-	template <typename T, typename... Args>
-	class IsCallable {
-
-
-		class dummy {	};
-
-
-		template <typename T1, typename=void>
-		class inner {
-		
-		
-			public:
-			
-			
-				static const bool Value=false;
-		
-		
-		};
-		
-		
-		template <typename T1>
-		class inner<T1,typename std::enable_if<
-			!std::is_same<
-				decltype(
-					std::declval<T1>()(
-						std::declval<Args>()...
-					)
-				),
-				dummy
-			>::value
-		>::type> {
-		
-		
-			public:
-			
-			
-				static const bool Value=true;
-		
-		
-		};
-		
-		
-		public:
-		
-		
-			static const bool Value=inner<T>::Value;
-
-
-	};
-	
-	
-	namespace ClientImpl {
-	
-	
-		template <typename...>
-		class ContainsPacketImpl {	};
-		
-		
-		template <typename T, typename... Args_i>
-		class ContainsPacketImpl<T,Args_i...> {
-		
-		
-			public:
-			
-			
-				constexpr static Word Value=ContainsPacketImpl<Args_i...>::Value+(
-					std::is_base_of<
-						Packet,
-						typename std::decay<T>::type
-					>::value
-						?	1
-						:	0
-				);
-		
-		
-		};
-		
-		
-		template <>
-		class ContainsPacketImpl<> {
-		
-		
-			public:
-			
-			
-				constexpr static Word Value=0;
-		
-		
-		};
-	
-	
-		template <typename... Args>
-		class ContainsPacket {
-
-		
-			public:
-			
-			
-				constexpr static Word Value=ContainsPacketImpl<Args...>::Value;
-		
-		
-		};
-		
-		
-	}
-	 
-	 
-	/**
-	 *	\endcond
-	 */
 
 
 	/**
@@ -158,6 +43,12 @@ namespace MCPP {
 	
 	
 		friend class ClientList;
+		
+		
+		public:
+		
+		
+			typedef Vector<SmartPointer<SendHandle>> AtomicType;
 	
 	
 		private:
@@ -166,17 +57,9 @@ namespace MCPP {
 			//	Connection to connection
 			SmartPointer<Connection> conn;
 			
-			//	This lock must be held
-			//	while performing IO so
-			//	that the state of the
-			//	encryptor may be changed
-			//	in a threadsafe manner
-			mutable RWLock comm_lock;
-			//	The following allow comm_lock
-			//	to be "recursively" acquired
-			//	during send atomic callbacks
-			mutable std::atomic<bool> comm_locked;
-			mutable std::atomic<Word> comm_locked_id;
+			
+			//	Guards state sends, and encryptor
+			mutable RecursiveMutex lock;
 			
 			//	Encryption
 			
@@ -217,8 +100,6 @@ namespace MCPP {
 				auto buffer=Serialize(packet);
 				Vector<Byte> ciphertext;
 				
-				SmartPointer<SendHandle> retr;
-				
 				if (encryptor.IsNull()) {
 				
 					log(
@@ -229,342 +110,65 @@ namespace MCPP {
 						ciphertext
 					);
 					
-					retr=conn->Send(std::move(buffer));
-				
-				} else {
-				
-					encryptor->BeginEncrypt();
-					
-					try {
-					
-						ciphertext=encryptor->Encrypt(buffer);
-						
-						log(
-							packet,
-							T::State,
-							T::Direction,
-							buffer,
-							ciphertext
-						);
-						
-						retr=conn->Send(std::move(ciphertext));
-					
-					} catch (...) {
-					
-						encryptor->EndEncrypt();
-						
-						throw;
-					
-					}
-					
-					encryptor->EndEncrypt();
+					return conn->Send(std::move(buffer));
 				
 				}
 				
-				return retr;
+				ciphertext=encryptor->Encrypt(buffer);
 				
-			}
-			
-			
-			template <typename T>
-			typename std::enable_if<
-				std::is_same<
-					decltype(std::declval<T>()()),
-					void
-				>::value
-			>::type read (T && callback) const noexcept(noexcept(callback())) {
-			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-					
-					comm_lock.Read();
-				
-				}
-				
-				try {
-				
-					callback();
-					
-				} catch (...) {
-				
-					if (locked) comm_lock.CompleteRead();
-					
-					throw;
-				
-				}
-				
-				if (locked) comm_lock.CompleteRead();
-			
-			}
-			template <typename T>
-			typename std::enable_if<
-				!std::is_same<
-					decltype(std::declval<T>()()),
-					void
-				>::value,
-				decltype(std::declval<T>()())
-			>::type read (T && callback) const noexcept(
-				std::is_nothrow_move_constructible<decltype(callback())>::value &&
-				noexcept(callback())
-			) {
-			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-					
-					comm_lock.Read();
-				
-				}
-				
-				Nullable<decltype(callback())> returnthis;
-				
-				try {
-				
-					returnthis.Construct(callback());
-					
-				} catch (...) {
-				
-					if (locked) comm_lock.CompleteRead();
-					
-					throw;
-				
-				}
-				
-				if (locked) comm_lock.CompleteRead();
-				
-				return *returnthis;
-			
-			}
-			
-			
-			template <typename T>
-			typename std::enable_if<
-				std::is_same<
-					decltype(std::declval<T>()()),
-					void
-				>::value
-			>::type write (T && callback) const noexcept(noexcept(callback())) {
-			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-					
-					comm_lock.Write();
-				
-				}
-				
-				try {
-				
-					callback();
-				
-				} catch (...) {
-				
-					if (locked) comm_lock.CompleteWrite();
-					
-					throw;
-				
-				}
-				
-				if (locked) comm_lock.CompleteWrite();
-			
-			}
-			template <typename T>
-			typename std::enable_if<
-				!std::is_same<
-					decltype(std::declval<T>()()),
-					void
-				>::value,
-				decltype(std::declval<T>()())
-			>::type write (T && callback) const noexcept(
-				std::is_nothrow_move_constructible<decltype(callback())>::value &&
-				noexcept(callback())
-			) {
-			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-					
-					comm_lock.Write();
-				
-				}
-				
-				Nullable<decltype(callback())> returnthis;
-				
-				try {
-				
-					returnthis.Construct(callback());
-				
-				} catch (...) {
-				
-					if (locked) comm_lock.CompleteWrite();
-					
-					throw;
-				
-				}
-				
-				if (locked) comm_lock.CompleteWrite();
-				
-				return *returnthis;
-			
-			}
-			
-			
-			template <typename T>
-			inline typename std::enable_if<
-				std::is_base_of<Packet,T>::value,
-				SmartPointer<SendHandle>
-			>::type atomic_perform (const T & packet) {
-			
-				return send(packet);
-			
-			}
-			
-			
-			inline SmartPointer<SendHandle> atomic_perform (const Tuple<Vector<Byte>,Vector<Byte>> & t) {
-			
-				if (encryptor.IsNull()) enable_encryption(
-					t.Item<0>(),
-					t.Item<1>()
+				log(
+					packet,
+					T::State,
+					T::Direction,
+					buffer,
+					ciphertext
 				);
 				
-				return SmartPointer<SendHandle>();
+				return conn->Send(std::move(ciphertext));
 			
 			}
 			
 			
 			template <typename T>
-			static typename std::enable_if<
-				std::is_convertible<T,std::function<void ()>>::value,
-				SmartPointer<SendHandle>
-			>::type atomic_perform (T && callback) noexcept(noexcept(callback())) {
+			typename std::enable_if<
+				std::is_base_of<Packet,typename std::decay<T>::type>::value
+			>::type atomic_perform (AtomicType & sends, T && packet) {
+			
+				sends.Add(send(std::forward<T>(packet)));
+			
+			}
+			
+			
+			template <typename T>
+			typename std::enable_if<
+				std::is_convertible<typename std::decay<T>::type,std::function<void ()>>::value
+			>::type atomic_perform (const AtomicType &, T && callback) noexcept(noexcept(callback())) {
 			
 				callback();
-				
-				return SmartPointer<SendHandle>();
 			
 			}
 			
 			
-			inline SmartPointer<SendHandle> atomic_perform (ProtocolState state) noexcept {
-			
-				this->state=state;
-				
-				return SmartPointer<SendHandle>();
-			
-			}
+			void atomic_perform (const AtomicType &, const Tuple<Vector<Byte>,Vector<Byte>> &);
 			
 			
-			//	Recursion terminators
-			static inline void atomic_helper () noexcept {	}
-			static inline void atomic_helper (const SmartPointer<SendHandle> &) noexcept {	}
-			static inline void atomic_helper (const Vector<SmartPointer<SendHandle>> &) noexcept {	}
+			void atomic_perform (const AtomicType &, ProtocolState) noexcept;
+			
+			
+			void atomic_perform (AtomicType &, Vector<Byte>);
+			
+			
+			static void atomic (const AtomicType &) noexcept {	}
 			
 			
 			template <typename T, typename... Args>
-			typename std::enable_if<
-				!(
-					std::is_same<
-						typename std::decay<T>::type,
-						SmartPointer<SendHandle>
-					>::value ||
-					std::is_same<
-						typename std::decay<T>::type,
-						Vector<SmartPointer<SendHandle>>
-					>::value
-				)
-			>::type atomic_helper (T && t, Args &&... args) {
+			void atomic (AtomicType & sends, T && arg, Args &&... args) {
 			
-				atomic_perform(std::forward<T>(t));
+				atomic_perform(sends,std::forward<T>(arg));
 				
-				atomic_helper(std::forward<Args>(args)...);
+				atomic(sends,std::forward<Args>(args)...);
 			
 			}
-			
-			
-			template <typename T, typename... Args>
-			void atomic_helper (SmartPointer<SendHandle> & handle, T && t, Args &&... args) {
-			
-				auto h=atomic_perform(std::forward<T>(t));
-				
-				if (!h.IsNull()) handle=std::move(h);
-				
-				atomic_helper(
-					handle,
-					std::forward<Args>(args)...
-				);
-			
-			}
-			
-			
-			template <typename T, typename... Args>
-			void atomic_helper (Vector<SmartPointer<SendHandle>> & vec, T && t, Args &&... args) {
-			
-				auto h=atomic_perform(std::forward<T>(t));
-				
-				if (!h.IsNull()) vec.Add(std::move(h));
-				
-				atomic_helper(
-					vec,
-					std::forward<Args>(args)...
-				);
-			
-			}
-			
-			
-			template <typename... Args>
-			static typename std::enable_if<
-				ClientImpl::ContainsPacket<Args...>::Value==1,
-				SmartPointer<SendHandle>
-			>::type get_atomic () noexcept {
-			
-				return SmartPointer<SendHandle>();
-			
-			}
-			
-			
-			template <typename... Args>
-			static typename std::enable_if<
-				ClientImpl::ContainsPacket<Args...>::Value!=1,
-				Vector<SmartPointer<SendHandle>>
-			>::type get_atomic () noexcept {
-			
-				return Vector<SmartPointer<SendHandle>>();
-			
-			}
-			
 			
 			
 		public:
@@ -588,117 +192,54 @@ namespace MCPP {
 			
 			
 			/**
+			 *	Performs an arbitrary number of actions,
+			 *	atomically, in an arbitrary order.
 			 *
+			 *	Each parameter to this variadic member
+			 *	function template gives one action, actions
+			 *	shall be performed in the order they are passed,
+			 *	from left to right.
+			 *
+			 *	Passing in a ProtocolState shall change the
+			 *	client's state to that state.
+			 *
+			 *	Passing in any object which is a Packet will
+			 *	send that packet to this client.
+			 *
+			 *	Passing in a Vector<Byte> object will send that
+			 *	raw buffer of bytes to the client.
+			 *
+			 *	Passing in a tuple of two Vector<Byte> objects
+			 *	will enable encryption with the first item
+			 *	in the tuple as the secret key and the second
+			 *	as the initializaton vector.
+			 *
+			 *	Passing in any object which is convertible to
+			 *	std::function<void ()> will invoke that callback.
+			 *
+			 *	\tparam Args
+			 *		The types of arguments to this variadic
+			 *		member function template.
+			 *
+			 *	\param [in] args
+			 *		The arguments to this variadic member
+			 *		function template.
+			 *
+			 *	\return
+			 *		A collection of send results, one for each
+			 *		packet that was sent, with the send results
+			 *		corresponding to the sent packets in order
+			 *		from left to right.
 			 */
 			template <typename... Args>
-			typename std::enable_if<
-				ClientImpl::ContainsPacket<Args...>::Value==0
-			>::type Atomic (Args &&... args) {
+			AtomicType Atomic (Args &&... args) {
 			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
+				lock.Acquire();
+				auto guard=AtExit([&] () {	lock.Release();	});
 				
-					locked=false;
+				Vector<SmartPointer<SendHandle>> retr;
 				
-				} else {
-				
-					locked=true;
-				
-					comm_lock.Write();
-					
-					comm_locked=true;
-					comm_locked_id=Thread::ID();
-				
-				}
-				
-				try {
-				
-					atomic_helper(std::forward<Args>(args)...);
-				
-				} catch (...) {
-				
-					if (locked) {
-					
-						comm_locked=false;
-					
-						comm_lock.CompleteWrite();
-					
-					}
-					
-					throw;
-				
-				}
-				
-				if (locked) {
-				
-					comm_locked=false;
-					
-					comm_lock.CompleteWrite();
-				
-				}
-			
-			}
-			/**
-			 *
-			 */
-			template <typename... Args>
-			typename std::enable_if<
-				ClientImpl::ContainsPacket<Args...>::Value!=0,
-				decltype(get_atomic<Args...>())
-			>::type Atomic (Args &&... args) {
-			
-				auto retr=get_atomic<Args...>();
-			
-				bool locked;
-				if (
-					comm_locked &&
-					(Thread::ID()==comm_locked_id)
-				) {
-				
-					locked=false;
-				
-				} else {
-				
-					locked=true;
-				
-					comm_lock.Write();
-					
-					comm_locked=true;
-					comm_locked_id=Thread::ID();
-				
-				}
-				
-				try {
-				
-					atomic_helper(
-						retr,
-						std::forward<Args>(args)...
-					);
-				
-				} catch (...) {
-				
-					if (locked) {
-					
-						comm_locked=false;
-					
-						comm_lock.CompleteWrite();
-					
-					}
-					
-					throw;
-				
-				}
-				
-				if (locked) {
-				
-					comm_locked=false;
-					
-					comm_lock.CompleteWrite();
-				
-				}
+				atomic(retr,std::forward<Args>(args)...);
 				
 				return retr;
 			
@@ -751,7 +292,7 @@ namespace MCPP {
 			template <typename T>
 			SmartPointer<SendHandle> Send (const T & packet) {
 			
-				return read([&] () {	return send(packet);	});
+				return lock.Execute([&] () {	return send(packet);	});
 			
 			}
 			
