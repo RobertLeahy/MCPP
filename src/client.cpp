@@ -118,7 +118,7 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Client::Send (Vector<Byte> buffer) {
+	Promise<bool> Client::Send (Vector<Byte> buffer) {
 	
 		auto & server=Server::Get();
 		
@@ -430,13 +430,6 @@ namespace MCPP {
 	UInt64 Client::Received () const noexcept {
 	
 		return conn->Received();
-	
-	}
-	
-	
-	Word Client::Pending () const noexcept {
-	
-		return conn->Pending();
 	
 	}
 	

@@ -48,7 +48,7 @@ namespace MCPP {
 		public:
 		
 		
-			typedef Vector<SmartPointer<SendHandle>> AtomicType;
+			typedef Vector<Promise<bool>> AtomicType;
 	
 	
 		private:
@@ -95,7 +95,7 @@ namespace MCPP {
 			
 			
 			template <typename T>
-			SmartPointer<SendHandle> send (const T & packet) {
+			Promise<bool> send (const T & packet) {
 			
 				auto buffer=Serialize(packet);
 				Vector<Byte> ciphertext;
@@ -273,7 +273,7 @@ namespace MCPP {
 			 *		monitor the progress of the asynchronous
 			 *		send operation.
 			 */
-			SmartPointer<SendHandle> Send (Vector<Byte> buffer);
+			Promise<bool> Send (Vector<Byte> buffer);
 			/**
 			 *	Sends data to the client.
 			 *
@@ -290,7 +290,7 @@ namespace MCPP {
 			 *		send operation.
 			 */
 			template <typename T>
-			SmartPointer<SendHandle> Send (const T & packet) {
+			Promise<bool> Send (const T & packet) {
 			
 				return lock.Execute([&] () {	return send(packet);	});
 			
@@ -481,15 +481,6 @@ namespace MCPP {
 			 *		The number of bytes sent on this connection.
 			 */
 			UInt64 Sent () const noexcept;
-			/**
-			 *	Retrieves the number of send operations to this
-			 *	client which are pending.
-			 *
-			 *	\return
-			 *		The number of send operations waiting to
-			 *		complete to this client.
-			 */
-			Word Pending () const noexcept;
 			
 	
 	
