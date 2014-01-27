@@ -1,10 +1,6 @@
 all: data_providers
 
 
-DP_LIB:=$(LIB) \
-bin/libmysql.dll
-
-
 .PHONY: data_providers
 data_providers: bin/data_provider.dll bin/mysql.ini
 
@@ -15,18 +11,17 @@ bin/data_provider.dll: bin/data_providers/mysql_data_provider.dll | bin
 
 bin/data_providers/mysql_data_provider.dll: \
 $(OBJ) \
-obj/mysql_data_provider/mysql_connection.o \
-obj/mysql_data_provider/mysql_data_provider.o \
-obj/mysql_data_provider/log.o \
+obj/data_provider.o \
+obj/mysql_data_provider/blob.o \
+obj/mysql_data_provider/connection.o \
+obj/mysql_data_provider/data_provider.o \
 obj/mysql_data_provider/factory.o \
-obj/mysql_data_provider/binary.o \
-obj/mysql_data_provider/key_value.o \
-obj/mysql_data_provider/settings.o \
-obj/mysql_data_provider/info.o \
-obj/data_provider.o | \
-$(DP_LIB) \
+obj/mysql_data_provider/get_buffer.o \
+obj/mysql_data_provider/prepared_statement.o | \
+$(LIB) \
+bin/libmysql.dll \
 bin/data_providers
-	$(GPP) -shared -o bin/data_providers/data_provider.dll $^ $(DP_LIB)
+	$(GPP) -shared -o bin/data_providers/data_provider.dll $^ $(LIB) bin/libmysql.dll
 	cmd /c "move bin\data_providers\data_provider.dll $@"
 	
 	

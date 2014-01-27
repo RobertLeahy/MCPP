@@ -16,6 +16,53 @@ namespace MCPP {
 
 
 	/**
+	 *	A piece of information about a data
+	 *	provider.
+	 */
+	class DataProviderDatum {
+	
+	
+		public:
+		
+		
+			/**
+			 *	A descriptive name for this piece of
+			 *	data.
+			 */
+			String Name;
+			/**
+			 *	The data.
+			 */
+			String Value;
+	
+	
+	};
+
+
+	/**
+	 *	Provides information about a data provider.
+	 */
+	class DataProviderInfo {
+	
+	
+		public:
+		
+		
+			/**
+			 *	The name of the data provider.
+			 */
+			String Name;
+			/**
+			 *	A collection of pieces of information
+			 *	about the data provider.
+			 */
+			Vector<DataProviderDatum> Data;
+	
+	
+	};
+
+
+	/**
 	 *	Specifies an interface to which providers
 	 *	that wish to provide data for the MCPP server
 	 *	shall conform.
@@ -97,7 +144,7 @@ namespace MCPP {
 			 *		Information about a concrete implementation of
 			 *		this abstract class.
 			 */
-			virtual Tuple<String,Vector<Tuple<String,String>>> GetInfo () = 0;
+			virtual DataProviderInfo GetInfo () = 0;
 			
 			
 			/**
