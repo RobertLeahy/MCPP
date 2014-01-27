@@ -131,7 +131,17 @@ namespace MCPP {
 				return *this;
 				
 			}
+
+
+			/**
+			 *	Disengages this scope guard, preventing
+			 *	its callback from firing.
+			 */
+			void Disengage () noexcept {
 			
+				engaged=false;
+			
+			}
 		
 		
 	};
