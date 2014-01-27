@@ -34,7 +34,6 @@ obj/mod_loader.o \
 obj/multi_scope_guard.o \
 obj/nbt.o \
 obj/network/connection.o \
-obj/network/send_handle.o \
 obj/network/windows/accept_command.o \
 obj/network/windows/accept_data.o \
 obj/network/windows/completion_command.o \
@@ -49,7 +48,6 @@ obj/network/windows/make_socket.o \
 obj/network/windows/receive_command.o \
 obj/network/windows/reference_manager.o \
 obj/network/windows/send_command.o \
-obj/network/windows/send_handle.o \
 obj/noise.o \
 obj/packet.o \
 obj/packet_router.o \

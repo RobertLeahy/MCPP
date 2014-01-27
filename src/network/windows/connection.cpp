@@ -18,7 +18,7 @@ namespace MCPP {
 			is_shutdown=true;
 			
 			//	Fail all remaining receives
-			for (auto & pair : sends) pair.second->Fail();
+			for (auto & pair : sends) pair.second->Completion.Complete(false);
 			
 			return true;
 		
@@ -184,8 +184,8 @@ namespace MCPP {
 			sent+=packet.Count;
 			handler.Sent+=packet.Count;
 			
-			//	Get the corresponding send handle
-			auto handle=sends_lock.Execute([&] () mutable {
+			//	Get the corresponding send command
+			auto command=sends_lock.Execute([&] () mutable {
 			
 				auto iter=sends.find(packet.Command);
 				
@@ -198,7 +198,7 @@ namespace MCPP {
 			});
 			
 			//	Complete
-			handle->Complete(handler.Pool);
+			command->Completion.Complete(true);
 			
 			complete();
 		
@@ -367,23 +367,24 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Connection::Send (Vector<Byte> buffer) {
+	Promise<bool> Connection::Send (Vector<Byte> buffer) {
 	
-		//	Create a send handle to represent
-		//	this send operation
-		auto handle=SmartPointer<SendHandle>::Make(std::move(buffer));
-		
 		//	If attempting to send 0 bytes,
-		//	succeed unconditionally (what
-		//	does it even mean to send 0
-		//	bytes?)
-		if (handle->Command.Buffer.Count()==0) {
-
-			handle->SetState(SendState::Sent);
+		//	succeed unconditionally (what does
+		//	it even mean to send 0 bytes?)
+		if (buffer.Count()==0) {
+		
+			Promise<bool> promise;
+			promise.Complete(true);
 			
-			return handle;
-
+			return promise;
+		
 		}
+	
+		//	Create a send command for this
+		//	send operation
+		auto command=std::unique_ptr<SendCommand>(new SendCommand(std::move(buffer)));
+		auto promise=command->Completion;
 		
 		//	Lock, add, and send
 		if (!sends_lock.Execute([&] () mutable {
@@ -406,14 +407,14 @@ namespace MCPP {
 			//	I/O operation, 
 			
 			//	Add
+			auto ptr=command.get();
 			auto pair=sends.emplace(
-				&(handle->Command),
-				handle
+				ptr,
+				std::move(command)
 			);
 			
-			//	If an exception is thrown, we
-			//	must roll back
-			auto result=handle->Command.Dispatch(socket);
+			//	Send
+			auto result=ptr->Dispatch(socket);
 			//	Something went wrong on the
 			//	connection
 			if (result!=0) {
@@ -443,9 +444,9 @@ namespace MCPP {
 			
 			return true;
 		
-		})) handle->Fail();
+		})) promise.Complete(false);
 		
-		return handle;
+		return promise;
 	
 	}
 	

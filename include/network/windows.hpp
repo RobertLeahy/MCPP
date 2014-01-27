@@ -9,6 +9,7 @@
 #include <rleahylib/rleahylib.hpp>
 #include <network.hpp>
 #include <thread_pool.hpp>
+#include <promise.hpp>
 #include <mswsock.h>
 #include <windows.h>
 #include <Ws2tcpip.h>
@@ -306,6 +307,7 @@ namespace MCPP {
 			
 			
 				Vector<Byte> Buffer;
+				Promise<bool> Completion;
 				
 				
 				//	Makes a WSASend request, queuing
@@ -524,103 +526,6 @@ namespace MCPP {
 	
 	
 	/**
-	 *	Represents a single send across a single
-	 *	connection, and allows for that send to be
-	 *	monitored.
-	 */
-	class SendHandle {
-	
-	
-		friend class Connection;
-	
-	
-		private:
-		
-		
-			//	A pointer to a send handle is
-			//	guaranteed to be a pointer to
-			//	a SendCommand, which is in turn
-			//	guaranteed to be a pointer to
-			//	an OVERLAPPED structure
-			NetworkImpl::SendCommand Command;
-			
-			
-			//	Current state of the send
-			SendState state;
-			mutable Mutex lock;
-			mutable CondVar wait;
-			Vector<std::function<void (SendState)>> callbacks;
-			
-			
-			//	Marks the current send as having failed,
-			//	and dispatches all waiting callbacks
-			//	synchronously
-			void Fail () noexcept;
-			//	Marks the current send as having succeeded,
-			//	and dispatches all waiting callbacks
-			//	asynchronously using the provided thread
-			//	pool
-			void Complete (ThreadPool &);
-			//	Simply sets the state
-			//	As this does not invoke callbacks, it
-			//	is assumed that this object is not
-			//	yet referenced by more than one thread,
-			//	and therefore this operation is not
-			//	thread safe
-			void SetState (SendState) noexcept;
-			
-			
-		public:
-		
-		
-			/**
-			 *	\cond
-			 */
-			 
-			 
-			//	Creates a send handle, passing the provided argument
-			//	through to the constructor of the underlying
-			//	send command
-			SendHandle (Vector<Byte>) noexcept;
-			 
-			 
-			/**
-			 *	\endcond
-			 */
-			 
-			
-			/**
-			 *	Waits for the send to complete.
-			 *
-			 *	\return
-			 *		The state in which the send completed.
-			 */
-			SendState Wait () const noexcept;
-			/**
-			 *	Adds a callback to be invoked once the
-			 *	send completes.
-			 *
-			 *	The callback will be invoked immediately if
-			 *	the send has already completed.
-			 *
-			 *	\param [in] callback
-			 *		A callback which shall be invoked when the
-			 *		send has completed.
-			 */
-			void Then (std::function<void (SendState)> callback);
-			/**
-			 *	Determines the send's current state.
-			 *
-			 *	\return
-			 *		The send's current state.
-			 */
-			SendState State () const noexcept;
-	
-	
-	};
-	
-	
-	/**
 	 *	Represents a connection to a single remote
 	 *	host.
 	 */
@@ -676,7 +581,7 @@ namespace MCPP {
 			
 			
 			//	Pending sends
-			std::unordered_map<NetworkImpl::CompletionCommand *,SmartPointer<SendHandle>> sends;
+			std::unordered_map<NetworkImpl::CompletionCommand *,std::unique_ptr<NetworkImpl::SendCommand>> sends;
 			Mutex sends_lock;
 			
 			
@@ -766,10 +671,13 @@ namespace MCPP {
 			 *		The data to sent.
 			 *
 			 *	\return
-			 *		A handle through which the send may be
-			 *		monitored.
+			 *		A promise for a boolean.  The value
+			 *		will be set when the asynchronous
+			 *		send operation completes.  It will be
+			 *		set to \em true if the send succeeds,
+			 *		\em false otherwise.
 			 */
-			SmartPointer<SendHandle> Send (Vector<Byte> buffer);
+			Promise<bool> Send (Vector<Byte> buffer);
 			
 			
 			/**
