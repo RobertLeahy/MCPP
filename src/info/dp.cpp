@@ -14,7 +14,7 @@ static const String help("Displays information about the data provider the serve
 static const String dp_banner("DATA PROVIDER:");
 
 
-class DataProviderInfo : public Module, public InformationProvider {
+class DPInfo : public Module, public InformationProvider {
 
 
 	public:
@@ -63,11 +63,11 @@ class DataProviderInfo : public Module, public InformationProvider {
 			
 			//	Sort the key/value pairs
 			std::sort(
-				info.Item<1>().begin(),
-				info.Item<1>().end(),
-				[] (const Tuple<String,String> & a, const Tuple<String,String> & b) {
+				info.Data.begin(),
+				info.Data.end(),
+				[] (const DataProviderDatum & a, const DataProviderDatum & b) {
 				
-					return a.Item<0>()<b.Item<0>();
+					return a.Name<b.Name;
 				
 				}
 			);
@@ -75,18 +75,18 @@ class DataProviderInfo : public Module, public InformationProvider {
 			message	<< ChatStyle::Bold
 					<< dp_banner
 					<< Newline
-					<< info.Item<0>()	//	Name of data provider
+					<< info.Name
 					<< ":"
 					<< ChatFormat::Pop;
 					
-			for (const auto & t : info.Item<1>()) {
+			for (const auto & datum : info.Data) {
 			
 				message	<< Newline
 						<< ChatStyle::Bold
-						<< t.Item<0>()
+						<< datum.Name
 						<< ": "
 						<< ChatFormat::Pop
-						<< t.Item<1>();
+						<< datum.Value;
 			
 			}
 		
@@ -96,4 +96,4 @@ class DataProviderInfo : public Module, public InformationProvider {
 };
 
 
-INSTALL_MODULE(DataProviderInfo)
+INSTALL_MODULE(DPInfo)
