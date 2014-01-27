@@ -1,4 +1,8 @@
-mods: \
+mods: commands
+
+
+.PHONY: commands
+commands: \
 bin/mods/mcpp_command.dll \
 bin/mods/mcpp_command_blacklist.dll \
 bin/mods/mcpp_command_kick.dll \

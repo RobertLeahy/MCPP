@@ -1,4 +1,8 @@
-mods: \
+mods: info
+
+
+.PHONY: info
+info: \
 bin/mods/mcpp_info.dll \
 bin/mods/mcpp_info_ban.dll \
 bin/mods/mcpp_info_blacklist.dll \
