@@ -20,7 +20,8 @@ obj/mysql_data_provider/key_value.o \
 obj/mysql_data_provider/settings.o \
 obj/mysql_data_provider/info.o \
 obj/data_provider.o | \
-$(LIB)
+$(LIB) \
+bin/data_providers
 	$(GPP) -shared -o bin/data_providers/data_provider.so $^ $(LIB) -lmysqlclient $(call LINK,data_provider.so)
 	cp bin/data_providers/data_provider.so $@
 	

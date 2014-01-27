@@ -118,7 +118,7 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> Client::Send (Vector<Byte> buffer) {
+	Promise<bool> Client::Send (Vector<Byte> buffer) {
 	
 		auto & server=Server::Get();
 		
@@ -142,38 +142,17 @@ namespace MCPP {
 		}
 	
 		return lock.Execute([&] () {
-		
-			SmartPointer<SendHandle> retr;
 			
-			if (encryptor.IsNull()) {
+			if (encryptor.IsNull()) return conn->Send(std::move(buffer));
+							
+			encryptor->BeginEncrypt();
+			auto guard=AtExit([&] () {	encryptor->EndEncrypt();	});
 			
-				retr=conn->Send(std::move(buffer));
-			
-			} else {
-			
-				encryptor->BeginEncrypt();
-				
-				try {
-				
-					retr=conn->Send(
-						encryptor->Encrypt(
-							std::move(buffer)
-						)
-					);
-				
-				} catch (...) {
-				
-					encryptor->EndEncrypt();
-					
-					throw;
-				
-				}
-				
-				encryptor->EndEncrypt();
-			
-			}
-			
-			return retr;
+			return conn->Send(
+				encryptor->Encrypt(
+					std::move(buffer)
+				)
+			);
 			
 		});
 	
@@ -187,21 +166,21 @@ namespace MCPP {
 	}
 	
 	
-	void Client::Disconnect () noexcept {
+	void Client::Disconnect () {
 	
 		conn->Disconnect();
 	
 	}
 	
 	
-	void Client::Disconnect (const String & reason) noexcept {
+	void Client::Disconnect (const String & reason) {
 	
 		conn->Disconnect(reason);
 	
 	}
 	
 	
-	void Client::Disconnect (String && reason) noexcept {
+	void Client::Disconnect (String && reason) {
 	
 		conn->Disconnect(std::move(reason));
 	
@@ -430,13 +409,6 @@ namespace MCPP {
 	UInt64 Client::Received () const noexcept {
 	
 		return conn->Received();
-	
-	}
-	
-	
-	Word Client::Pending () const noexcept {
-	
-		return conn->Pending();
 	
 	}
 	

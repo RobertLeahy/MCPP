@@ -163,6 +163,7 @@ namespace MCPP {
 			inline void load_mods ();
 			inline void cleanup_events () noexcept;
 			inline void stop_impl ();
+			[[noreturn]]
 			inline void panic_impl (std::exception_ptr except=std::exception_ptr()) noexcept;
 		
 		
@@ -450,6 +451,7 @@ namespace MCPP {
 			 *	Should be called when an irrecoverable
 			 *	error is experienced.
 			 */
+			[[noreturn]]
 			void Panic () noexcept;
 			/**
 			 *	Should be called when an irrecoverable
@@ -459,6 +461,7 @@ namespace MCPP {
 			 *		A reason string which describes
 			 *		the irrecoverable error.
 			 */
+			[[noreturn]]
 			void Panic (const String & reason) noexcept;
 			/**
 			 *	Should be called when an irrecoverable
@@ -469,6 +472,7 @@ namespace MCPP {
 			 *		points to the exception representing
 			 *		the irrecoverable error.
 			 */
+			[[noreturn]]
 			void Panic (std::exception_ptr except) noexcept;
 			
 			
