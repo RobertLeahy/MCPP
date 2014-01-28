@@ -240,3 +240,7 @@ gcc*/
 Doxyfile
 env.bat
 experimental/
+/*.mk
+/Makefile
+/*.bat
+!/build.bat
