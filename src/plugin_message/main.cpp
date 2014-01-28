@@ -193,9 +193,9 @@ namespace MCPP {
 	}
 	
 	
-	SmartPointer<SendHandle> PluginMessages::Send (PluginMessage message) {
+	Nullable<Promise<bool>> PluginMessages::Send (PluginMessage message) {
 	
-		SmartPointer<SendHandle> retr;
+		Nullable<Promise<bool>> retr;
 		
 		if (message.Endpoint.IsNull()) return retr;
 		
@@ -214,7 +214,7 @@ namespace MCPP {
 			packet.Channel=std::move(message.Channel);
 			packet.Data=std::move(message.Buffer);
 			
-			retr=message.Endpoint->Send(packet);
+			retr.Construct(message.Endpoint->Send(packet));
 		
 		}
 		

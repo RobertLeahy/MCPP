@@ -12,6 +12,7 @@
 #include <mod.hpp>
 #include <packet.hpp>
 #include <packet_router.hpp>
+#include <promise.hpp>
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
@@ -143,10 +144,11 @@ namespace MCPP {
 			 *		The message to send.
 			 *
 			 *	\return
-			 *		A send handle if the message
-			 *		was sent, null otherwise.
+			 *		A promise for the results of the
+			 *		send if a send was performed, null
+			 *		otherwise.
 			 */
-			SmartPointer<SendHandle> Send (PluginMessage message);
+			Nullable<Promise<bool>> Send (PluginMessage message);
 	
 	
 	};
