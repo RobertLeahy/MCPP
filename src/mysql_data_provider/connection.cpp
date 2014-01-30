@@ -39,7 +39,7 @@ namespace MCPP {
 		
 			if (mysql_options(
 				get(),
-				MYSQL_OPT_RECONNECT,
+				option,
 				&arg
 			)!=0) Raise();
 		
