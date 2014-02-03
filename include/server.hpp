@@ -146,7 +146,7 @@ namespace MCPP {
 			std::unordered_set<String> verbose;
 			
 			//	Shutdown synchronization
-			Word num_shutdowns;
+			bool is_shutting_down;
 			Mutex shutdown_lock;
 			CondVar shutdown_wait;
 			

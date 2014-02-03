@@ -67,12 +67,12 @@ namespace MCPP {
 		data(nullptr),
 		interpreter(nullptr),
 		provider(nullptr),
+		is_shutting_down(false)
 	{
 	
 		debug=false;
 		log_all_packets=false;
 		verbose_all=false;
-		num_shutdowns=0;
 		
 		OnReceive=[=] (ReceiveEvent event) {
 		
@@ -131,9 +131,7 @@ namespace MCPP {
 		//	Make sure we don't destroy this
 		//	object while a thread is calling
 		//	Stop on it.
-		shutdown_lock.Acquire();
-		while (num_shutdowns!=0) shutdown_wait.Sleep(shutdown_lock);
-		shutdown_lock.Release();
+		shutdown_lock.Execute([&] () {	while (is_shutting_down) shutdown_wait.Sleep(shutdown_lock);	});
 	
 	}
 	
@@ -155,9 +153,15 @@ namespace MCPP {
 	
 	void Server::Stop () noexcept {
 	
-		shutdown_lock.Acquire();
-		++num_shutdowns;
-		shutdown_lock.Release();
+		if (!shutdown_lock.Execute([&] () {
+		
+			if (is_shutting_down) return false;
+			
+			is_shutting_down=true;
+			
+			return true;
+		
+		})) return;
 	
 		try {
 	
@@ -167,30 +171,41 @@ namespace MCPP {
 			
 					stop_impl();
 					
-					//	None of this can throw
-					shutdown_lock.Acquire();
-					if ((--num_shutdowns)==0) shutdown_wait.WakeAll();
-					shutdown_lock.Release();
-					
 				} catch (...) {
 				
-					shutdown_lock.Acquire();
-					if ((--num_shutdowns)==0) shutdown_wait.WakeAll();
-					shutdown_lock.Release();
+					shutdown_lock.Execute([&] () {
+					
+						is_shutting_down=false;
+						
+						shutdown_wait.WakeAll();
+					
+					});
 				
 					Panic(std::current_exception());
 					
 					throw;
 				
 				}
+				
+				shutdown_lock.Execute([&] () {
+				
+					is_shutting_down=false;
+					
+					shutdown_wait.WakeAll();
+				
+				});
 			
 			});
 			
 		} catch (...) {
 		
-			shutdown_lock.Acquire();
-			if ((--num_shutdowns)==0) shutdown_wait.WakeAll();
-			shutdown_lock.Release();
+			shutdown_lock.Execute([&] () {
+			
+				is_shutting_down=false;
+				
+				shutdown_wait.WakeAll();
+			
+			});
 		
 			Panic(std::current_exception());
 		
