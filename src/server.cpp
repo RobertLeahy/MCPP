@@ -64,7 +64,9 @@ namespace MCPP {
 
 	Server::Server () :
 		running(false),
-		data(nullptr)
+		data(nullptr),
+		interpreter(nullptr),
+		provider(nullptr),
 	{
 	
 		debug=false;
