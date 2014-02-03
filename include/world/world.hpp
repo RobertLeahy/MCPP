@@ -1601,7 +1601,6 @@ namespace MCPP {
 		
 		
 			World () noexcept;
-			~World () noexcept;
 			virtual const String & Name () const noexcept override;
 			virtual Word Priority () const noexcept override;
 			virtual void Install () override;

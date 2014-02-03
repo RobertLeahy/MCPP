@@ -35,16 +35,6 @@ namespace MCPP {
 		generate_time=0;
 		populated=0;
 		populate_time=0;
-		
-		//	Initialize events
-		init_events();
-	
-	}
-	
-	
-	World::~World () noexcept {
-	
-		destroy_events();
 	
 	}
 	
@@ -94,7 +84,7 @@ namespace MCPP {
 		
 		//	Install shutdown handler to cleanup
 		//	any module code
-		server.OnShutdown.Add([this] () {	cleanup_events();	});
+		server.OnShutdown.Add([this] () mutable {	cleanup_events();	});
 		
 		//	Tie into the save loop
 		SaveManager::Get().Add([this] () mutable {	maintenance();	});

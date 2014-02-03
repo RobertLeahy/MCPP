@@ -33,45 +33,9 @@ namespace MCPP {
 	
 	
 	template <Word n, typename T>
-	static inline void init_array (T (& arr) [n]) noexcept(std::is_nothrow_default_constructible<T>::value) {
-	
-		for (auto & i : arr) new (&i) T ();
-	
-	}
-	
-	
-	template <Word n, typename T>
-	static inline void destroy_array (T (& arr) [n]) noexcept {
-	
-		for (auto & i : arr) i.~T();
-	
-	}
-	
-	
-	template <Word n, typename T>
 	static inline void cleanup_array (T (& arr) [n]) noexcept {
 	
 		for (auto & i : arr) i=T();
-	
-	}
-	
-	
-	void World::init_events () noexcept {
-	
-		init_array(OnReplace);
-		init_array(OnPlace);
-		init_array(CanReplace);
-		init_array(CanPlace);
-	
-	}
-	
-	
-	void World::destroy_events () noexcept {
-	
-		destroy_array(OnReplace);
-		destroy_array(OnPlace);
-		destroy_array(CanReplace);
-		destroy_array(CanPlace);
 	
 	}
 	
