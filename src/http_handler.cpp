@@ -114,7 +114,7 @@ namespace MCPP {
 	
 	static const String content_type_header("content-type");
 	static const Regex charset(
-		"(?:^|\\s)charset\\=(\\S+)(?:$|\\s)",
+		"(?:^|\\s|;)charset\\s*\\=\\s*(\\S+)(?:$|\\s)",
 		RegexOptions().SetIgnoreCase()
 	);
 	
