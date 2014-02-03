@@ -66,20 +66,14 @@ namespace MCPP {
 	
 	ClientListIterator ClientList::begin () noexcept {
 	
-		return ClientListIterator(
-			this,
-			map.begin()
-		);
+		return map_lock.Read([&] () {	return ClientListIterator(this,map.begin());	});
 	
 	}
 	
 	
 	ClientListIterator ClientList::end () noexcept {
-		
-		return ClientListIterator(
-			this,
-			map.end()
-		);
+	
+		return map_lock.Read([&] () {	return ClientListIterator(this,map.end());	});
 	
 	}
 	
