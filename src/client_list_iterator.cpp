@@ -4,6 +4,19 @@
 namespace MCPP {
 
 
+	void ClientListIterator::destroy () noexcept {
+	
+		if (list!=nullptr) {
+		
+			list->map_lock.CompleteRead();
+			
+			list=nullptr;
+		
+		}
+	
+	}
+
+
 	ClientListIterator::ClientListIterator (ClientList * list, iter_type iter) noexcept
 		:	iter(std::move(iter)),
 			list(list)
@@ -21,15 +34,43 @@ namespace MCPP {
 	}
 	
 	
+	ClientListIterator::ClientListIterator (ClientListIterator && other) noexcept : iter(std::move(other.iter)), list(other.list) {
+	
+		other.list=nullptr;
+	
+	}
+	
+	
 	ClientListIterator & ClientListIterator::operator = (const ClientListIterator & other) noexcept {
 	
-		list->map_lock.CompleteRead();
+		if (this!=&other) {
 		
-		iter=other.iter;
-		list=other.list;
-		
-		list->map_lock.Read();
+			destroy();
+			
+			iter=other.iter;
+			list=other.list;
+			
+			list->map_lock.Read();
+			
+		}
 	
+		return *this;
+	
+	}
+	
+	
+	ClientListIterator & ClientListIterator::operator = (ClientListIterator && other) noexcept {
+	
+		if (this!=&other) {
+		
+			destroy();
+		
+			iter=std::move(other.iter);
+			list=other.list;
+			other.list=nullptr;
+		
+		}
+		
 		return *this;
 	
 	}
@@ -37,7 +78,7 @@ namespace MCPP {
 	
 	ClientListIterator::~ClientListIterator () noexcept {
 	
-		list->map_lock.CompleteRead();
+		destroy();
 	
 	}
 	

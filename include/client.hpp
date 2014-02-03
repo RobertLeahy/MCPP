@@ -513,6 +513,9 @@ namespace MCPP {
 			ClientList * list;
 			
 			
+			void destroy () noexcept;
+			
+			
 			ClientListIterator (ClientList *, iter_type) noexcept;
 			
 			
@@ -522,7 +525,9 @@ namespace MCPP {
 			ClientListIterator () = delete;
 			~ClientListIterator () noexcept;
 			ClientListIterator (const ClientListIterator &) noexcept;
+			ClientListIterator (ClientListIterator &&) noexcept;
 			ClientListIterator & operator = (const ClientListIterator &) noexcept;
+			ClientListIterator & operator = (ClientListIterator &&) noexcept;
 			
 			
 			SmartPointer<Client> & operator * () noexcept;
