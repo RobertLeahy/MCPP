@@ -31,8 +31,9 @@ obj/world/populators.o \
 obj/world/process.o \
 obj/world/world.o \
 obj/world/world_handle.o | \
-$(MOD_LIB)
-	$(GPP) -shared -o $@ $^ $(MOD_LIB)
+$(MOD_LIB) \
+bin/mods/mcpp_save.dll
+	$(GPP) -shared -o $@ $^ $(MOD_LIB) bin/mods/mcpp_save.dll
 	
 	
 WORLD_LIB:=$(MOD_LIB) bin/mods/mcpp_world.dll

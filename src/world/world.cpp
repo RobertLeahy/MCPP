@@ -1,3 +1,4 @@
+#include <save/save.hpp>
 #include <world/world.hpp>
 #include <server.hpp>
 #include <singleton.hpp>
@@ -78,15 +79,6 @@ namespace MCPP {
 			String(this->seed)
 		);
 		
-		//	Time per maintenance cycle
-		auto maintenance_interval=server.Data().GetSetting(
-			maintenance_interval_key
-		);
-		if (
-			maintenance_interval.IsNull() ||
-			!maintenance_interval->ToInteger(&(this->maintenance_interval))
-		) this->maintenance_interval=default_maintenance_interval;
-		
 		//	World type
 		auto type=server.Data().GetSetting(
 			type_key
@@ -104,11 +96,8 @@ namespace MCPP {
 		//	any module code
 		server.OnShutdown.Add([this] () {	cleanup_events();	});
 		
-		//	Begin maintenance
-		server.Pool().Enqueue(
-			this->maintenance_interval,
-			[this] () {	maintenance();	}
-		);
+		//	Tie into the save loop
+		SaveManager::Get().Add([this] () mutable {	maintenance();	});
 	
 	}
 	
