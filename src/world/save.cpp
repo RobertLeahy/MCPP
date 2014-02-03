@@ -1,6 +1,8 @@
 #include <world/world.hpp>
+#include <compression.hpp>
 #include <server.hpp>
 #include <cstring>
+#include <iterator>
 
 
 namespace MCPP {
@@ -47,10 +49,14 @@ namespace MCPP {
 		//	Perform save
 		try {
 		
+			auto compressed=Deflate(
+				std::begin(buffer),
+				std::end(buffer)
+			);
 			server.Data().SaveBinary(
 				key(column),
-				buffer,
-				ColumnContainer::Size
+				compressed.begin(),
+				compressed.Count()
 			);
 		
 		} catch (...) {

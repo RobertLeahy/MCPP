@@ -1,34 +1,39 @@
 #include <world/world.hpp>
 #include <server.hpp>
+#include <cstring>
 
 
 namespace MCPP {
 
 
 	ColumnState World::load (ColumnContainer & column) {
+	
+		//	Attemt to retrieve data
+		auto buffer=Server::Get().Data().GetBinary(key(column));
+		//	If no data was retrieved from
+		//	the backing store, the column
+		//	will have to be generated
+		if (buffer.IsNull()) return ColumnState::Generating;
 		
-		//	Attempt to retrieve data
-		Word len=ColumnContainer::Size;
-		if (!(
-			//	Make sure data is actually loaded
-			//	from the backing store.
-			//
-			//	If it's not, the column will have
-			//	to be generated.
-			Server::Get().Data().GetBinary(
-				key(column),
-				column.Get(),
-				&len
-			) &&
-			//	Make sure that the data coming
-			//	from the backing store is a sane
-			//	length, if it's not consider
-			//	any loaded data bogus.
-			(len==ColumnContainer::Size)
-		)) return ColumnState::Generating;
+		//	Decompress
+		auto decompressed=Inflate(
+			buffer->begin(),
+			buffer->end()
+		);
+		
+		//	If the data is an invalid length,
+		//	generate the column
+		if (decompressed.Count()!=ColumnContainer::Size) return ColumnState::Generating;
+		
+		//	Copy the decompressed data
+		std::memcpy(
+			column.Get(),
+			decompressed.begin(),
+			ColumnContainer::Size
+		);
 		
 		//	The column was loaded, but what
-		//	state was it saved in?
+		//	stat was it in?
 		//
 		//	Return its state based on this
 		return column.Populated ? ColumnState::Populated : ColumnState::Generated;
