@@ -99,7 +99,7 @@ namespace MCPP {
 		
 		void ReferenceManager::End () noexcept {
 		
-			lock.Execute([&] () mutable {	--count;	});
+			lock.Execute([&] () mutable {	if ((--count)==0) wait.WakeAll();	});
 		
 		}
 		
