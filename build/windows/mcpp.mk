@@ -57,9 +57,9 @@ obj/serializer.o \
 obj/server.o \
 obj/sha1.o \
 obj/socketpair.o \
-obj/url.o \
 obj/random.o \
 obj/thread_pool.o \
+obj/url.o \
 obj/yggdrasil.o | \
 $(MCPP_LIB) \
 bin
