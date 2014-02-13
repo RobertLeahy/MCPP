@@ -1,4 +1,6 @@
 #include <auth/auth.hpp>
+#include <random_device.hpp>
+#include <seed_sequence.hpp>
 #include <server.hpp>
 #include <singleton.hpp>
 
@@ -28,9 +30,21 @@ namespace MCPP {
 		return Server::Get().IsVerbose(debug_key);
 	
 	}*/
+	
+	
+	static std::mt19937 get_mt19937 () {
+	
+		SeedSequence seq;
+		return std::mt19937(seq);
+	
+	}
 
 
-	Authentication::Authentication () : id_len_generator(15,20), id_generator('!','~') {
+	Authentication::Authentication ()
+		:	gen(get_mt19937()),
+			id_len(UniformIntDistribution<Word>(15,20)),
+			id_dist(UniformIntDistribution<Byte>('!','~'))
+	{
 	
 		/*ygg.SetDebug(
 			[this] (Yggdrasil::Request request) mutable {
@@ -108,9 +122,19 @@ namespace MCPP {
 	
 	Vector<Byte> Authentication::GetVerifyToken () {
 	
-		Vector<Byte> retr(verify_token_length);
+		static_assert(
+			sizeof(std::mt19937::result_type)==verify_token_length,
+			"std::mt19937 does not return exactly 4 bytes"
+		);
 		
-		for (Word i=0;i<verify_token_length;++i) retr.Add(token_generator());
+		union {
+			std::mt19937::result_type in;
+			Byte out [verify_token_length];
+		};
+		in=gen();
+		
+		Vector<Byte> retr(verify_token_length);
+		for (Word i=0;i<verify_token_length;++i) retr.Add(out[i]);
 		
 		return retr;
 	
@@ -121,15 +145,18 @@ namespace MCPP {
 	
 		//	Determine how long this
 		//	server ID string will be
-		Word len=id_len_generator();
+		auto len=id_len(gen);
 		
 		//	Generate random ASCII characters
-		Vector<Byte> ascii(len);
+		Vector<CodePoint> ascii(len);
 		
-		for (Word i=0;i<len;++i) ascii.Add(id_generator());
+		for (Word i=0;i<len;++i) ascii.Add(
+			static_cast<CodePoint>(
+				id_dist(gen)
+			)
+		);
 		
-		//	Decode and return
-		return ASCII().Decode(ascii.begin(),ascii.end());
+		return ascii;
 	
 	}
 	

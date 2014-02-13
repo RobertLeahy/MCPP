@@ -8,9 +8,11 @@
 
 #include <rleahylib/rleahylib.hpp>
 #include <mod.hpp>
-#include <random.hpp>
+#include <synchronized_random.hpp>
 #include <rsa_key.hpp>
+#include <uniform_int_distribution.hpp>
 #include <yggdrasil.hpp>
+#include <random>
 
 
 namespace MCPP {
@@ -29,14 +31,16 @@ namespace MCPP {
 			RSAKey key;
 			//	Yggdrasil authenticator
 			Yggdrasil::Client ygg;
-			//	Generates verify tokens
-			Random<Byte> token_generator;
-			//	Randomly selects a length for
-			//	a server ID string
-			Random<Word> id_len_generator;
-			//	Randomly selects ASCII characters
-			//	for the server ID string
-			Random<Byte> id_generator;
+			//	Random number generator
+			SynchronizedRandom<std::mt19937> gen;
+			//	Distributes random numbers to produce
+			//	a random length for the server ID
+			//	string
+			SynchronizedRandom<UniformIntDistribution<Word>> id_len;
+			//	Distributes random numbers to produce
+			//	ASCII characters for the server ID
+			//	string
+			SynchronizedRandom<UniformIntDistribution<Byte>> id_dist;
 		
 		
 		public:
@@ -107,7 +111,7 @@ namespace MCPP {
 			 *
 			 *	\return
 			 *		A buffer of bytes containing a
-			 *		randmly-generated verify token.
+			 *		randomly-generated verify token.
 			 */
 			Vector<Byte> GetVerifyToken ();
 			/**
