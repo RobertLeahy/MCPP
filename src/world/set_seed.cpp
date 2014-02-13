@@ -1,5 +1,5 @@
 #include <world/world.hpp>
-#include <random.hpp>
+#include <random_device.hpp>
 #include <server.hpp>
 
 
@@ -20,7 +20,7 @@ namespace MCPP {
 		//	get the seed
 		if (material.IsNull()) {
 		
-			seed=CryptoRandom<UInt64>();
+			seed=RandomDevice<UInt64>{}();
 			
 			log=String::Format(
 				log_new_seed,
