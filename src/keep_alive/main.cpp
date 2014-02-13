@@ -1,9 +1,12 @@
 #include <rleahylib/rleahylib.hpp>
 #include <mod.hpp>
 #include <packet.hpp>
-#include <random.hpp>
+#include <seed_sequence.hpp>
 #include <server.hpp>
+#include <synchronized_random.hpp>
+#include <uniform_int_distribution.hpp>
 #include <exception>
+#include <random>
 #include <unordered_map>
 #include <utility>
 
@@ -74,7 +77,8 @@ class KeepAlive : public Module {
 		
 		//	Generates random IDs for the keep
 		//	alive packets
-		Random<Int32> generator;
+		SynchronizedRandom<UniformIntDistribution<Int32>> dist;
+		std::mt19937 gen;
 		
 		
 		//	Settings
@@ -224,7 +228,7 @@ class KeepAlive : public Module {
 						//	Generate a random ID that isn't zero
 						//	(since zero is reserved for the client's
 						//	use)
-						auto id=generator();
+						auto id=dist(gen);
 						if (id==0) ++id;
 						
 						lock.Execute([&] () mutable {
@@ -288,7 +292,18 @@ class KeepAlive : public Module {
 		}
 		
 		
+		static std::mt19937 get_mt19937 () {
+		
+			SeedSequence seq;
+			return std::mt19937(seq);
+		
+		}
+		
+		
 	public:
+	
+	
+		KeepAlive () : gen(get_mt19937()) {	}
 	
 	
 		virtual Word Priority () const noexcept override {
