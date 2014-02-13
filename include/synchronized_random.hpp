@@ -36,6 +36,9 @@ namespace MCPP {
 			typedef typename T::result_type result_type;
 			
 			
+			SynchronizedRandom () = default;
+			
+			
 			/**
 			 *	Wraps a random number source in a thread
 			 *	safe wrapper.
